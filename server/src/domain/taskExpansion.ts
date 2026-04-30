@@ -1,0 +1,102 @@
+export type RecurrenceType = "once" | "finite" | "infinite";
+
+export interface TaskContainer {
+  id: string;
+  type: "operation" | "patrol";
+  name: string;
+  startAt: string;
+  endAt: string;
+  recurrenceType: RecurrenceType;
+  recurrenceIntervalMinutes: number | null;
+  recurrenceCount: number | null;
+  skipWeekends: boolean;
+  skipHolidays: boolean;
+  enabled: boolean;
+}
+
+export interface TaskItemInput {
+  id: string;
+  offsetMinutes: number;
+  durationMinutes: number;
+  content?: string;
+  timeTag?: "全天" | "上午" | "下午";
+  target?: string;
+  personnel?: string;
+  vehicle?: string;
+  other?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ExpandedTaskItem extends TaskItemInput {
+  containerId: string;
+  startAt: string;
+  endAt: string;
+}
+
+export interface ExpandOptions {
+  windowStart: string;
+  windowEnd: string;
+  holidays: Set<string>;
+}
+
+export function validateTaskItem(
+  parentDurationMinutes: number,
+  item: Pick<TaskItemInput, "offsetMinutes" | "durationMinutes">
+): { ok: true } | { ok: false; message: string } {
+  if (item.offsetMinutes < 0) return { ok: false, message: "offset must be non-negative" };
+  if (item.durationMinutes <= 0) return { ok: false, message: "duration must be positive" };
+  if (item.offsetMinutes + item.durationMinutes > parentDurationMinutes) {
+    return { ok: false, message: "child task ends after parent occurrence" };
+  }
+  return { ok: true };
+}
+
+export function expandContainer(
+  container: TaskContainer,
+  items: TaskItemInput[],
+  options: ExpandOptions
+): ExpandedTaskItem[] {
+  if (!container.enabled) return [];
+  const start = new Date(container.startAt);
+  const end = new Date(container.endAt);
+  const duration = end.getTime() - start.getTime();
+  const windowStart = new Date(options.windowStart).getTime();
+  const windowEnd = new Date(options.windowEnd).getTime();
+  const occurrences = occurrenceStarts(container, windowStart, windowEnd);
+
+  return occurrences.flatMap((occurrenceStart) => {
+    const occurrenceEnd = occurrenceStart + duration;
+    if (occurrenceEnd < windowStart || occurrenceStart > windowEnd) return [];
+    return items
+      .map((item) => {
+        const childStart = occurrenceStart + item.offsetMinutes * 60_000;
+        const childEnd = childStart + item.durationMinutes * 60_000;
+        return {
+          ...item,
+          containerId: container.id,
+          startAt: formatWithChinaOffset(childStart),
+          endAt: formatWithChinaOffset(childEnd)
+        };
+      })
+      .filter((item) => new Date(item.endAt).getTime() >= windowStart && new Date(item.startAt).getTime() <= windowEnd);
+  });
+}
+
+function occurrenceStarts(container: TaskContainer, windowStart: number, windowEnd: number): number[] {
+  const first = new Date(container.startAt).getTime();
+  if (container.recurrenceType === "once") return [first];
+  const interval = (container.recurrenceIntervalMinutes ?? 0) * 60_000;
+  const countLimit = container.recurrenceType === "finite" ? container.recurrenceCount ?? 0 : 10_000;
+  const starts: number[] = [];
+  for (let index = 0; index < countLimit; index += 1) {
+    const occurrence = first + index * interval;
+    if (occurrence > windowEnd) break;
+    if (occurrence >= windowStart - interval) starts.push(occurrence);
+  }
+  return starts;
+}
+
+function formatWithChinaOffset(epochMs: number): string {
+  const shifted = new Date(epochMs + 8 * 60 * 60 * 1000);
+  return `${shifted.toISOString().slice(0, 23)}+08:00`;
+}
