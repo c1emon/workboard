@@ -66,6 +66,59 @@ describe("admin routes", () => {
       leavePeople: ["王五"]
     });
   });
+
+  it("returns 400 for invalid timeTag payloads", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/permit-arrangements",
+      payload: {
+        date: "2026-05-01",
+        timeTag: "晚上",
+        permit: "动火许可"
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid admin payload",
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: ["timeTag"]
+        })
+      ])
+    });
+  });
+
+  it.each([
+    ["/api/admin/permit-arrangements", { date: "2026/05/01", timeTag: "上午", permit: "动火许可" }],
+    ["/api/admin/other-arrangements", { date: "2026/05/01", timeTag: "下午", task: "设备巡检" }],
+    ["/api/admin/leave-people", { date: "2026/05/01", name: "王五" }],
+    ["/api/admin/holidays", { date: "2026/05/01", name: "劳动节" }]
+  ])("returns 400 for malformed dates on %s", async (url, payload) => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url,
+      payload
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid admin payload",
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          path: ["date"]
+        })
+      ])
+    });
+  });
 });
 
 function toChinaDate(date: Date): string {

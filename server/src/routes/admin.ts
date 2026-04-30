@@ -4,9 +4,10 @@ import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 
 const timeTagSchema = z.enum(["全天", "上午", "下午"]);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const permitInputSchema = z.object({
-  date: z.string().min(1),
+  date: dateSchema,
   timeTag: timeTagSchema,
   permit: z.string().min(1),
   personnel: z.string().default(""),
@@ -15,7 +16,7 @@ const permitInputSchema = z.object({
 });
 
 const otherInputSchema = z.object({
-  date: z.string().min(1),
+  date: dateSchema,
   timeTag: timeTagSchema,
   task: z.string().min(1),
   personnel: z.string().default(""),
@@ -24,18 +25,42 @@ const otherInputSchema = z.object({
 });
 
 const leaveInputSchema = z.object({
-  date: z.string().min(1),
+  date: dateSchema,
   name: z.string().min(1)
 });
 
 const holidayInputSchema = z.object({
-  date: z.string().min(1),
+  date: dateSchema,
   name: z.string().default("")
 });
 
+function validateAdminPayload<TSchema extends z.ZodTypeAny>(
+  schema: TSchema,
+  body: unknown
+): { success: true; data: z.infer<TSchema> } | { success: false; error: { error: string; issues: z.ZodIssue[] } } {
+  const result = schema.safeParse(body);
+
+  if (!result.success) {
+    return {
+      success: false,
+      error: {
+        error: "Invalid admin payload",
+        issues: result.error.issues
+      }
+    };
+  }
+
+  return { success: true, data: result.data };
+}
+
 export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase): void {
   app.post("/api/admin/permit-arrangements", async (request, reply) => {
-    const input = permitInputSchema.parse(request.body);
+    const validation = validateAdminPayload(permitInputSchema, request.body);
+    if (!validation.success) {
+      return reply.code(400).send(validation.error);
+    }
+
+    const input = validation.data;
     const id = nanoid();
 
     db.prepare(
@@ -46,7 +71,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase): void
   });
 
   app.post("/api/admin/other-arrangements", async (request, reply) => {
-    const input = otherInputSchema.parse(request.body);
+    const validation = validateAdminPayload(otherInputSchema, request.body);
+    if (!validation.success) {
+      return reply.code(400).send(validation.error);
+    }
+
+    const input = validation.data;
     const id = nanoid();
 
     db.prepare(
@@ -57,7 +87,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase): void
   });
 
   app.post("/api/admin/leave-people", async (request, reply) => {
-    const input = leaveInputSchema.parse(request.body);
+    const validation = validateAdminPayload(leaveInputSchema, request.body);
+    if (!validation.success) {
+      return reply.code(400).send(validation.error);
+    }
+
+    const input = validation.data;
     const id = nanoid();
 
     db.prepare("insert into leave_people (id, date, name) values (?, ?, ?)").run(id, input.date, input.name);
@@ -66,7 +101,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase): void
   });
 
   app.post("/api/admin/holidays", async (request, reply) => {
-    const input = holidayInputSchema.parse(request.body);
+    const validation = validateAdminPayload(holidayInputSchema, request.body);
+    if (!validation.success) {
+      return reply.code(400).send(validation.error);
+    }
+
+    const input = validation.data;
     const id = nanoid();
 
     db.prepare("insert into holidays (id, date, name) values (?, ?, ?)").run(id, input.date, input.name);
