@@ -1,0 +1,4 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Arial, "Microsoft YaHei", sans-serif; background: #07111f; color: #e2e8f0; }
+.board-page { min-height: 100vh; background: #07111f; }
+.admin-page { min-height: 100vh; padding: 24px; background: #f8fafc; color: #0f172a; }
