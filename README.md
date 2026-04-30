@@ -4,7 +4,17 @@
 
 ```bash
 npm install
+```
+
+Start the backend in one terminal:
+
+```bash
 npm run dev --workspace server
+```
+
+Start the frontend in a second terminal:
+
+```bash
 npm run dev --workspace web
 ```
 
