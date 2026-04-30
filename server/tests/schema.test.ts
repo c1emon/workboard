@@ -1,5 +1,8 @@
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createTestDatabase } from "../src/db/database.js";
+import { createTestDatabase, openDatabase } from "../src/db/database.js";
 
 describe("database schema", () => {
   it("creates all MVP tables", () => {
@@ -17,5 +20,21 @@ describe("database schema", () => {
       "task_containers",
       "task_items"
     ]);
+  });
+
+  it("creates the parent directory before opening a database file", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "workboard-db-"));
+    const databasePath = join(tempRoot, "missing-parent", "workboard.sqlite");
+
+    try {
+      expect(existsSync(join(tempRoot, "missing-parent"))).toBe(false);
+
+      const db = openDatabase(databasePath);
+      db.close();
+
+      expect(existsSync(databasePath)).toBe(true);
+    } finally {
+      rmSync(tempRoot, { force: true, recursive: true });
+    }
   });
 });

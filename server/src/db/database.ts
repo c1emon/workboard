@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import { schemaSql } from "./schema.js";
 
@@ -9,6 +11,7 @@ export function migrate(db: AppDatabase): void {
 }
 
 export function openDatabase(filename = "server/db/workboard.sqlite"): AppDatabase {
+  mkdirSync(dirname(filename), { recursive: true });
   const db = new Database(filename);
   migrate(db);
   return db;
