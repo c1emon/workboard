@@ -58,6 +58,42 @@ describe("task expansion", () => {
     expect(expanded).toEqual([]);
   });
 
+  it("skips a one-time occurrence on a weekend when weekend skips are enabled", () => {
+    const expanded = expandContainer(
+      {
+        ...baseContainer,
+        startAt: "2026-05-02T08:00:00+08:00",
+        endAt: "2026-05-02T12:00:00+08:00",
+        skipWeekends: true
+      },
+      [baseItem],
+      {
+        windowStart: "2026-05-02T00:00:00+08:00",
+        windowEnd: "2026-05-02T23:59:59+08:00",
+        holidays: new Set()
+      }
+    );
+
+    expect(expanded).toEqual([]);
+  });
+
+  it("skips a one-time occurrence on a holiday when holiday skips are enabled", () => {
+    const expanded = expandContainer(
+      {
+        ...baseContainer,
+        skipHolidays: true
+      },
+      [baseItem],
+      {
+        windowStart: "2026-05-01T00:00:00+08:00",
+        windowEnd: "2026-05-01T23:59:59+08:00",
+        holidays: new Set(["2026-05-01"])
+      }
+    );
+
+    expect(expanded).toEqual([]);
+  });
+
   it("counts finite recurrence after weekend and holiday skips", () => {
     const expanded = expandContainer(
       {

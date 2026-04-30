@@ -90,7 +90,7 @@ function occurrenceStarts(
   holidays: Set<string>
 ): number[] {
   const first = new Date(container.startAt).getTime();
-  if (container.recurrenceType === "once") return [first];
+  if (container.recurrenceType === "once") return shouldSkipOccurrence(container, first, holidays) ? [] : [first];
   const intervalMinutes = container.recurrenceIntervalMinutes ?? 0;
   if (intervalMinutes <= 0) {
     throw new Error(`recurrenceIntervalMinutes must be positive for ${container.recurrenceType} recurrence`);
