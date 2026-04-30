@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { createApp } from "../src/app.js";
 import { createTestDatabase } from "../src/db/database.js";
 import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
+import { writeInitialBoardEvent } from "../src/routes/board.js";
 
 describe("board snapshot", () => {
-  it("sorts permits and other arrangements by time tag", () => {
+  it("sorts permits by time tag", () => {
     const db = createTestDatabase();
     db.prepare("insert into permit_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .run("p1", "2026-05-01", "下午", "封闭许可", "孙八", "西侧", "待确认", 1, 0);
@@ -13,5 +15,65 @@ describe("board snapshot", () => {
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
     expect(snapshot.permits.map((permit) => permit.timeTag)).toEqual(["全天", "下午"]);
+  });
+
+  it("sorts other arrangements by time tag", () => {
+    const db = createTestDatabase();
+    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("o1", "2026-05-01", "下午", "清点物资", "李四", "电瓶车", "", 1, 0);
+    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("o2", "2026-05-01", "上午", "设备巡检", "王五", "皮卡", "", 1, 0);
+    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("o3", "2026-05-01", "全天", "值守", "赵六", "", "", 1, 0);
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
+
+    expect(snapshot.others.map((other) => other.timeTag)).toEqual(["全天", "上午", "下午"]);
+  });
+
+  it("returns board snapshot JSON from the board route", async () => {
+    const db = createTestDatabase();
+    db.prepare("insert into permit_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("p1", "2026-05-01", "上午", "动火许可", "张三", "A区", "已审批", 1, 0);
+    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("o1", "2026-05-01", "全天", "值守", "赵六", "", "", 1, 0);
+    db.prepare("insert into leave_people values (?, ?, ?, ?, ?)")
+      .run("l1", "2026-05-01", "钱七", 1, 0);
+    const app = createApp(db);
+
+    const response = await app.inject({ method: "GET", url: "/api/board" });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.json()).toMatchObject({
+      operation: { items: [] },
+      permits: [{ timeTag: "上午", permit: "动火许可", personnel: "张三", area: "A区", other: "已审批" }],
+      patrols: [],
+      others: [{ timeTag: "全天", task: "值守", personnel: "赵六", vehicle: "", other: "" }],
+      leavePeople: ["钱七"]
+    });
+  });
+
+  it("writes initial board event without ending the stream", () => {
+    const calls: string[] = [];
+    const raw = {
+      writeHead: (statusCode: number, headers: Record<string, string>) => {
+        calls.push(`writeHead:${statusCode}:${headers["Content-Type"]}`);
+      },
+      write: (chunk: string) => {
+        calls.push(`write:${chunk}`);
+      },
+      end: () => {
+        calls.push("end");
+      }
+    };
+
+    writeInitialBoardEvent(raw);
+
+    expect(calls).toEqual([
+      "writeHead:200:text/event-stream",
+      'write:event: board:update\ndata: {"version":1}\n\n'
+    ]);
   });
 });
