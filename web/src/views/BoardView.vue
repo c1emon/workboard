@@ -46,6 +46,8 @@ import type { BoardSnapshot } from "../api/types";
 const snapshot = ref<BoardSnapshot | null>(null);
 let updateSource: EventSource | null = null;
 let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+let isMounted = false;
+let refreshSequence = 0;
 
 const permitColumns: DenseColumn[] = [
   { key: "timeTag", label: "时间" },
@@ -78,7 +80,17 @@ const leaveText = computed(() => snapshot.value?.leavePeople.join("、") || "无
 const headerTime = computed(() => formatDateTime(snapshot.value?.serverTime));
 
 async function refreshBoard() {
-  snapshot.value = await fetchBoard();
+  const sequence = ++refreshSequence;
+
+  try {
+    const nextSnapshot = await fetchBoard();
+    if (!isMounted || sequence !== refreshSequence) return;
+    snapshot.value = nextSnapshot;
+  } catch (error) {
+    if (isMounted) {
+      console.error("Failed to refresh board", error);
+    }
+  }
 }
 
 function formatDateTime(value?: string) {
@@ -96,6 +108,7 @@ function formatDateTime(value?: string) {
 }
 
 onMounted(() => {
+  isMounted = true;
   void refreshBoard();
   updateSource = subscribeBoardUpdates(() => {
     void refreshBoard();
@@ -106,6 +119,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  isMounted = false;
   updateSource?.close();
   if (fallbackInterval) clearInterval(fallbackInterval);
 });

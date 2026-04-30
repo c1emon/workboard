@@ -14,7 +14,7 @@ vi.mock("../src/api/client", () => ({
 const mockedFetchBoard = vi.mocked(fetchBoard);
 const mockedSubscribeBoardUpdates = vi.mocked(subscribeBoardUpdates);
 
-function makeSnapshot(): BoardSnapshot {
+function makeSnapshot(overrides: Partial<BoardSnapshot> = {}): BoardSnapshot {
   return {
     serverTime: "2026-05-01T09:30:00.000Z",
     operation: {
@@ -42,21 +42,36 @@ function makeSnapshot(): BoardSnapshot {
     others: [
       { timeTag: "下午", task: "消防演练", personnel: "郑十一", vehicle: "3号车", other: "集合" }
     ],
-    leavePeople: ["陈一", "刘二", "黄三"]
+    leavePeople: ["陈一", "刘二", "黄三"],
+    ...overrides
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
 }
 
 describe("BoardView", () => {
   let close: ReturnType<typeof vi.fn>;
+  let consoleError: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     close = vi.fn();
+    consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     mockedFetchBoard.mockResolvedValue(makeSnapshot());
     mockedSubscribeBoardUpdates.mockReturnValue({ close } as unknown as EventSource);
   });
 
   afterEach(() => {
+    consoleError.mockRestore();
     vi.useRealTimers();
     vi.clearAllMocks();
   });
@@ -102,5 +117,55 @@ describe("BoardView", () => {
     await vi.advanceTimersByTimeAsync(30_000);
     await flushPromises();
     expect(mockedFetchBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the newest board snapshot when an older refresh resolves later", async () => {
+    const firstRefresh = deferred<BoardSnapshot>();
+    const secondRefresh = deferred<BoardSnapshot>();
+    mockedFetchBoard.mockReset();
+    mockedFetchBoard.mockReturnValueOnce(firstRefresh.promise).mockReturnValueOnce(secondRefresh.promise);
+
+    const wrapper = mount(BoardView);
+    const onUpdate = mockedSubscribeBoardUpdates.mock.calls[0][0];
+    onUpdate();
+
+    secondRefresh.resolve(makeSnapshot({ leavePeople: ["新数据"] }));
+    await flushPromises();
+    expect(wrapper.text()).toContain("新数据");
+
+    firstRefresh.resolve(makeSnapshot({ leavePeople: ["旧数据"] }));
+    await flushPromises();
+    expect(wrapper.text()).toContain("新数据");
+    expect(wrapper.text()).not.toContain("旧数据");
+  });
+
+  it("keeps the previous snapshot when a refresh rejects", async () => {
+    const initialSnapshot = makeSnapshot({ leavePeople: ["保留数据"] });
+    mockedFetchBoard.mockResolvedValueOnce(initialSnapshot).mockRejectedValueOnce(new Error("network down"));
+
+    const wrapper = mount(BoardView);
+    await flushPromises();
+    expect(wrapper.text()).toContain("保留数据");
+
+    const onUpdate = mockedSubscribeBoardUpdates.mock.calls[0][0];
+    onUpdate();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("保留数据");
+    expect(consoleError).toHaveBeenCalledWith("Failed to refresh board", expect.any(Error));
+  });
+
+  it("does not update board state after unmount", async () => {
+    const firstRefresh = deferred<BoardSnapshot>();
+    mockedFetchBoard.mockReset();
+    mockedFetchBoard.mockReturnValueOnce(firstRefresh.promise);
+
+    const wrapper = mount(BoardView);
+    wrapper.unmount();
+
+    firstRefresh.resolve(makeSnapshot({ leavePeople: ["卸载后数据"] }));
+    await flushPromises();
+
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });
