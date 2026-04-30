@@ -25,6 +25,7 @@ export interface TaskItemInput {
   vehicle?: string;
   other?: string;
   metadata: Record<string, unknown>;
+  sortOrder?: number;
 }
 
 export interface ExpandedTaskItem extends TaskItemInput {

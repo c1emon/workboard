@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createTestDatabase } from "../src/db/database.js";
 import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
-import { writeInitialBoardEvent } from "../src/routes/board.js";
+import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
 describe("board snapshot", () => {
   it("sorts permits by time tag", () => {
@@ -55,7 +55,7 @@ describe("board snapshot", () => {
     });
   });
 
-  it("writes initial board event without ending the stream", () => {
+  it("writes current board event version and broadcasts later updates", () => {
     const calls: string[] = [];
     const raw = {
       writeHead: (statusCode: number, headers: Record<string, string>) => {
@@ -68,12 +68,16 @@ describe("board snapshot", () => {
         calls.push("end");
       }
     };
-
-    writeInitialBoardEvent(raw);
+    const boardEvents = createBoardEventBroadcaster();
+    const cleanup = boardEvents.register(raw);
+    boardEvents.publish();
+    cleanup();
+    boardEvents.publish();
 
     expect(calls).toEqual([
       "writeHead:200:text/event-stream",
-      'write:event: board:update\ndata: {"version":1}\n\n'
+      'write:event: board:update\ndata: {"version":1}\n\n',
+      'write:event: board:update\ndata: {"version":2}\n\n'
     ]);
   });
 });
