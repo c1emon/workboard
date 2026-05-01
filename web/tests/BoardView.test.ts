@@ -90,6 +90,7 @@ describe("BoardView", () => {
     expect(wrapper.text()).toContain("动火许可");
     expect(wrapper.text()).toContain("开挖许可");
     expect(wrapper.findAll("[data-testid='permit-row']")).toHaveLength(6);
+    expect(wrapper.findAll(".dense-head")[0].text()).toBe("时间对象人员车辆其他");
     expect(wrapper.text()).toContain("陈一");
     expect(wrapper.text()).toContain("刘二");
     expect(wrapper.text()).toContain("黄三");
@@ -103,6 +104,49 @@ describe("BoardView", () => {
 
     await wrapper.unmount();
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("centers the header time in the emphasized Chinese date format", async () => {
+    mockedFetchBoard.mockResolvedValue(makeSnapshot({ serverTime: "2026-05-01T12:16:00.000Z" }));
+
+    const wrapper = mount(BoardView);
+    await flushPromises();
+
+    const headerTime = wrapper.find(".header-time");
+    expect(headerTime.text()).toBe("2026年5月1日 20时16分");
+    expect(headerTime.element.parentElement?.className).toBe("board-header");
+  });
+
+  it("shows the real backend update connection status", async () => {
+    const wrapper = mount(BoardView);
+    await flushPromises();
+    expect(wrapper.find(".status-pill").text()).toBe("轮询中");
+
+    const handlers = mockedSubscribeBoardUpdates.mock.calls[0][1];
+    handlers.onOpen();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".status-pill").text()).toBe("已连接");
+
+    handlers.onError();
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find(".status-pill").text()).toBe("轮询中");
+  });
+
+  it("shows muted empty messages for empty permit, patrol, other, and leave modules", async () => {
+    mockedFetchBoard.mockResolvedValue(
+      makeSnapshot({
+        permits: [],
+        patrols: [],
+        others: [],
+        leavePeople: []
+      })
+    );
+
+    const wrapper = mount(BoardView);
+    await flushPromises();
+
+    expect(wrapper.findAll(".dense-table .empty-plan").map((item) => item.text())).toEqual(["无计划安排", "无计划安排", "无计划安排"]);
+    expect(wrapper.find(".leave-line.empty-plan").text()).toBe("无");
   });
 
   it("refreshes with a fallback interval and clears it on unmount", async () => {
@@ -152,6 +196,7 @@ describe("BoardView", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("保留数据");
+    expect(wrapper.find(".status-pill").text()).toBe("连接异常");
     expect(consoleError).toHaveBeenCalledWith("Failed to refresh board", expect.any(Error));
   });
 

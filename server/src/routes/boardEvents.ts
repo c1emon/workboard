@@ -6,7 +6,7 @@ export interface BoardEventStream {
 export interface BoardEventBroadcaster {
   getVersion(): number;
   publish(): number;
-  register(stream: BoardEventStream): () => void;
+  register(stream: BoardEventStream, headers?: Record<string, string>): () => void;
 }
 
 export function createBoardEventBroadcaster(initialVersion = 1): BoardEventBroadcaster {
@@ -30,11 +30,12 @@ export function createBoardEventBroadcaster(initialVersion = 1): BoardEventBroad
       }
       return version;
     },
-    register: (stream) => {
+    register: (stream, headers = {}) => {
       stream.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
-        Connection: "keep-alive"
+        Connection: "keep-alive",
+        ...headers
       });
       streams.add(stream);
       writeUpdate(stream);

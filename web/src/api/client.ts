@@ -4,6 +4,11 @@ const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 type TimeTag = "全天" | "上午" | "下午";
 
+export interface BoardUpdateConnectionHandlers {
+  onOpen: () => void;
+  onError: () => void;
+}
+
 async function postAdmin<TInput extends object>(path: string, input: TInput): Promise<{ id: string }> {
   const response = await fetch(`${apiBase}/api/admin/${path}`, {
     method: "POST",
@@ -82,8 +87,12 @@ export async function createTaskItem(input: {
   return postAdmin("task-items", input);
 }
 
-export function subscribeBoardUpdates(onUpdate: () => void): EventSource {
+export function subscribeBoardUpdates(onUpdate: () => void, handlers?: BoardUpdateConnectionHandlers): EventSource {
   const source = new EventSource(`${apiBase}/api/events`);
   source.addEventListener("board:update", onUpdate);
+  if (handlers) {
+    source.addEventListener("open", handlers.onOpen);
+    source.addEventListener("error", handlers.onError);
+  }
   return source;
 }

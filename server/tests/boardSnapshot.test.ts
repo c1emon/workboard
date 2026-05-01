@@ -59,7 +59,9 @@ describe("board snapshot", () => {
     const calls: string[] = [];
     const raw = {
       writeHead: (statusCode: number, headers: Record<string, string>) => {
-        calls.push(`writeHead:${statusCode}:${headers["Content-Type"]}`);
+        calls.push(
+          `writeHead:${statusCode}:${headers["Content-Type"]}:${headers["Access-Control-Allow-Origin"]}:${headers.Vary}`
+        );
       },
       write: (chunk: string) => {
         calls.push(`write:${chunk}`);
@@ -69,13 +71,16 @@ describe("board snapshot", () => {
       }
     };
     const boardEvents = createBoardEventBroadcaster();
-    const cleanup = boardEvents.register(raw);
+    const cleanup = boardEvents.register(raw, {
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      Vary: "Origin"
+    });
     boardEvents.publish();
     cleanup();
     boardEvents.publish();
 
     expect(calls).toEqual([
-      "writeHead:200:text/event-stream",
+      "writeHead:200:text/event-stream:http://localhost:5173:Origin",
       'write:event: board:update\ndata: {"version":1}\n\n',
       'write:event: board:update\ndata: {"version":2}\n\n'
     ]);

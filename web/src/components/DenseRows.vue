@@ -5,23 +5,33 @@
     </div>
 
     <div class="dense-body">
-      <div v-for="(row, index) in rows" :key="index" class="dense-row" :data-testid="rowTestId">
-        <span
-          v-for="column in columns"
-          :key="column.key"
-          class="dense-cell"
-          :class="{ 'time-cell': column.key === 'timeTag' }"
-          :title="String(row[column.key] ?? '')"
-        >
-          <span v-if="column.key === 'timeTag'" class="time-tag" :class="timeTagClass(String(row[column.key] ?? ''))">
-            {{ row[column.key] }}
-          </span>
-          <template v-else>{{ row[column.key] }}</template>
-        </span>
-      </div>
+      <div v-if="rows.length === 0" class="empty-plan">无计划安排</div>
 
-      <div v-for="index in emptyRows" :key="`empty-${index}`" class="dense-row empty-row" aria-hidden="true">
-        <span v-for="column in columns" :key="column.key" class="dense-cell">&nbsp;</span>
+      <div v-else class="scroll-track" :class="{ looping: shouldLoopRows }" :style="trackStyle">
+        <div
+          v-for="(row, index) in displayRows"
+          :key="index"
+          class="dense-row"
+          :class="{ 'even-row': originalRowIndex(index) % 2 === 1 }"
+          :data-testid="rowTestId"
+        >
+          <span
+            v-for="column in columns"
+            :key="column.key"
+            class="dense-cell"
+            :class="{ 'time-cell': column.key === 'timeTag' }"
+            :title="String(row[column.key] ?? '')"
+          >
+            <span v-if="column.key === 'timeTag'" class="time-tag" :class="timeTagClass(String(row[column.key] ?? ''))">
+              {{ row[column.key] }}
+            </span>
+            <template v-else>{{ row[column.key] }}</template>
+          </span>
+        </div>
+
+        <div v-for="index in emptyRows" v-if="!shouldLoopRows" :key="`empty-${index}`" class="dense-row empty-row" aria-hidden="true">
+          <span v-for="column in columns" :key="column.key" class="dense-cell">&nbsp;</span>
+        </div>
       </div>
     </div>
   </div>
@@ -48,10 +58,20 @@ const props = withDefaults(
 );
 
 const emptyRows = computed(() => Math.max(props.visibleRows - props.rows.length, 0));
+const shouldLoopRows = computed(() => props.rows.length > props.visibleRows);
+const displayRows = computed(() => (shouldLoopRows.value ? [...props.rows, ...props.rows] : props.rows));
 const tableStyle = computed(() => ({
   "--visible-rows": String(props.visibleRows),
-  "--column-count": String(props.columns.length)
+  "--grid-template-columns": props.columns.map((column) => (column.key === "timeTag" ? "56px" : "minmax(0, 1fr)")).join(" ")
 }));
+const trackStyle = computed(() => ({
+  "--row-count": String(props.rows.length),
+  "--scroll-duration": `${Math.max(props.rows.length * 2.4, 12)}s`
+}));
+
+function originalRowIndex(index: number) {
+  return props.rows.length === 0 ? index : index % props.rows.length;
+}
 
 function timeTagClass(value: string) {
   return {
@@ -74,7 +94,7 @@ function timeTagClass(value: string) {
 .dense-head,
 .dense-row {
   display: grid;
-  grid-template-columns: repeat(var(--column-count), minmax(0, 1fr));
+  grid-template-columns: var(--grid-template-columns);
 }
 
 .dense-head {
@@ -102,7 +122,31 @@ function timeTagClass(value: string) {
 }
 
 .dense-body {
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+.scroll-track.looping {
+  animation: dense-scroll var(--scroll-duration) linear infinite;
+}
+
+@keyframes dense-scroll {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(var(--row-height) * var(--row-count) * -1));
+  }
+}
+
+.empty-plan {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(148, 163, 184, 0.46);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .dense-row {
@@ -114,7 +158,7 @@ function timeTagClass(value: string) {
   background: rgba(8, 20, 38, 0.72);
 }
 
-.dense-row:nth-child(even) {
+.dense-row.even-row {
   background: rgba(15, 31, 54, 0.72);
 }
 
