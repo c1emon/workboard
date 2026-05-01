@@ -4,6 +4,47 @@ const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 type TimeTag = "全天" | "上午" | "下午";
 
+export interface PermitArrangementRecord {
+  id: string;
+  date: string;
+  timeTag: TimeTag;
+  permit: string;
+  personnel: string;
+  area: string;
+  other: string;
+  enabled: boolean;
+}
+
+export interface OtherArrangementRecord {
+  id: string;
+  date: string;
+  timeTag: TimeTag;
+  task: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  enabled: boolean;
+}
+
+export interface PatrolArrangementRecord {
+  id: string;
+  itemId: string;
+  date: string;
+  timeTag: TimeTag;
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  enabled: boolean;
+}
+
+export interface LeavePersonRecord {
+  id: string;
+  date: string;
+  name: string;
+  enabled: boolean;
+}
+
 export interface BoardUpdateConnectionHandlers {
   onOpen: () => void;
   onError: () => void;
@@ -20,10 +61,45 @@ async function postAdmin<TInput extends object>(path: string, input: TInput): Pr
   return response.json();
 }
 
+async function fetchAdmin<TOutput>(path: string): Promise<TOutput> {
+  const response = await fetch(`${apiBase}/api/admin/${path}`);
+  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  return response.json();
+}
+
+async function putAdmin<TInput extends object>(path: string, input: TInput): Promise<void> {
+  const response = await fetch(`${apiBase}/api/admin/${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+}
+
+async function patchAdmin<TInput extends object>(path: string, input: TInput): Promise<void> {
+  const response = await fetch(`${apiBase}/api/admin/${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+}
+
+async function deleteAdmin(path: string): Promise<void> {
+  const response = await fetch(`${apiBase}/api/admin/${path}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+}
+
 export async function fetchBoard(): Promise<BoardSnapshot> {
   const response = await fetch(`${apiBase}/api/board`);
   if (!response.ok) throw new Error(`Board fetch failed: ${response.status}`);
   return response.json();
+}
+
+export async function fetchPermitArrangements(date: string): Promise<PermitArrangementRecord[]> {
+  return fetchAdmin(`permit-arrangements?date=${encodeURIComponent(date)}`);
 }
 
 export async function createPermit(input: {
@@ -37,6 +113,22 @@ export async function createPermit(input: {
   return postAdmin("permit-arrangements", input);
 }
 
+export async function updatePermitArrangement(id: string, input: Omit<PermitArrangementRecord, "id" | "enabled">): Promise<void> {
+  return putAdmin(`permit-arrangements/${encodeURIComponent(id)}`, input);
+}
+
+export async function updatePermitArrangementEnabled(id: string, enabled: boolean): Promise<void> {
+  return patchAdmin(`permit-arrangements/${encodeURIComponent(id)}/enabled`, { enabled });
+}
+
+export async function deletePermitArrangement(id: string): Promise<void> {
+  return deleteAdmin(`permit-arrangements/${encodeURIComponent(id)}`);
+}
+
+export async function fetchOtherArrangements(date: string): Promise<OtherArrangementRecord[]> {
+  return fetchAdmin(`other-arrangements?date=${encodeURIComponent(date)}`);
+}
+
 export async function createOtherArrangement(input: {
   date: string;
   timeTag: TimeTag;
@@ -48,8 +140,63 @@ export async function createOtherArrangement(input: {
   return postAdmin("other-arrangements", input);
 }
 
+export async function updateOtherArrangement(id: string, input: Omit<OtherArrangementRecord, "id" | "enabled">): Promise<void> {
+  return putAdmin(`other-arrangements/${encodeURIComponent(id)}`, input);
+}
+
+export async function updateOtherArrangementEnabled(id: string, enabled: boolean): Promise<void> {
+  return patchAdmin(`other-arrangements/${encodeURIComponent(id)}/enabled`, { enabled });
+}
+
+export async function deleteOtherArrangement(id: string): Promise<void> {
+  return deleteAdmin(`other-arrangements/${encodeURIComponent(id)}`);
+}
+
+export async function fetchPatrolArrangements(date: string): Promise<PatrolArrangementRecord[]> {
+  return fetchAdmin(`patrol-arrangements?date=${encodeURIComponent(date)}`);
+}
+
+export async function createPatrolArrangement(input: {
+  date: string;
+  timeTag: TimeTag;
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+}): Promise<{ id: string }> {
+  return postAdmin("patrol-arrangements", input);
+}
+
+export async function updatePatrolArrangement(id: string, input: Omit<PatrolArrangementRecord, "id" | "itemId" | "enabled">): Promise<void> {
+  return putAdmin(`patrol-arrangements/${encodeURIComponent(id)}`, input);
+}
+
+export async function updatePatrolArrangementEnabled(id: string, enabled: boolean): Promise<void> {
+  return patchAdmin(`patrol-arrangements/${encodeURIComponent(id)}/enabled`, { enabled });
+}
+
+export async function deletePatrolArrangement(id: string): Promise<void> {
+  return deleteAdmin(`patrol-arrangements/${encodeURIComponent(id)}`);
+}
+
 export async function createLeavePerson(input: { date: string; name: string }): Promise<{ id: string }> {
   return postAdmin("leave-people", input);
+}
+
+export async function fetchLeavePeople(date: string): Promise<LeavePersonRecord[]> {
+  return fetchAdmin(`leave-people?date=${encodeURIComponent(date)}`);
+}
+
+export async function updateLeavePerson(id: string, input: Omit<LeavePersonRecord, "id" | "enabled">): Promise<void> {
+  return putAdmin(`leave-people/${encodeURIComponent(id)}`, input);
+}
+
+export async function updateLeavePersonEnabled(id: string, enabled: boolean): Promise<void> {
+  return patchAdmin(`leave-people/${encodeURIComponent(id)}/enabled`, { enabled });
+}
+
+export async function deleteLeavePerson(id: string): Promise<void> {
+  return deleteAdmin(`leave-people/${encodeURIComponent(id)}`);
 }
 
 export async function createHoliday(input: { date: string; name: string }): Promise<{ id: string }> {

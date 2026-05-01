@@ -225,6 +225,164 @@ describe("admin routes", () => {
     expect(boardEvents.getVersion()).toBe(2);
   });
 
+  it("lists, updates, disables, and deletes permit arrangements by date", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const date = "2026-05-01";
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/permit-arrangements",
+      payload: {
+        date,
+        timeTag: "上午",
+        permit: "动火许可",
+        personnel: "张三",
+        area: "A区",
+        other: "已审批"
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const listResponse = await app.inject({ method: "GET", url: `/api/admin/permit-arrangements?date=${date}` });
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/permit-arrangements/${id}`,
+      payload: {
+        date,
+        timeTag: "下午",
+        permit: "受限空间",
+        personnel: "李四",
+        area: "B区",
+        other: "待复核"
+      }
+    });
+    const disableResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/permit-arrangements/${id}/enabled`,
+      payload: { enabled: false }
+    });
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/permit-arrangements/${id}` });
+    const finalListResponse = await app.inject({ method: "GET", url: `/api/admin/permit-arrangements?date=${date}` });
+    await app.close();
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual([
+      {
+        id,
+        date,
+        timeTag: "上午",
+        permit: "动火许可",
+        personnel: "张三",
+        area: "A区",
+        other: "已审批",
+        enabled: true
+      }
+    ]);
+    expect(updateResponse.statusCode).toBe(200);
+    expect(disableResponse.statusCode).toBe(200);
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(finalListResponse.json()).toEqual([]);
+  });
+
+  it("lists and manages patrol arrangements by date", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const date = "2026-05-01";
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-arrangements",
+      payload: {
+        date,
+        timeTag: "上午",
+        target: "1号线",
+        personnel: "赵六",
+        vehicle: "巡检车",
+        other: "带测温仪"
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const listResponse = await app.inject({ method: "GET", url: `/api/admin/patrol-arrangements?date=${date}` });
+    const disableResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/patrol-arrangements/${id}/enabled`,
+      payload: { enabled: false }
+    });
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/patrol-arrangements/${id}` });
+    const finalListResponse = await app.inject({ method: "GET", url: `/api/admin/patrol-arrangements?date=${date}` });
+    await app.close();
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual([
+      {
+        id,
+        itemId: expect.any(String),
+        date,
+        timeTag: "上午",
+        target: "1号线",
+        personnel: "赵六",
+        vehicle: "巡检车",
+        other: "带测温仪",
+        enabled: true
+      }
+    ]);
+    expect(disableResponse.statusCode).toBe(200);
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(finalListResponse.json()).toEqual([]);
+  });
+
+  it("lists and manages leave people by date", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const date = "2026-05-01";
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/leave-people",
+      payload: {
+        date,
+        name: "王五"
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const listResponse = await app.inject({ method: "GET", url: `/api/admin/leave-people?date=${date}` });
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/leave-people/${id}`,
+      payload: {
+        date,
+        name: "赵六"
+      }
+    });
+    const disableResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/leave-people/${id}/enabled`,
+      payload: { enabled: false }
+    });
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/leave-people/${id}` });
+    const finalListResponse = await app.inject({ method: "GET", url: `/api/admin/leave-people?date=${date}` });
+    await app.close();
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual([
+      {
+        id,
+        date,
+        name: "王五",
+        enabled: true
+      }
+    ]);
+    expect(updateResponse.statusCode).toBe(200);
+    expect(disableResponse.statusCode).toBe(200);
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(finalListResponse.json()).toEqual([]);
+  });
+
   it("returns 400 for invalid timeTag payloads", async () => {
     const db = createTestDatabase();
     const app = createApp(db);

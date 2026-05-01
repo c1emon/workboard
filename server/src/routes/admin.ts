@@ -29,6 +29,15 @@ const otherInputSchema = z.object({
   other: z.string().default("")
 });
 
+const patrolArrangementInputSchema = z.object({
+  date: dateSchema,
+  timeTag: timeTagSchema,
+  target: z.string().min(1),
+  personnel: z.string().default(""),
+  vehicle: z.string().default(""),
+  other: z.string().default("")
+});
+
 const leaveInputSchema = z.object({
   date: dateSchema,
   name: z.string().min(1)
@@ -95,9 +104,53 @@ const taskItemInputSchema = z.object({
   sortOrder: z.number().int().default(0)
 });
 
+const idParamSchema = z.object({ id: z.string().min(1) });
+const dateQuerySchema = z.object({ date: dateSchema });
+const enabledInputSchema = z.object({ enabled: z.boolean() });
+
 interface TaskContainerDurationRow {
   start_at: string;
   end_at: string;
+}
+
+interface PermitArrangementAdminRow {
+  id: string;
+  date: string;
+  time_tag: "全天" | "上午" | "下午";
+  permit: string;
+  personnel: string;
+  area: string;
+  other: string;
+  enabled: number;
+}
+
+interface OtherArrangementAdminRow {
+  id: string;
+  date: string;
+  time_tag: "全天" | "上午" | "下午";
+  task: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  enabled: number;
+}
+
+interface PatrolArrangementAdminRow {
+  id: string;
+  item_id: string;
+  time_tag: "全天" | "上午" | "下午" | null;
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  enabled: number;
+}
+
+interface LeavePersonAdminRow {
+  id: string;
+  date: string;
+  name: string;
+  enabled: number;
 }
 
 function validateAdminPayload<TSchema extends z.ZodTypeAny>(
@@ -120,6 +173,31 @@ function validateAdminPayload<TSchema extends z.ZodTypeAny>(
 }
 
 export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, boardEvents: BoardEventBroadcaster): void {
+  app.get("/api/admin/permit-arrangements", async (request, reply) => {
+    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const rows = db
+      .prepare<[string], PermitArrangementAdminRow>(
+        `select id, date, time_tag, permit, personnel, area, other, enabled
+         from permit_arrangements
+         where date = ?
+         order by sort_order, time_tag, permit`
+      )
+      .all(validation.data.date);
+
+    return rows.map((row) => ({
+      id: row.id,
+      date: row.date,
+      timeTag: row.time_tag,
+      permit: row.permit,
+      personnel: row.personnel,
+      area: row.area,
+      other: row.other,
+      enabled: row.enabled === 1
+    }));
+  });
+
   app.post("/api/admin/permit-arrangements", async (request, reply) => {
     const validation = validateAdminPayload(permitInputSchema, request.body);
     if (!validation.success) {
@@ -135,6 +213,73 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     boardEvents.publish();
 
     return reply.code(201).send({ id });
+  });
+
+  app.put("/api/admin/permit-arrangements/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(permitInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const input = validation.data;
+    const result = db
+      .prepare("update permit_arrangements set date = ?, time_tag = ?, permit = ?, personnel = ?, area = ?, other = ? where id = ?")
+      .run(input.date, input.timeTag, input.permit, input.personnel, input.area, input.other, params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id };
+  });
+
+  app.patch("/api/admin/permit-arrangements/:id/enabled", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(enabledInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const result = db
+      .prepare("update permit_arrangements set enabled = ? where id = ?")
+      .run(validation.data.enabled ? 1 : 0, params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id, enabled: validation.data.enabled };
+  });
+
+  app.delete("/api/admin/permit-arrangements/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    if (!params.success) return reply.code(400).send(params.error);
+
+    const result = db.prepare("delete from permit_arrangements where id = ?").run(params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return reply.code(204).send();
+  });
+
+  app.get("/api/admin/other-arrangements", async (request, reply) => {
+    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const rows = db
+      .prepare<[string], OtherArrangementAdminRow>(
+        `select id, date, time_tag, task, personnel, vehicle, other, enabled
+         from other_arrangements
+         where date = ?
+         order by sort_order, time_tag, task`
+      )
+      .all(validation.data.date);
+
+    return rows.map((row) => ({
+      id: row.id,
+      date: row.date,
+      timeTag: row.time_tag,
+      task: row.task,
+      personnel: row.personnel,
+      vehicle: row.vehicle,
+      other: row.other,
+      enabled: row.enabled === 1
+    }));
   });
 
   app.post("/api/admin/other-arrangements", async (request, reply) => {
@@ -154,6 +299,171 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     return reply.code(201).send({ id });
   });
 
+  app.put("/api/admin/other-arrangements/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(otherInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const input = validation.data;
+    const result = db
+      .prepare("update other_arrangements set date = ?, time_tag = ?, task = ?, personnel = ?, vehicle = ?, other = ? where id = ?")
+      .run(input.date, input.timeTag, input.task, input.personnel, input.vehicle, input.other, params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id };
+  });
+
+  app.patch("/api/admin/other-arrangements/:id/enabled", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(enabledInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const result = db
+      .prepare("update other_arrangements set enabled = ? where id = ?")
+      .run(validation.data.enabled ? 1 : 0, params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id, enabled: validation.data.enabled };
+  });
+
+  app.delete("/api/admin/other-arrangements/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    if (!params.success) return reply.code(400).send(params.error);
+
+    const result = db.prepare("delete from other_arrangements where id = ?").run(params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return reply.code(204).send();
+  });
+
+  app.get("/api/admin/patrol-arrangements", async (request, reply) => {
+    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const rows = db
+      .prepare<[string, string], PatrolArrangementAdminRow>(
+        `select c.id, i.id as item_id, i.time_tag, i.target, i.personnel, i.vehicle, i.other, c.enabled
+         from task_containers c
+         join task_items i on i.container_id = c.id
+         where c.type = 'patrol'
+           and c.start_at <= ?
+           and c.end_at >= ?
+         order by c.start_at, i.sort_order, i.offset_minutes`
+      )
+      .all(`${validation.data.date}T23:59:59+08:00`, `${validation.data.date}T00:00:00+08:00`);
+
+    return rows.map((row) => ({
+      id: row.id,
+      itemId: row.item_id,
+      date: validation.data.date,
+      timeTag: row.time_tag ?? "全天",
+      target: row.target,
+      personnel: row.personnel,
+      vehicle: row.vehicle,
+      other: row.other,
+      enabled: row.enabled === 1
+    }));
+  });
+
+  app.post("/api/admin/patrol-arrangements", async (request, reply) => {
+    const validation = validateAdminPayload(patrolArrangementInputSchema, request.body);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const input = validation.data;
+    const id = nanoid();
+    const itemId = nanoid();
+    const now = new Date().toISOString();
+
+    db.prepare(
+      `insert into task_containers
+       (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
+        recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
+       values (?, 'patrol', '巡视', '巡视安排', ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
+    ).run(id, `${input.date}T00:00:00+08:00`, `${input.date}T23:59:59+08:00`, now, now);
+    db.prepare(
+      `insert into task_items
+       (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
+        metadata_json, sort_order)
+       values (?, ?, 0, 1439, ?, ?, ?, ?, ?, ?, '{}', 0)`
+    ).run(itemId, id, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other);
+    boardEvents.publish();
+
+    return reply.code(201).send({ id, itemId });
+  });
+
+  app.put("/api/admin/patrol-arrangements/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(patrolArrangementInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const input = validation.data;
+    const now = new Date().toISOString();
+    const containerResult = db
+      .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = 'patrol'")
+      .run(`${input.date}T00:00:00+08:00`, `${input.date}T23:59:59+08:00`, now, params.data.id);
+    if (containerResult.changes === 0) return reply.code(404).send({ error: "Not found" });
+
+    db.prepare(
+      "update task_items set content = ?, time_tag = ?, target = ?, personnel = ?, vehicle = ?, other = ? where container_id = ?"
+    ).run(input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other, params.data.id);
+    boardEvents.publish();
+
+    return { id: params.data.id };
+  });
+
+  app.patch("/api/admin/patrol-arrangements/:id/enabled", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(enabledInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const result = db
+      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'patrol'")
+      .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id, enabled: validation.data.enabled };
+  });
+
+  app.delete("/api/admin/patrol-arrangements/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    if (!params.success) return reply.code(400).send(params.error);
+
+    const result = db.prepare("delete from task_containers where id = ? and type = 'patrol'").run(params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return reply.code(204).send();
+  });
+
+  app.get("/api/admin/leave-people", async (request, reply) => {
+    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const rows = db
+      .prepare<[string], LeavePersonAdminRow>(
+        `select id, date, name, enabled
+         from leave_people
+         where date = ?
+         order by sort_order, name`
+      )
+      .all(validation.data.date);
+
+    return rows.map((row) => ({
+      id: row.id,
+      date: row.date,
+      name: row.name,
+      enabled: row.enabled === 1
+    }));
+  });
+
   app.post("/api/admin/leave-people", async (request, reply) => {
     const validation = validateAdminPayload(leaveInputSchema, request.body);
     if (!validation.success) {
@@ -167,6 +477,44 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     boardEvents.publish();
 
     return reply.code(201).send({ id });
+  });
+
+  app.put("/api/admin/leave-people/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(leaveInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const input = validation.data;
+    const result = db.prepare("update leave_people set date = ?, name = ? where id = ?").run(input.date, input.name, params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id };
+  });
+
+  app.patch("/api/admin/leave-people/:id/enabled", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(enabledInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const result = db.prepare("update leave_people set enabled = ? where id = ?").run(validation.data.enabled ? 1 : 0, params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.id, enabled: validation.data.enabled };
+  });
+
+  app.delete("/api/admin/leave-people/:id", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    if (!params.success) return reply.code(400).send(params.error);
+
+    const result = db.prepare("delete from leave_people where id = ?").run(params.data.id);
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return reply.code(204).send();
   });
 
   app.post("/api/admin/holidays", async (request, reply) => {
