@@ -15,6 +15,7 @@ describe("admin modals", () => {
       primary: "",
       personnel: "",
       secondary: "",
+      tertiary: "",
       other: ""
     };
     const wrapper = mount(ArrangementModal, {
@@ -25,11 +26,13 @@ describe("admin modals", () => {
       }
     });
 
-    await wrapper.find('input[name="permit"]').setValue("动火许可");
+    await wrapper.find('input[name="target"]').setValue("A区");
+    await wrapper.find('input[name="task"]').setValue("动火许可");
     await wrapper.find(".modal-form").trigger("submit.prevent");
     await wrapper.find('[aria-label="关闭弹窗"]').trigger("click");
 
-    expect(form.primary).toBe("动火许可");
+    expect(form.primary).toBe("A区");
+    expect(form.secondary).toBe("动火许可");
     expect(wrapper.emitted("save")).toEqual([[]]);
     expect(wrapper.emitted("close")).toEqual([[]]);
   });

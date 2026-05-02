@@ -46,6 +46,7 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
     primary: "",
     personnel: "",
     secondary: "",
+    tertiary: "",
     other: ""
   });
 
@@ -73,6 +74,7 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
     modalForm.primary = "";
     modalForm.personnel = "";
     modalForm.secondary = "";
+    modalForm.tertiary = "";
     modalForm.other = "";
   }
 
@@ -81,9 +83,10 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
     if (record) {
       modalForm.date = record.date;
       modalForm.timeTag = record.timeTag;
-      modalForm.primary = record.permit;
+      modalForm.primary = record.target;
       modalForm.personnel = record.personnel;
-      modalForm.secondary = record.area;
+      modalForm.secondary = record.task;
+      modalForm.tertiary = record.vehicle;
       modalForm.other = record.other;
     }
   }
@@ -140,9 +143,10 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
         const payload = {
           date: modalForm.date,
           timeTag: modalForm.timeTag,
-          permit: modalForm.primary,
+          target: modalForm.primary,
+          task: modalForm.secondary,
           personnel: modalForm.personnel,
-          area: modalForm.secondary,
+          vehicle: modalForm.tertiary,
           other: modalForm.other
         };
         if (modalRecordId.value) await updatePermitArrangement(modalRecordId.value, payload);

@@ -46,9 +46,10 @@ describe("admin routes", () => {
       payload: {
         date,
         timeTag: "上午",
-        permit: "动火许可",
+        target: "A区",
+        task: "动火许可",
         personnel: "张三",
-        area: "A区",
+        vehicle: "工程车",
         other: "已审批"
       }
     });
@@ -93,7 +94,7 @@ describe("admin routes", () => {
     expect(leaveResponse.json()).toEqual({ id: expect.any(String) });
     expect(holidayResponse.json()).toEqual({ id: expect.any(String) });
     expect(boardResponse.json()).toMatchObject({
-      permits: [{ timeTag: "上午", permit: "动火许可", personnel: "张三", area: "A区", other: "已审批" }],
+      permits: [{ timeTag: "上午", target: "A区", task: "动火许可", personnel: "张三", vehicle: "工程车", other: "已审批" }],
       others: [{ timeTag: "下午", task: "设备巡检", personnel: "李四", vehicle: "皮卡", other: "带工具" }],
       leavePeople: ["王五"]
     });
@@ -554,7 +555,7 @@ describe("admin routes", () => {
       payload: {
         date: toChinaDate(new Date()),
         timeTag: "上午",
-        permit: "动火许可"
+        task: "动火许可"
       }
     });
     await app.close();
@@ -571,7 +572,7 @@ describe("admin routes", () => {
     await app.inject({
       method: "POST",
       url: "/api/admin/permit-arrangements",
-      payload: { date, timeTag: "上午", permit: "动火许可" }
+      payload: { date, timeTag: "上午", task: "动火许可" }
     });
     await app.inject({
       method: "POST",
@@ -616,12 +617,12 @@ describe("admin routes", () => {
     await app.inject({
       method: "POST",
       url: "/api/admin/permit-arrangements",
-      payload: { date: "2026-05-01", timeTag: "上午", permit: "动火许可" }
+      payload: { date: "2026-05-01", timeTag: "上午", task: "动火许可" }
     });
     await app.inject({
       method: "POST",
       url: "/api/admin/permit-arrangements",
-      payload: { date: "2026-05-02", timeTag: "下午", permit: "登高许可" }
+      payload: { date: "2026-05-02", timeTag: "下午", task: "登高许可" }
     });
     await app.inject({
       method: "POST",
@@ -652,7 +653,7 @@ describe("admin routes", () => {
     const leaveResponse = await app.inject({ method: "GET", url: "/api/admin/leave-people?scope=all" });
     await app.close();
 
-    expect(permitResponse.json().map((record: { permit: string }) => record.permit)).toEqual(["登高许可", "动火许可"]);
+    expect(permitResponse.json().map((record: { task: string }) => record.task)).toEqual(["登高许可", "动火许可"]);
     expect(patrolResponse.json().map((record: { target: string }) => record.target)).toEqual(["2号线", "1号线"]);
     expect(otherResponse.json().map((record: { task: string }) => record.task)).toEqual(["现场协调", "清点物资"]);
     expect(leaveResponse.json().map((record: { name: string }) => record.name)).toEqual(["赵六", "王五"]);
@@ -669,9 +670,10 @@ describe("admin routes", () => {
       payload: {
         date,
         timeTag: "上午",
-        permit: "动火许可",
+        target: "A区",
+        task: "动火许可",
         personnel: "张三",
-        area: "A区",
+        vehicle: "工程车",
         other: "已审批"
       }
     });
@@ -684,9 +686,10 @@ describe("admin routes", () => {
       payload: {
         date,
         timeTag: "下午",
-        permit: "受限空间",
+        target: "B区",
+        task: "受限空间",
         personnel: "李四",
-        area: "B区",
+        vehicle: "抢修车",
         other: "待复核"
       }
     });
@@ -706,9 +709,10 @@ describe("admin routes", () => {
         id,
         date,
         timeTag: "上午",
-        permit: "动火许可",
+        target: "A区",
+        task: "动火许可",
         personnel: "张三",
-        area: "A区",
+        vehicle: "工程车",
         other: "已审批",
         startAt: "2026-05-01T08:00:00+08:00",
         endAt: "2026-05-01T12:00:00+08:00",
@@ -721,9 +725,10 @@ describe("admin routes", () => {
         id,
         date,
         timeTag: "下午",
-        permit: "受限空间",
+        target: "B区",
+        task: "受限空间",
         personnel: "李四",
-        area: "B区",
+        vehicle: "抢修车",
         other: "待复核",
         startAt: "2026-05-01T12:00:00+08:00",
         endAt: "2026-05-01T17:00:00+08:00",
@@ -745,9 +750,10 @@ describe("admin routes", () => {
       payload: {
         date: "2026-05-01",
         timeTag: "上午",
-        permit: "动火许可",
+        target: "A区",
+        task: "动火许可",
         personnel: "张三",
-        area: "A区",
+        vehicle: "工程车",
         other: "已审批"
       }
     });
@@ -775,11 +781,10 @@ describe("admin routes", () => {
     });
     expect(JSON.parse(item?.ext_data_json ?? "{}")).toEqual({
       timeTag: "上午",
-      target: "动火许可",
+      target: "A区",
       personnel: "张三",
-      vehicle: "",
-      other: "已审批",
-      area: "A区"
+      vehicle: "工程车",
+      other: "已审批"
     });
     expect(legacyTable).toBeUndefined();
   });
@@ -1087,7 +1092,7 @@ describe("admin routes", () => {
       payload: {
         date: "2026-05-01",
         timeTag: "晚上",
-        permit: "动火许可"
+        task: "动火许可"
       }
     });
     await app.close();
@@ -1104,7 +1109,7 @@ describe("admin routes", () => {
   });
 
   it.each([
-    ["/api/admin/permit-arrangements", { date: "2026/05/01", timeTag: "上午", permit: "动火许可" }],
+    ["/api/admin/permit-arrangements", { date: "2026/05/01", timeTag: "上午", task: "动火许可" }],
     ["/api/admin/other-arrangements", { date: "2026/05/01", timeTag: "下午", task: "设备巡检" }],
     ["/api/admin/leave-people", { date: "2026/05/01", name: "王五" }],
     ["/api/admin/holidays", { date: "2026/05/01", name: "劳动节" }]

@@ -28,12 +28,12 @@ function makeSnapshot(overrides: Partial<BoardSnapshot> = {}): BoardSnapshot {
       ]
     },
     permits: [
-      { timeTag: "全天", permit: "动火许可", personnel: "张三", area: "A区", other: "复核" },
-      { timeTag: "上午", permit: "登高许可", personnel: "李四", area: "B区", other: "监护" },
-      { timeTag: "下午", permit: "受限空间", personnel: "王五", area: "C区", other: "检测" },
-      { timeTag: "全天", permit: "临电许可", personnel: "赵六", area: "D区", other: "挂牌" },
-      { timeTag: "上午", permit: "吊装许可", personnel: "钱七", area: "E区", other: "封控" },
-      { timeTag: "下午", permit: "开挖许可", personnel: "孙八", area: "F区", other: "旁站" }
+      { timeTag: "全天", target: "A区", task: "动火许可", personnel: "张三", vehicle: "1号车", other: "复核" },
+      { timeTag: "上午", target: "B区", task: "登高许可", personnel: "李四", vehicle: "2号车", other: "监护" },
+      { timeTag: "下午", target: "C区", task: "受限空间", personnel: "王五", vehicle: "3号车", other: "检测" },
+      { timeTag: "全天", target: "D区", task: "临电许可", personnel: "赵六", vehicle: "4号车", other: "挂牌" },
+      { timeTag: "上午", target: "E区", task: "吊装许可", personnel: "钱七", vehicle: "5号车", other: "封控" },
+      { timeTag: "下午", target: "F区", task: "开挖许可", personnel: "孙八", vehicle: "6号车", other: "旁站" }
     ],
     patrols: [
       { timeTag: "全天", target: "主厂房", personnel: "周九", vehicle: "1号车", other: "正常", metadata: {} },
@@ -90,7 +90,7 @@ describe("BoardView", () => {
     expect(wrapper.text()).toContain("动火许可");
     expect(wrapper.text()).toContain("开挖许可");
     expect(wrapper.findAll("[data-testid='permit-row']")).toHaveLength(6);
-    expect(wrapper.findAll(".dense-head")[0].text()).toBe("时间许可人员区域其他");
+    expect(wrapper.findAll(".dense-head")[0].text()).toBe("时间对象任务人员车辆其他");
     expect(wrapper.text()).toContain("陈一");
     expect(wrapper.text()).toContain("刘二");
     expect(wrapper.text()).toContain("黄三");

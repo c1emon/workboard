@@ -51,9 +51,10 @@ let refreshSequence = 0;
 
 const permitColumns: DenseColumn[] = [
   { key: "timeTag", label: "时间" },
-  { key: "permit", label: "许可" },
+  { key: "target", label: "对象" },
+  { key: "task", label: "任务" },
   { key: "personnel", label: "人员" },
-  { key: "area", label: "区域" },
+  { key: "vehicle", label: "车辆" },
   { key: "other", label: "其他" }
 ];
 

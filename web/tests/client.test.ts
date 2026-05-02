@@ -23,9 +23,10 @@ describe("api client", () => {
       createPermit({
         date: "2026-05-01",
         timeTag: "上午",
-        permit: "动火许可",
+        target: "A区",
+        task: "动火许可",
         personnel: "",
-        area: "",
+        vehicle: "",
         other: ""
       })
     ).rejects.toThrow("Invalid admin payload: timeTag: Invalid enum value");

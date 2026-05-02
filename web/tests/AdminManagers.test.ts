@@ -27,9 +27,10 @@ describe("admin managers", () => {
             timeTag: "上午",
             startAt: "2026-05-01T08:00:00+08:00",
             endAt: "2026-05-01T12:00:00+08:00",
-            permit: "动火许可",
+            target: "A区",
+            task: "动火许可",
             personnel: "张三",
-            area: "A区",
+            vehicle: "工程车",
             other: "已审批",
             enabled: true
           }

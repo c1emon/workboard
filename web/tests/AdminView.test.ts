@@ -103,9 +103,10 @@ vi.mock("../src/api/client", () => ({
       id: "permit-1",
       date: "2026-05-01",
       timeTag: "全天",
-      permit: "动火许可",
+      target: "A区",
+      task: "动火许可",
       personnel: "张三",
-      area: "A区",
+      vehicle: "工程车",
       other: "已审批",
       enabled: true
     }
@@ -302,18 +303,20 @@ describe("AdminView", () => {
     await wrapper.findAll(".section-nav button")[1].trigger("click");
     await wrapper.find('[aria-label="新增许可"]').trigger("click");
 
-    await wrapper.find('input[name="permit"]').setValue("动火许可");
+    await wrapper.find('input[name="target"]').setValue("A区");
+    await wrapper.find('input[name="task"]').setValue("动火许可");
     await wrapper.find('input[name="personnel"]').setValue("张三");
-    await wrapper.find('input[name="area"]').setValue("A区");
+    await wrapper.find('input[name="vehicle"]').setValue("工程车");
     await wrapper.find('input[name="other"]').setValue("已审批");
     await wrapper.find(".modal-form").trigger("submit.prevent");
 
     expect(createPermit).toHaveBeenCalledWith({
       date: expect.any(String),
       timeTag: "上午",
-      permit: "动火许可",
+      target: "A区",
+      task: "动火许可",
       personnel: "张三",
-      area: "A区",
+      vehicle: "工程车",
       other: "已审批"
     });
   });

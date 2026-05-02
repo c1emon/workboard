@@ -20,9 +20,10 @@
         <thead>
           <tr>
             <th>时间</th>
-            <th>许可</th>
+            <th>对象</th>
+            <th>任务</th>
             <th>人员</th>
-            <th>区域</th>
+            <th>车辆</th>
             <th>其他</th>
             <th class="actions-column">操作</th>
           </tr>
@@ -30,9 +31,10 @@
         <tbody>
           <tr v-for="record in rows" :key="record.id" :class="{ disabled: !record.enabled }">
             <td>{{ record.timeTag }}</td>
-            <td>{{ record.permit }}</td>
+            <td>{{ record.target || "-" }}</td>
+            <td>{{ record.task }}</td>
             <td>{{ record.personnel || "-" }}</td>
-            <td>{{ record.area || "-" }}</td>
+            <td>{{ record.vehicle || "-" }}</td>
             <td>{{ record.other || "-" }}</td>
             <td class="row-actions">
               <button type="button" :aria-label="record.enabled ? '禁用许可' : '启用许可'" @click="emit('toggle', record)">
@@ -43,7 +45,7 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0">
-            <td class="empty-cell" colspan="6">当前日期暂无许可</td>
+            <td class="empty-cell" colspan="7">当前日期暂无许可</td>
           </tr>
         </tbody>
       </table>

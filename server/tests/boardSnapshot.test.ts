@@ -18,9 +18,9 @@ describe("board snapshot", () => {
       date: "2026-05-01",
       timeTag: "下午",
       content: "封闭许可",
+      target: "西侧",
       personnel: "孙八",
-      other: "待确认",
-      metadata: { area: "西侧" }
+      other: "待确认"
     });
     insertArrangementContainer(db, {
       id: "p2",
@@ -28,9 +28,9 @@ describe("board snapshot", () => {
       date: "2026-05-01",
       timeTag: "全天",
       content: "动火许可",
+      target: "A区",
       personnel: "张三",
-      other: "已审批",
-      metadata: { area: "A区" }
+      other: "已审批"
     });
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
@@ -81,9 +81,10 @@ describe("board snapshot", () => {
       date,
       timeTag: "上午",
       content: "动火许可",
+      target: "A区",
       personnel: "张三",
-      other: "已审批",
-      metadata: { area: "A区" }
+      vehicle: "工程车",
+      other: "已审批"
     });
     insertArrangementContainer(db, {
       id: "o1",
@@ -104,7 +105,7 @@ describe("board snapshot", () => {
     expect(response.headers["content-type"]).toContain("application/json");
     expect(response.json()).toMatchObject({
       operation: { items: [] },
-      permits: [{ timeTag: "上午", permit: "动火许可", personnel: "张三", area: "A区", other: "已审批" }],
+      permits: [{ timeTag: "上午", target: "A区", task: "动火许可", personnel: "张三", vehicle: "工程车", other: "已审批" }],
       patrols: [],
       others: [{ timeTag: "全天", task: "值守", personnel: "赵六", vehicle: "", other: "" }],
       leavePeople: ["钱七"]
@@ -225,6 +226,7 @@ function insertArrangementContainer(
     date: string;
     timeTag: "全天" | "上午" | "下午";
     content: string;
+    target?: string;
     personnel?: string;
     vehicle?: string;
     other?: string;
@@ -266,7 +268,7 @@ function insertArrangementContainer(
     JSON.stringify({
       ...(input.metadata ?? {}),
       timeTag: input.timeTag,
-      target: input.content,
+      target: input.target ?? input.content,
       personnel: input.personnel ?? "",
       vehicle: input.vehicle ?? "",
       other: input.other ?? ""

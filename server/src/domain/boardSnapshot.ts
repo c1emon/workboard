@@ -5,7 +5,7 @@ import { compareTimeTag, type TimeTag } from "./timeTags.js";
 export interface BoardSnapshot {
   serverTime: string;
   operation: { items: Array<{ content: string; startAt: string; endAt: string; metadata: Record<string, unknown> }> };
-  permits: Array<{ timeTag: TimeTag; permit: string; personnel: string; area: string; other: string }>;
+  permits: Array<{ timeTag: TimeTag; target: string; task: string; personnel: string; vehicle: string; other: string }>;
   patrols: Array<{ timeTag: TimeTag; target: string; personnel: string; vehicle: string; other: string; metadata: Record<string, unknown> }>;
   others: Array<{ timeTag: TimeTag; task: string; personnel: string; vehicle: string; other: string }>;
   leavePeople: string[];
@@ -99,9 +99,10 @@ export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapsh
   const permits = permitItems
     .map((item) => ({
       timeTag: metadataTimeTag(item.metadata),
-      permit: metadataString(item.metadata, "target") || (item.content ?? ""),
+      target: metadataString(item.metadata, "target"),
+      task: item.content ?? "",
       personnel: metadataString(item.metadata, "personnel"),
-      area: String(item.metadata.area ?? ""),
+      vehicle: metadataString(item.metadata, "vehicle"),
       other: metadataString(item.metadata, "other")
     }))
     .sort((a, b) => compareTimeTag(a.timeTag, b.timeTag));

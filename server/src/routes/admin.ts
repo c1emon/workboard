@@ -18,9 +18,10 @@ const resourceIdSchema = z.string().min(1).max(64);
 const permitInputSchema = z.object({
   date: dateSchema,
   timeTag: timeTagSchema,
-  permit: z.string().min(1),
+  target: z.string().default(""),
+  task: z.string().min(1),
   personnel: z.string().default(""),
-  area: z.string().default(""),
+  vehicle: z.string().default(""),
   other: z.string().default("")
 });
 
@@ -377,9 +378,10 @@ function mapPermitArrangementTaskRow(row: ArrangementTaskAdminRow) {
     timeTag: metadataTimeTag(metadata),
     startAt: row.start_at,
     endAt: row.end_at,
-    permit: metadataString(metadata, "target") || row.content,
+    target: metadataString(metadata, "target"),
+    task: row.content,
     personnel: metadataString(metadata, "personnel"),
-    area: metadataString(metadata, "area"),
+    vehicle: metadataString(metadata, "vehicle"),
     other: metadataString(metadata, "other"),
     enabled: row.enabled === 1
   };
@@ -555,12 +557,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       description: "许可安排",
       date: input.date,
       timeTag: input.timeTag,
-      content: input.permit,
-      target: input.permit,
+      content: input.task,
+      target: input.target,
       personnel: input.personnel,
-      vehicle: "",
+      vehicle: input.vehicle,
       other: input.other,
-      metadata: { area: input.area }
+      metadata: {}
     });
     boardEvents.publish();
 
@@ -578,12 +580,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       type: "permit",
       date: input.date,
       timeTag: input.timeTag,
-      content: input.permit,
-      target: input.permit,
+      content: input.task,
+      target: input.target,
       personnel: input.personnel,
-      vehicle: "",
+      vehicle: input.vehicle,
       other: input.other,
-      metadata: { area: input.area }
+      metadata: {}
     });
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();

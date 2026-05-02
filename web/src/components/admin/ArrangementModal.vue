@@ -9,9 +9,10 @@
         <label>日期<input v-model="form.date" required type="date" /></label>
         <label v-if="kind !== 'leave'">时间标记<TimeTagSelect v-model="form.timeTag" /></label>
         <template v-if="kind === 'permit'">
-          <label>许可<input v-model="form.primary" name="permit" required /></label>
+          <label>对象<input v-model="form.primary" name="target" /></label>
+          <label>任务<input v-model="form.secondary" name="task" required /></label>
           <label>人员<input v-model="form.personnel" name="personnel" /></label>
-          <label>区域<input v-model="form.secondary" name="area" /></label>
+          <label>车辆<input v-model="form.tertiary" name="vehicle" /></label>
           <label>其他<input v-model="form.other" name="other" /></label>
         </template>
         <template v-else-if="kind === 'patrol'">
@@ -50,6 +51,7 @@ export interface ArrangementForm {
   primary: string;
   personnel: string;
   secondary: string;
+  tertiary: string;
   other: string;
 }
 

@@ -11,9 +11,10 @@ export interface PermitArrangementRecord {
   timeTag: TimeTag;
   startAt: string;
   endAt: string;
-  permit: string;
+  target: string;
+  task: string;
   personnel: string;
-  area: string;
+  vehicle: string;
   other: string;
   enabled: boolean;
 }
@@ -217,9 +218,10 @@ export async function fetchPermitArrangements(date: string, scope: ListScope = "
 export async function createPermit(input: {
   date: string;
   timeTag: TimeTag;
-  permit: string;
+  target: string;
+  task: string;
   personnel: string;
-  area: string;
+  vehicle: string;
   other: string;
 }): Promise<{ id: string }> {
   return postAdmin("permit-arrangements", input);
