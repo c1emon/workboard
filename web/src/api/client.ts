@@ -1,9 +1,10 @@
-import type { BoardSnapshot } from "./types";
+import type { BoardSnapshot, TaskInstanceStatus } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 type TimeTag = "全天" | "上午" | "下午";
 type ListScope = "date" | "all";
+type TaskTemplateType = "operation" | "permit" | "patrol" | "other";
 
 export interface PermitArrangementRecord {
   id: string;
@@ -26,20 +27,6 @@ export interface OtherArrangementRecord {
   startAt: string;
   endAt: string;
   task: string;
-  personnel: string;
-  vehicle: string;
-  other: string;
-  enabled: boolean;
-}
-
-export interface PatrolArrangementRecord {
-  id: string;
-  itemId: string;
-  date: string;
-  timeTag: TimeTag;
-  startAt: string;
-  endAt: string;
-  target: string;
   personnel: string;
   vehicle: string;
   other: string;
@@ -121,6 +108,103 @@ export interface OperationPlanInput {
   };
 }
 
+export interface OperationPlanItemInput {
+  offsetMinutes: number;
+  durationMinutes: number;
+  content: string;
+  metadata: Record<string, unknown>;
+  sortOrder: number;
+}
+
+export interface TaskInstanceRecord {
+  id: string;
+  type: TaskTemplateType;
+  templateId: string | null;
+  sourceTemplateItemId: string | null;
+  sourceType: "generated" | "manual" | "override";
+  generationKey: string | null;
+  occurrenceDate: string;
+  startAt: string;
+  endAt: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  status: TaskInstanceStatus;
+  generatedAt: string;
+  updatedAt: string;
+}
+
+export interface TaskInstanceInput {
+  type: TaskTemplateType;
+  startAt: string;
+  endAt: string;
+  content: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface TaskInstanceGenerationInput {
+  windowStartDate: string;
+  windowEndDate: string;
+  types?: TaskTemplateType[];
+  refreshPending?: boolean;
+}
+
+export interface TaskInstanceGenerationResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
+export interface PatrolCycleItemRecord {
+  id: string;
+  templateId: string;
+  cycleDay: number;
+  timeTag: TimeTag;
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  content: string;
+  sortOrder: number;
+}
+
+export interface PatrolPlanRecord {
+  id: string;
+  name: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  skipWeekends: boolean;
+  skipHolidays: boolean;
+  enabled: boolean;
+  cycleLength: number;
+}
+
+export interface PatrolPlanDetail extends PatrolPlanRecord {
+  items: PatrolCycleItemRecord[];
+}
+
+export interface PatrolPlanInput {
+  name: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  skipWeekends: boolean;
+  skipHolidays: boolean;
+  cycleLength: number;
+  enabled?: boolean;
+}
+
+export interface PatrolCycleItemInput {
+  cycleDay: number;
+  timeTag: TimeTag;
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  sortOrder: number;
+  content?: string;
+}
+
 export interface BoardUpdateConnectionHandlers {
   onOpen: () => void;
   onError: () => void;
@@ -158,6 +242,17 @@ async function throwApiError(response: Response, fallback: string): Promise<neve
 }
 
 async function postAdmin<TInput extends object>(path: string, input: TInput): Promise<{ id: string }> {
+  const response = await fetch(`${apiBase}/api/admin/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) await throwApiError(response, "Admin request failed");
+  return response.json();
+}
+
+async function postAdminFor<TInput extends object, TOutput>(path: string, input: TInput): Promise<TOutput> {
   const response = await fetch(`${apiBase}/api/admin/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -272,36 +367,6 @@ export async function deleteOtherArrangement(id: string): Promise<void> {
   return deleteAdmin(`other-arrangements/${encodeURIComponent(id)}`);
 }
 
-export async function fetchPatrolArrangements(date: string, scope: ListScope = "date"): Promise<PatrolArrangementRecord[]> {
-  return fetchAdmin(arrangementListPath("patrol-arrangements", date, scope));
-}
-
-export async function createPatrolArrangement(input: {
-  date: string;
-  timeTag: TimeTag;
-  target: string;
-  personnel: string;
-  vehicle: string;
-  other: string;
-}): Promise<{ id: string }> {
-  return postAdmin("patrol-arrangements", input);
-}
-
-export async function updatePatrolArrangement(
-  id: string,
-  input: Omit<PatrolArrangementRecord, "id" | "itemId" | "enabled" | "startAt" | "endAt">
-): Promise<void> {
-  return putAdmin(`patrol-arrangements/${encodeURIComponent(id)}`, input);
-}
-
-export async function updatePatrolArrangementEnabled(id: string, enabled: boolean): Promise<void> {
-  return patchAdmin(`patrol-arrangements/${encodeURIComponent(id)}/enabled`, { enabled });
-}
-
-export async function deletePatrolArrangement(id: string): Promise<void> {
-  return deleteAdmin(`patrol-arrangements/${encodeURIComponent(id)}`);
-}
-
 export async function createLeavePerson(input: { date: string; name: string }): Promise<{ id: string }> {
   return postAdmin("leave-people", input);
 }
@@ -367,39 +432,78 @@ export async function deleteOperationPlan(id: string): Promise<void> {
   return deleteAdmin(`operation-plans/${encodeURIComponent(id)}`);
 }
 
-export async function createTaskContainer(input: {
-  type: "operation" | "patrol";
-  name: string;
-  description: string;
-  startAt: string;
-  endAt: string;
-  recurrenceType: "once" | "finite" | "infinite";
-  recurrenceIntervalMinutes?: number | null;
-  recurrenceCount?: number | null;
-  skipWeekends: boolean;
-  skipHolidays: boolean;
-}): Promise<{ id: string }> {
-  return postAdmin("task-containers", input);
+export async function createOperationPlanItem(planId: string, input: OperationPlanItemInput): Promise<{ id: string }> {
+  return postAdmin(`operation-plans/${encodeURIComponent(planId)}/items`, input);
 }
 
-export async function createTaskItem(input: {
-  containerId: string;
-  offsetMinutes: number;
-  durationMinutes: number;
-  content: string;
-  timeTag?: TimeTag;
-  target: string;
-  personnel: string;
-  vehicle: string;
-  other: string;
-  metadata: Record<string, unknown>;
-  sortOrder: number;
-}): Promise<{ id: string }> {
-  return postAdmin("task-items", input);
+export async function updateOperationPlanItem(planId: string, itemId: string, input: OperationPlanItemInput): Promise<void> {
+  return putAdmin(`operation-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`, input);
 }
 
-export async function deleteTaskItem(id: string): Promise<void> {
-  return deleteAdmin(`task-items/${encodeURIComponent(id)}`);
+export async function deleteOperationPlanItem(planId: string, itemId: string): Promise<void> {
+  return deleteAdmin(`operation-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`);
+}
+
+export async function fetchTaskInstances(date: string, type?: TaskTemplateType): Promise<TaskInstanceRecord[]> {
+  const params = new URLSearchParams({ date });
+  if (type) params.set("type", type);
+  return fetchAdmin(`task-instances?${params.toString()}`);
+}
+
+export async function createTaskInstance(input: TaskInstanceInput): Promise<TaskInstanceRecord> {
+  return postAdminFor("task-instances", input);
+}
+
+export async function updateTaskInstance(id: string, input: TaskInstanceInput): Promise<void> {
+  return putAdmin(`task-instances/${encodeURIComponent(id)}`, input);
+}
+
+export async function updateTaskInstanceStatus(id: string, status: TaskInstanceStatus): Promise<void> {
+  return patchAdmin(`task-instances/${encodeURIComponent(id)}/status`, { status });
+}
+
+export async function deleteTaskInstance(id: string): Promise<void> {
+  return deleteAdmin(`task-instances/${encodeURIComponent(id)}`);
+}
+
+export async function generateTaskInstances(input: TaskInstanceGenerationInput): Promise<TaskInstanceGenerationResult> {
+  return postAdminFor("task-instances/generate", input);
+}
+
+export async function fetchPatrolPlans(): Promise<PatrolPlanRecord[]> {
+  return fetchAdmin("patrol-plans");
+}
+
+export async function fetchPatrolPlan(id: string): Promise<PatrolPlanDetail> {
+  return fetchAdmin(`patrol-plans/${encodeURIComponent(id)}`);
+}
+
+export async function createPatrolPlan(input: PatrolPlanInput): Promise<{ id: string }> {
+  return postAdmin("patrol-plans", input);
+}
+
+export async function updatePatrolPlan(id: string, input: PatrolPlanInput): Promise<void> {
+  return putAdmin(`patrol-plans/${encodeURIComponent(id)}`, input);
+}
+
+export async function updatePatrolPlanEnabled(id: string, enabled: boolean): Promise<void> {
+  return patchAdmin(`patrol-plans/${encodeURIComponent(id)}/enabled`, { enabled });
+}
+
+export async function deletePatrolPlan(id: string): Promise<void> {
+  return deleteAdmin(`patrol-plans/${encodeURIComponent(id)}`);
+}
+
+export async function createPatrolPlanItem(planId: string, input: PatrolCycleItemInput): Promise<{ id: string }> {
+  return postAdmin(`patrol-plans/${encodeURIComponent(planId)}/items`, input);
+}
+
+export async function updatePatrolPlanItem(planId: string, itemId: string, input: PatrolCycleItemInput): Promise<void> {
+  return putAdmin(`patrol-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`, input);
+}
+
+export async function deletePatrolPlanItem(planId: string, itemId: string): Promise<void> {
+  return deleteAdmin(`patrol-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`);
 }
 
 export function subscribeBoardUpdates(onUpdate: () => void, handlers?: BoardUpdateConnectionHandlers): EventSource {

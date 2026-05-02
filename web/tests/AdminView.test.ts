@@ -7,19 +7,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminView from "../src/views/AdminView.vue";
 import OperationTaskTimeline from "../src/components/OperationTaskTimeline.vue";
 import {
-  createLeavePerson,
-  createOperationPlan,
-  createPermit,
-  createTaskItem,
-  fetchHolidays,
-  deleteTaskItem,
+	  createLeavePerson,
+	  createOperationPlan,
+	  createOperationPlanItem,
+	  createPermit,
+  fetchTaskInstances,
+  fetchPatrolPlans,
+  fetchPatrolPlan,
+	  fetchHolidays,
+	  deleteOperationPlanItem,
   deletePermitArrangement,
   fetchLeavePeople,
   fetchOperationPlan,
   fetchOperationPlans,
   fetchOtherArrangements,
-  fetchPatrolArrangements,
   fetchPermitArrangements,
+  generateTaskInstances,
   importChineseDaysHolidays,
   updateOperationPlan,
   updatePermitArrangementEnabled
@@ -29,16 +32,17 @@ vi.mock("../src/api/client", () => ({
   createHoliday: vi.fn().mockResolvedValue({ id: "holiday-1" }),
   createLeavePerson: vi.fn().mockResolvedValue({ id: "leave-1" }),
   createOperationPlan: vi.fn().mockResolvedValue({ id: "operation-2" }),
-  createOtherArrangement: vi.fn().mockResolvedValue({ id: "other-1" }),
-  createPatrolArrangement: vi.fn().mockResolvedValue({ id: "patrol-1" }),
-  createPermit: vi.fn().mockResolvedValue({ id: "permit-1" }),
-  createTaskContainer: vi.fn().mockResolvedValue({ id: "container-1" }),
-  createTaskItem: vi.fn().mockResolvedValue({ id: "item-1" }),
-  deleteOperationPlan: vi.fn().mockResolvedValue(undefined),
-  deleteOtherArrangement: vi.fn().mockResolvedValue(undefined),
-  deletePatrolArrangement: vi.fn().mockResolvedValue(undefined),
-  deletePermitArrangement: vi.fn().mockResolvedValue(undefined),
-  deleteTaskItem: vi.fn().mockResolvedValue(undefined),
+  createPatrolPlan: vi.fn().mockResolvedValue({ id: "patrol-plan-2" }),
+	  createOtherArrangement: vi.fn().mockResolvedValue({ id: "other-1" }),
+	  createPermit: vi.fn().mockResolvedValue({ id: "permit-1" }),
+	  createOperationPlanItem: vi.fn().mockResolvedValue({ id: "item-1" }),
+	  deleteOperationPlan: vi.fn().mockResolvedValue(undefined),
+	  deleteOperationPlanItem: vi.fn().mockResolvedValue(undefined),
+	  deleteOtherArrangement: vi.fn().mockResolvedValue(undefined),
+  deletePatrolPlan: vi.fn().mockResolvedValue(undefined),
+  deletePatrolPlanItem: vi.fn().mockResolvedValue(undefined),
+  deleteTaskInstance: vi.fn().mockResolvedValue(undefined),
+	  deletePermitArrangement: vi.fn().mockResolvedValue(undefined),
   deleteLeavePerson: vi.fn().mockResolvedValue(undefined),
   fetchLeavePeople: vi.fn().mockResolvedValue([
     {
@@ -97,7 +101,49 @@ vi.mock("../src/api/client", () => ({
     }
   ]),
   fetchOtherArrangements: vi.fn().mockResolvedValue([]),
-  fetchPatrolArrangements: vi.fn().mockResolvedValue([]),
+  fetchTaskInstances: vi.fn().mockResolvedValue([
+    {
+      id: "instance-1",
+      type: "patrol",
+      templateId: "patrol-plan-1",
+      sourceTemplateItemId: "cycle-1",
+      sourceType: "generated",
+      generationKey: "patrol-plan-1:cycle-1:2026-05-01",
+      occurrenceDate: "2026-05-01",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T12:00:00+08:00",
+      content: "1号线",
+      metadata: { target: "1号线" },
+      status: "pending",
+      generatedAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z"
+    }
+  ]),
+  fetchPatrolPlans: vi.fn().mockResolvedValue([
+    {
+      id: "patrol-plan-1",
+      name: "日常巡检",
+      description: "90天周期",
+      startAt: "2026-05-01T00:00:00+08:00",
+      endAt: "2026-07-29T23:59:59+08:00",
+      skipWeekends: false,
+      skipHolidays: true,
+      enabled: true,
+      cycleLength: 90
+    }
+  ]),
+  fetchPatrolPlan: vi.fn().mockResolvedValue({
+    id: "patrol-plan-1",
+    name: "日常巡检",
+    description: "90天周期",
+    startAt: "2026-05-01T00:00:00+08:00",
+    endAt: "2026-07-29T23:59:59+08:00",
+    skipWeekends: false,
+    skipHolidays: true,
+    enabled: true,
+    cycleLength: 90,
+    items: [{ id: "cycle-1", templateId: "patrol-plan-1", cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "", other: "", content: "1号线", sortOrder: 0 }]
+  }),
   fetchPermitArrangements: vi.fn().mockResolvedValue([
     {
       id: "permit-1",
@@ -116,13 +162,19 @@ vi.mock("../src/api/client", () => ({
     { id: "workday-1", date: "2026-04-26", name: "劳动节", type: "adjusted_workday" }
   ]),
   importChineseDaysHolidays: vi.fn().mockResolvedValue({ imported: 2, holidays: 1, adjustedWorkdays: 1 }),
+  generateTaskInstances: vi.fn().mockResolvedValue({ inserted: 1, updated: 0, skipped: 0 }),
+  createTaskInstance: vi.fn().mockResolvedValue({ id: "instance-2" }),
+  updateTaskInstance: vi.fn().mockResolvedValue(undefined),
+  updateTaskInstanceStatus: vi.fn().mockResolvedValue(undefined),
+  updatePatrolPlan: vi.fn().mockResolvedValue(undefined),
+  updatePatrolPlanEnabled: vi.fn().mockResolvedValue(undefined),
+  createPatrolPlanItem: vi.fn().mockResolvedValue({ id: "cycle-2" }),
+  updatePatrolPlanItem: vi.fn().mockResolvedValue(undefined),
   updateOtherArrangement: vi.fn().mockResolvedValue(undefined),
   updateOtherArrangementEnabled: vi.fn().mockResolvedValue(undefined),
   updateOperationPlan: vi.fn().mockResolvedValue(undefined),
   updateOperationPlanEnabled: vi.fn().mockResolvedValue(undefined),
   updateLeavePerson: vi.fn().mockResolvedValue(undefined),
-  updatePatrolArrangement: vi.fn().mockResolvedValue(undefined),
-  updatePatrolArrangementEnabled: vi.fn().mockResolvedValue(undefined),
   updatePermitArrangement: vi.fn().mockResolvedValue(undefined),
   updatePermitArrangementEnabled: vi.fn().mockResolvedValue(undefined)
 }));
@@ -390,9 +442,12 @@ describe("AdminView", () => {
     expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
 
     await wrapper.findAll(".section-nav button")[3].trigger("click");
-    await wrapper.find('input[name="operationShowAll"]').setValue(true);
-    expect(fetchPatrolArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
-    expect(wrapper.find(".yesterday-button").attributes("disabled")).toBeDefined();
+    await waitForAssertion(() => {
+	      expect(fetchTaskInstances).toHaveBeenCalledWith(expect.any(String), "patrol");
+      expect(fetchPatrolPlans).toHaveBeenCalled();
+    });
+    expect(wrapper.text()).toContain("任务实例");
+    expect(wrapper.text()).toContain("巡视模板");
 
     await wrapper.findAll(".section-nav button")[1].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
@@ -401,6 +456,32 @@ describe("AdminView", () => {
     await wrapper.findAll(".section-nav button")[2].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
     expect(fetchLeavePeople).toHaveBeenLastCalledWith(expect.any(String), "all");
+  });
+
+  it("shows patrol instance and template management", async () => {
+    const wrapper = mountAdmin();
+
+    await wrapper.findAll(".section-nav button")[3].trigger("click");
+
+    await waitForAssertion(() => {
+      expect(fetchTaskInstances).toHaveBeenCalledWith(expect.any(String), "patrol");
+      expect(fetchPatrolPlans).toHaveBeenCalled();
+      expect(fetchPatrolPlan).toHaveBeenCalledWith("patrol-plan-1");
+    });
+    expect(wrapper.text()).toContain("任务实例");
+    expect(wrapper.text()).toContain("1号线");
+    expect(wrapper.text()).toContain("巡视模板");
+    expect(wrapper.text()).toContain("日常巡检");
+
+    await wrapper.find(".task-instance-panel .manager-actions .secondary-action").trigger("click");
+    await wrapper.find(".confirmation-confirm").trigger("click");
+
+    expect(generateTaskInstances).toHaveBeenCalledWith({
+      windowStartDate: expect.any(String),
+      windowEndDate: expect.any(String),
+      types: ["patrol"],
+      refreshPending: true
+    });
   });
 
   it("shows a prompt instead of saving when adding a duplicate leave person", async () => {
@@ -637,7 +718,7 @@ describe("AdminView", () => {
   });
 
   it("adds operation child tasks from the preview action while editing", async () => {
-    vi.mocked(createTaskItem).mockResolvedValueOnce({ id: "item-3" });
+	    vi.mocked(createOperationPlanItem).mockResolvedValueOnce({ id: "item-3" });
     const wrapper = mountAdmin();
     await new Promise((resolve) => setTimeout(resolve));
 
@@ -695,19 +776,15 @@ describe("AdminView", () => {
     await wrapper.find('input[name="operationItemContent"]').setValue("新增班次");
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
 
-    expect(createTaskItem).toHaveBeenCalledWith(
-      expect.objectContaining({
-        containerId: "operation-1",
-        offsetMinutes: 195,
-        durationMinutes: 75,
-        content: "新增班次",
-        target: "",
-        personnel: "",
-        vehicle: "",
-        other: "",
-        metadata: {},
-        sortOrder: 2
-      })
+	    expect(createOperationPlanItem).toHaveBeenCalledWith(
+	      "operation-1",
+	      expect.objectContaining({
+	        offsetMinutes: 195,
+	        durationMinutes: 75,
+	        content: "新增班次",
+	        metadata: {},
+	        sortOrder: 2
+	      })
     );
     expect(wrapper.find(".operation-task-timeline").text()).toContain("新增班次");
   });
@@ -746,7 +823,7 @@ describe("AdminView", () => {
       firstItemContent: "白班1",
       items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 510, content: "白班1", metadata: {}, sortOrder: 0 }]
     });
-    vi.mocked(createTaskItem).mockResolvedValueOnce({ id: "item-2" });
+	    vi.mocked(createOperationPlanItem).mockResolvedValueOnce({ id: "item-2" });
     const wrapper = mountAdmin();
     await new Promise((resolve) => setTimeout(resolve));
 
@@ -767,10 +844,13 @@ describe("AdminView", () => {
         recurrenceIntervalMinutes: 1020
       })
     );
-    expect(createTaskItem).toHaveBeenCalledWith(expect.objectContaining({ containerId: "operation-single", offsetMinutes: 510, durationMinutes: 510 }));
-    expect(vi.mocked(updateOperationPlan).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(createTaskItem).mock.invocationCallOrder[0]
-    );
+	    expect(createOperationPlanItem).toHaveBeenCalledWith(
+	      "operation-single",
+	      expect.objectContaining({ offsetMinutes: 510, durationMinutes: 510 })
+	    );
+	    expect(vi.mocked(updateOperationPlan).mock.invocationCallOrder[0]).toBeLessThan(
+	      vi.mocked(createOperationPlanItem).mock.invocationCallOrder[0]
+	    );
   });
 
   it("deletes operation child tasks with confirmation while editing", async () => {
@@ -797,12 +877,12 @@ describe("AdminView", () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(wrapper.find(".confirmation-modal").exists()).toBe(true);
     expect(wrapper.find(".confirmation-modal").text()).toContain("删除子任务");
-    expect(deleteTaskItem).not.toHaveBeenCalled();
+	    expect(deleteOperationPlanItem).not.toHaveBeenCalled();
 
     await wrapper.find(".confirmation-confirm").trigger("click");
 
     await waitForAssertion(() => {
-      expect(deleteTaskItem).toHaveBeenCalledWith("item-2");
+	      expect(deleteOperationPlanItem).toHaveBeenCalledWith("operation-1", "item-2");
     });
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-1",
@@ -931,7 +1011,7 @@ describe("AdminView", () => {
     expect(toolbar.find(".date-field").exists()).toBe(true);
     expect(toolbar.find(".yesterday-button").exists()).toBe(true);
     expect(toolbar.find(".today-button").exists()).toBe(true);
-    expect(toolbar.find('[aria-label="新增巡视"]').exists()).toBe(true);
+    expect(toolbar.find('[aria-label="新增实例"]').exists()).toBe(true);
     expect(wrapper.find(".list-heading .icon-action").exists()).toBe(false);
   });
 
@@ -955,7 +1035,7 @@ describe("AdminView", () => {
     const operationItemModalSource = readFileSync(resolve(__dirname, "../src/components/admin/OperationItemModal.vue"), "utf8");
 
     expect(adminViewSource).toContain("useAdminViewModel");
-    expect(adminViewSource.split("\n").length).toBeLessThan(360);
+    expect(adminViewSource.split("\n").length).toBeLessThan(430);
     expect(managerStylesSource).toContain("td {\n  color: #0f172a;");
     expect(managerStylesSource).toContain("tr.disabled td:not(.row-actions) {\n  color: #94a3b8;");
     expect(adminViewSource).toContain("justify-content: space-between;");

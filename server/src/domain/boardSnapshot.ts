@@ -1,13 +1,20 @@
 import type { AppDatabase } from "../db/database.js";
-import { expandContainer, type ExpandedTaskItem, type TaskContainer, type TaskItemInput } from "./taskExpansion.js";
 import { compareTimeTag, type TimeTag } from "./timeTags.js";
 
 export interface BoardSnapshot {
   serverTime: string;
-  operation: { items: Array<{ content: string; startAt: string; endAt: string; metadata: Record<string, unknown> }> };
-  permits: Array<{ timeTag: TimeTag; target: string; task: string; personnel: string; vehicle: string; other: string }>;
-  patrols: Array<{ timeTag: TimeTag; target: string; personnel: string; vehicle: string; other: string; metadata: Record<string, unknown> }>;
-  others: Array<{ timeTag: TimeTag; task: string; personnel: string; vehicle: string; other: string }>;
+  operation: { items: Array<{ content: string; startAt: string; endAt: string; status: TaskInstanceStatus; metadata: Record<string, unknown> }> };
+  permits: Array<{ timeTag: TimeTag; target: string; task: string; personnel: string; vehicle: string; other: string; status: TaskInstanceStatus }>;
+  patrols: Array<{
+    timeTag: TimeTag;
+    target: string;
+    personnel: string;
+    vehicle: string;
+    other: string;
+    status: TaskInstanceStatus;
+    metadata: Record<string, unknown>;
+  }>;
+  others: Array<{ timeTag: TimeTag; task: string; personnel: string; vehicle: string; other: string; status: TaskInstanceStatus }>;
   leavePeople: string[];
 }
 
@@ -15,76 +22,56 @@ interface LeavePersonRow {
   name: string;
 }
 
-interface HolidayRow {
-  date: string;
-}
-
-interface TaskContainerRow {
+interface TaskInstanceRow {
   id: string;
   type: "operation" | "permit" | "patrol" | "other";
-  name: string;
+  template_id: string | null;
+  source_template_item_id: string | null;
+  source_type: "generated" | "manual" | "override";
+  generation_key: string | null;
+  occurrence_date: string;
   start_at: string;
   end_at: string;
-  recurrence_type: "once" | "finite" | "infinite";
-  recurrence_interval_minutes: number | null;
-  recurrence_count: number | null;
-  skip_weekends: number;
-  skip_holidays: number;
-  enabled: number;
-}
-
-interface TaskItemRow {
-  id: string;
-  container_id: string;
-  offset_minutes: number;
-  duration_minutes: number;
   content: string;
   ext_data_json: string;
-  sort_order: number;
+  status: "pending" | "in_progress" | "done" | "cancelled";
 }
 
-interface SnapshotTaskItem extends TaskItemInput {
-  sortOrder: number;
-}
+type TaskInstanceStatus = TaskInstanceRow["status"];
 
-type ExpandedArrangementItem = ExpandedTaskItem & { sortOrder?: number };
+interface SnapshotTaskInstance {
+  id: string;
+  type: TaskInstanceRow["type"];
+  startAt: string;
+  endAt: string;
+  content: string;
+  status: TaskInstanceStatus;
+  metadata: Record<string, unknown>;
+}
 
 export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapshot {
   const date = toChinaDate(now);
-  const holidays = new Set(
-    db.prepare<[], HolidayRow>("select date from holidays where type = 'holiday'").all().map((row) => row.date)
-  );
-  const containers = loadTaskContainers(db);
-  const itemsByContainer = loadTaskItems(db);
-  const operationItems = containers
-    .filter((container) => container.type === "operation")
-    .flatMap((container) =>
-      expandContainer(container, itemsByContainer.get(container.id) ?? [], {
-        windowStart: new Date(now.getTime() - 24 * 60 * 60_000).toISOString(),
-        windowEnd: new Date(now.getTime() + 24 * 60 * 60_000).toISOString(),
-        holidays
-      })
-    )
-    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime() || (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+  const operationInstances = loadTaskInstances(db, "operation", {
+    start: new Date(now.getTime() - 24 * 60 * 60_000),
+    end: new Date(now.getTime() + 24 * 60 * 60_000)
+  });
+  const dayWindow = {
+    start: new Date(`${date}T00:00:00+08:00`),
+    end: new Date(`${date}T23:59:59.999+08:00`)
+  };
+  const operationItems = operationInstances
+    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
     .map((item) => ({
       content: item.content ?? "",
       startAt: item.startAt,
       endAt: item.endAt,
+      status: item.status,
       metadata: item.metadata
     }));
-  const patrols = containers
-    .filter((container) => container.type === "patrol")
-    .flatMap((container) =>
-      expandContainer(container, itemsByContainer.get(container.id) ?? [], {
-        windowStart: `${date}T00:00:00+08:00`,
-        windowEnd: `${date}T23:59:59.999+08:00`,
-        holidays
-      })
-    )
+  const patrols = loadTaskInstances(db, "patrol", dayWindow)
     .sort(
       (a, b) =>
         compareTimeTag(metadataTimeTag(a.metadata), metadataTimeTag(b.metadata)) ||
-        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
         new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
     )
     .map((item) => ({
@@ -93,27 +80,28 @@ export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapsh
       personnel: metadataString(item.metadata, "personnel"),
       vehicle: metadataString(item.metadata, "vehicle"),
       other: metadataString(item.metadata, "other"),
+      status: item.status,
       metadata: item.metadata
     }));
-  const permitItems = expandArrangementContainers(containers, itemsByContainer, "permit", date, holidays);
-  const permits = permitItems
+  const permits = loadTaskInstances(db, "permit", dayWindow)
     .map((item) => ({
       timeTag: metadataTimeTag(item.metadata),
       target: metadataString(item.metadata, "target"),
       task: item.content ?? "",
       personnel: metadataString(item.metadata, "personnel"),
       vehicle: metadataString(item.metadata, "vehicle"),
-      other: metadataString(item.metadata, "other")
+      other: metadataString(item.metadata, "other"),
+      status: item.status
     }))
     .sort((a, b) => compareTimeTag(a.timeTag, b.timeTag));
-  const otherItems = expandArrangementContainers(containers, itemsByContainer, "other", date, holidays);
-  const others = otherItems
+  const others = loadTaskInstances(db, "other", dayWindow)
     .map((item) => ({
       timeTag: metadataTimeTag(item.metadata),
       task: metadataString(item.metadata, "target") || (item.content ?? ""),
       personnel: metadataString(item.metadata, "personnel"),
       vehicle: metadataString(item.metadata, "vehicle"),
-      other: metadataString(item.metadata, "other")
+      other: metadataString(item.metadata, "other"),
+      status: item.status
     }))
     .sort((a, b) => compareTimeTag(a.timeTag, b.timeTag));
   const leavePeople = db
@@ -131,78 +119,39 @@ export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapsh
   };
 }
 
-function expandArrangementContainers(
-  containers: TaskContainer[],
-  itemsByContainer: Map<string, SnapshotTaskItem[]>,
-  type: "permit" | "other",
-  date: string,
-  holidays: Set<string>
-): ExpandedArrangementItem[] {
-  return containers
-    .filter((container) => container.type === type)
-    .flatMap((container) =>
-      expandContainer(container, itemsByContainer.get(container.id) ?? [], {
-        windowStart: `${date}T00:00:00+08:00`,
-        windowEnd: `${date}T23:59:59.999+08:00`,
-        holidays
-      })
+function loadTaskInstances(
+  db: AppDatabase,
+  type: TaskInstanceRow["type"],
+  window: { start: Date; end: Date }
+): SnapshotTaskInstance[] {
+  const rows = db
+    .prepare<[TaskInstanceRow["type"]], TaskInstanceRow>(
+      `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
+              start_at, end_at, content, ext_data_json, status
+       from task_instances
+       where type = ?
+         and status <> 'cancelled'
+       order by start_at, end_at, id`
     )
-    .sort(
-      (a, b) =>
-        compareTimeTag(metadataTimeTag(a.metadata), metadataTimeTag(b.metadata)) ||
-        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-        new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
-    );
-}
+    .all(type);
 
-function loadTaskContainers(db: AppDatabase): TaskContainer[] {
-  return db
-    .prepare<[], TaskContainerRow>(
-      `select id, type, name, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-              recurrence_count, skip_weekends, skip_holidays, enabled
-       from task_containers
-       where enabled = 1
-       order by start_at`
-    )
-    .all()
+  return rows
+    .filter((row) => overlapsWindow(row.start_at, row.end_at, window))
     .map((row) => ({
       id: row.id,
       type: row.type,
-      name: row.name,
       startAt: row.start_at,
       endAt: row.end_at,
-      recurrenceType: row.recurrence_type,
-      recurrenceIntervalMinutes: row.recurrence_interval_minutes,
-      recurrenceCount: row.recurrence_count,
-      skipWeekends: row.skip_weekends === 1,
-      skipHolidays: row.skip_holidays === 1,
-      enabled: row.enabled === 1
+      content: row.content,
+      status: row.status,
+      metadata: parseMetadata(row.ext_data_json)
     }));
 }
 
-function loadTaskItems(db: AppDatabase): Map<string, SnapshotTaskItem[]> {
-  const rows = db
-    .prepare<[], TaskItemRow>(
-      `select id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order
-       from task_items
-       order by sort_order, offset_minutes`
-    )
-    .all();
-  const grouped = new Map<string, SnapshotTaskItem[]>();
-
-  for (const row of rows) {
-    const item: SnapshotTaskItem = {
-      id: row.id,
-      offsetMinutes: row.offset_minutes,
-      durationMinutes: row.duration_minutes,
-      content: row.content,
-      metadata: parseMetadata(row.ext_data_json),
-      sortOrder: row.sort_order
-    };
-    grouped.set(row.container_id, [...(grouped.get(row.container_id) ?? []), item]);
-  }
-
-  return grouped;
+function overlapsWindow(startAt: string, endAt: string, window: { start: Date; end: Date }): boolean {
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= window.end.getTime() && endMs >= window.start.getTime();
 }
 
 function metadataString(metadata: Record<string, unknown>, key: string): string {

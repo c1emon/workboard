@@ -45,20 +45,47 @@
           @delete="removePermit"
         />
 
-        <PatrolManager
-          v-else-if="activeKey === 'patrol'"
-          v-model:selected-date="selectedDate"
-          v-model:show-all="patrolShowAll"
-          :today="today"
-          :yesterday="yesterday"
-          :rows="patrolRows"
-          @add="openPatrolModal()"
-          @today="jumpToToday"
-          @yesterday="jumpToYesterday"
-          @toggle="togglePatrol"
-          @edit="openPatrolModal"
-          @delete="removePatrol"
-        />
+        <div v-else-if="activeKey === 'patrol'" class="patrol-admin-stack">
+          <TaskInstanceManager
+            v-model:selected-date="selectedDate"
+            :today="today"
+            :yesterday="yesterday"
+            :rows="taskInstanceRows"
+            :form="taskInstanceForm"
+            :form-open="taskInstanceFormOpen"
+            :editing-id="taskInstanceEditingId"
+            :generation-summary="taskInstanceGenerationSummary"
+            @add="openTaskInstanceCreate"
+            @today="jumpToToday"
+            @yesterday="jumpToYesterday"
+            @edit="openTaskInstanceEdit"
+            @cancel="cancelTaskInstance"
+            @delete="removeTaskInstance"
+            @regenerate="regenerateTaskInstances"
+            @save="saveTaskInstance"
+            @close="closeTaskInstanceForm"
+          />
+          <PatrolPlanManager
+            :rows="patrolPlanRows"
+            :detail="patrolPlanDetail"
+            :plan-form="patrolPlanForm"
+            :plan-form-open="patrolPlanFormOpen"
+            :plan-editing-id="patrolPlanEditingId"
+            :item-form="patrolCycleItemForm"
+            :item-editing-id="patrolCycleItemEditingId"
+            @add-plan="openPatrolPlanCreate"
+            @edit-plan="openPatrolPlanEdit"
+            @select-plan="selectPatrolPlan"
+            @toggle-plan="togglePatrolPlan"
+            @delete-plan="removePatrolPlan"
+            @close-plan="closePatrolPlanForm"
+            @save-plan="savePatrolPlan"
+            @add-item="openPatrolCycleItemCreate"
+            @edit-item="openPatrolCycleItemEdit"
+            @delete-item="removePatrolCycleItem"
+            @save-item="savePatrolCycleItem"
+          />
+        </div>
 
         <OtherManager
           v-else-if="activeKey === 'other'"
@@ -191,26 +218,33 @@ import OperationLoadingOverlay from "../components/admin/OperationLoadingOverlay
 import OperationManager from "../components/admin/OperationManager.vue";
 import OperationPlanModal from "../components/admin/OperationPlanModal.vue";
 import OtherManager from "../components/admin/OtherManager.vue";
-import PatrolManager from "../components/admin/PatrolManager.vue";
+import PatrolPlanManager from "../components/admin/PatrolPlanManager.vue";
 import PermitManager from "../components/admin/PermitManager.vue";
+import TaskInstanceManager from "../components/admin/TaskInstanceManager.vue";
 import { useAdminViewModel } from "../composables/admin/useAdminViewModel";
 
 const {
   sections, today, yesterday, activeKey, selectedDate, statusText, activeSection,
-  permitRows, patrolRows, otherRows, leaveRows, permitShowAll, patrolShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
+  permitRows, otherRows, leaveRows, permitShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
+  taskInstanceRows, taskInstanceForm, taskInstanceFormOpen, taskInstanceEditingId, taskInstanceGenerationSummary,
+  patrolPlanRows, patrolPlanDetail, patrolPlanForm, patrolPlanFormOpen, patrolPlanEditingId, patrolCycleItemForm, patrolCycleItemEditingId,
   holidayYear, holidayRows, adjustedWorkdayRows, holidayImportModalOpen, holidayImportForm,
   modalKind, modalTitle, modalForm, operationModalOpen, operationModalMode, operationRecordId,
   operationForm, operationReadOnly, operationModalTitle, operationDurationMinutes, operationHasEndAt,
   operationDerivedRecurrenceIntervalMinutes, operationDerivedRecurrenceCount, operationComputedEndAt,
   operationDetailItems, operationSelectedItemId, operationDetailLoading, operationItemModalOpen,
   operationItemModalMode, operationItemModalTitle, operationItemForm, operationItemBaseOptions,
-  confirmation, jumpToToday, jumpToYesterday, openPermitModal, openPatrolModal, openOtherModal,
+  confirmation, jumpToToday, jumpToYesterday, openPermitModal, openOtherModal,
   openLeaveModal, openOperationModal, selectOperationItem, openOperationItemCreate, closeModal,
   openHolidayImportModal, closeHolidayImportModal, selectHolidayImportFile, closeOperationModal,
-  closeOperationItemModal, saveModal, togglePermit, togglePatrol, toggleOther, toggleOperation,
-  confirmConfirmation, cancelConfirmation, removePermit, removePatrol, removeOther, removeLeave,
+  closeOperationItemModal, saveModal, togglePermit, toggleOther, toggleOperation,
+  confirmConfirmation, cancelConfirmation, removePermit, removeOther, removeLeave,
   removeOperation, saveOperation, saveOperationItem, removeOperationItem, submitHolidayImport,
-  normalizeOperationItemOffset, normalizeOperationItemDuration
+  normalizeOperationItemOffset, normalizeOperationItemDuration, openTaskInstanceCreate, openTaskInstanceEdit,
+  closeTaskInstanceForm, saveTaskInstance, cancelTaskInstance, removeTaskInstance, regenerateTaskInstances,
+  selectPatrolPlan, openPatrolPlanCreate, openPatrolPlanEdit, closePatrolPlanForm, savePatrolPlan,
+  togglePatrolPlan, removePatrolPlan, openPatrolCycleItemCreate, openPatrolCycleItemEdit,
+  savePatrolCycleItem, removePatrolCycleItem
 } = useAdminViewModel();
 </script>
 
@@ -325,6 +359,10 @@ const {
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #fff;
+}
+
+.patrol-admin-stack {
+  display: grid;
 }
 
 @media (max-width: 900px) {

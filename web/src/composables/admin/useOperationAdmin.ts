@@ -1,9 +1,9 @@
 import { computed, reactive, ref } from "vue";
 import {
-  createOperationPlan,
-  createTaskItem,
-  deleteOperationPlan,
-  deleteTaskItem,
+	  createOperationPlan,
+	  createOperationPlanItem,
+	  deleteOperationPlan,
+	  deleteOperationPlanItem,
   fetchOperationPlan,
   fetchOperationPlans,
   type OperationPlanInput,
@@ -355,14 +355,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
           (a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes
         );
         await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
-        const created = await createTaskItem({
-          containerId: recordId,
-          ...itemPayload,
-          target: "",
-          personnel: "",
-          vehicle: "",
-          other: ""
-        });
+	        const created = await createOperationPlanItem(recordId, itemPayload);
         const newItem = { id: created.id, ...itemPayload };
         operationDetailItems.value = nextItems.map((item) => (item.id ? item : newItem));
         closeOperationItemModal();
@@ -396,7 +389,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     const recordId = operationRecordId.value;
     const itemId = operationItemForm.id;
     await withStatus(async () => {
-      await deleteTaskItem(itemId);
+	      await deleteOperationPlanItem(recordId, itemId);
       const nextItems = operationDetailItems.value.filter((item) => item.id !== itemId);
       await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
       operationDetailItems.value = nextItems;

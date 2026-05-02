@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import HolidayManager from "../src/components/admin/HolidayManager.vue";
 import OperationManager from "../src/components/admin/OperationManager.vue";
 import OtherManager from "../src/components/admin/OtherManager.vue";
-import PatrolManager from "../src/components/admin/PatrolManager.vue";
 import PermitManager from "../src/components/admin/PermitManager.vue";
 
 const calendarProps = {
@@ -49,43 +48,6 @@ describe("admin managers", () => {
     expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "permit-1" });
     expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "permit-1" });
     expect(wrapper.emitted("delete")).toEqual([["permit-1"]]);
-    expect(wrapper.emitted("update:showAll")).toEqual([[true]]);
-  });
-
-  it("renders patrol rows and emits row actions", async () => {
-    const wrapper = mount(PatrolManager, {
-      props: {
-        ...calendarProps,
-        showAll: false,
-        rows: [
-          {
-            id: "patrol-1",
-            itemId: "item-1",
-            date: "2026-05-01",
-            timeTag: "下午",
-            startAt: "2026-05-01T12:00:00+08:00",
-            endAt: "2026-05-01T17:00:00+08:00",
-            target: "1号线",
-            personnel: "李四",
-            vehicle: "皮卡",
-            other: "带记录仪",
-            enabled: true
-          }
-        ]
-      }
-    });
-
-    expect(wrapper.text()).toContain("巡视列表");
-    expect(wrapper.text()).toContain("1号线");
-
-    await wrapper.findAll("tbody .row-actions button")[0].trigger("click");
-    await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
-    await wrapper.find("tbody .row-actions .danger").trigger("click");
-    await wrapper.find('input[name="operationShowAll"]').setValue(true);
-
-    expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "patrol-1" });
-    expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "patrol-1" });
-    expect(wrapper.emitted("delete")).toEqual([["patrol-1"]]);
     expect(wrapper.emitted("update:showAll")).toEqual([[true]]);
   });
 

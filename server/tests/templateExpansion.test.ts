@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { expandContainer, validateTaskItem } from "../src/domain/taskExpansion.js";
-import type { TaskContainer, TaskItemInput } from "../src/domain/taskExpansion.js";
+import { expandTemplate, validateTaskItem } from "../src/domain/templateExpansion.js";
+import type { TaskTemplate, TaskTemplateItemInput } from "../src/domain/templateExpansion.js";
 
-describe("task expansion", () => {
-  const baseContainer: TaskContainer = {
-    id: "container-1",
+describe("template expansion", () => {
+  const baseTemplate: TaskTemplate = {
+    id: "template-1",
     type: "operation",
     name: "操作",
     startAt: "2026-05-01T08:00:00+08:00",
@@ -14,10 +14,11 @@ describe("task expansion", () => {
     recurrenceCount: null,
     skipWeekends: false,
     skipHolidays: false,
-    enabled: true
+    enabled: true,
+    metadata: {}
   };
 
-  const baseItem: TaskItemInput = {
+  const baseItem: TaskTemplateItemInput = {
     id: "a",
     offsetMinutes: 0,
     durationMinutes: 60,
@@ -26,8 +27,8 @@ describe("task expansion", () => {
   };
 
   it("expands overlapping child tasks relative to an occurrence start", () => {
-    const expanded = expandContainer(
-      baseContainer,
+    const expanded = expandTemplate(
+      baseTemplate,
       [
         { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A", metadata: {} },
         { id: "b", offsetMinutes: 60, durationMinutes: 120, content: "B", metadata: {} }
@@ -44,9 +45,9 @@ describe("task expansion", () => {
     expect(expanded[1].startAt).toBe("2026-05-01T09:00:00.000+08:00");
   });
 
-  it("does not expand disabled containers", () => {
-    const expanded = expandContainer(
-      { ...baseContainer, enabled: false },
+  it("does not expand disabled templates", () => {
+    const expanded = expandTemplate(
+      { ...baseTemplate, enabled: false },
       [baseItem],
       {
         windowStart: "2026-05-01T07:00:00+08:00",
@@ -59,9 +60,9 @@ describe("task expansion", () => {
   });
 
   it("skips a one-time occurrence on a weekend when weekend skips are enabled", () => {
-    const expanded = expandContainer(
+    const expanded = expandTemplate(
       {
-        ...baseContainer,
+        ...baseTemplate,
         startAt: "2026-05-02T08:00:00+08:00",
         endAt: "2026-05-02T12:00:00+08:00",
         skipWeekends: true
@@ -78,9 +79,9 @@ describe("task expansion", () => {
   });
 
   it("skips a one-time occurrence on a holiday when holiday skips are enabled", () => {
-    const expanded = expandContainer(
+    const expanded = expandTemplate(
       {
-        ...baseContainer,
+        ...baseTemplate,
         skipHolidays: true
       },
       [baseItem],
@@ -95,9 +96,9 @@ describe("task expansion", () => {
   });
 
   it("counts finite recurrence after weekend and holiday skips", () => {
-    const expanded = expandContainer(
+    const expanded = expandTemplate(
       {
-        ...baseContainer,
+        ...baseTemplate,
         recurrenceType: "finite",
         recurrenceIntervalMinutes: 24 * 60,
         recurrenceCount: 3,
@@ -121,8 +122,8 @@ describe("task expansion", () => {
 
   it("rejects finite recurrence with missing or zero interval", () => {
     expect(() =>
-      expandContainer(
-        { ...baseContainer, recurrenceType: "finite", recurrenceIntervalMinutes: null, recurrenceCount: 2 },
+      expandTemplate(
+        { ...baseTemplate, recurrenceType: "finite", recurrenceIntervalMinutes: null, recurrenceCount: 2 },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -133,8 +134,8 @@ describe("task expansion", () => {
     ).toThrow("recurrenceIntervalMinutes must be positive for finite recurrence");
 
     expect(() =>
-      expandContainer(
-        { ...baseContainer, recurrenceType: "finite", recurrenceIntervalMinutes: 0, recurrenceCount: 2 },
+      expandTemplate(
+        { ...baseTemplate, recurrenceType: "finite", recurrenceIntervalMinutes: 0, recurrenceCount: 2 },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -147,8 +148,8 @@ describe("task expansion", () => {
 
   it("rejects infinite recurrence with missing or zero interval", () => {
     expect(() =>
-      expandContainer(
-        { ...baseContainer, recurrenceType: "infinite", recurrenceIntervalMinutes: null },
+      expandTemplate(
+        { ...baseTemplate, recurrenceType: "infinite", recurrenceIntervalMinutes: null },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -159,8 +160,8 @@ describe("task expansion", () => {
     ).toThrow("recurrenceIntervalMinutes must be positive for infinite recurrence");
 
     expect(() =>
-      expandContainer(
-        { ...baseContainer, recurrenceType: "infinite", recurrenceIntervalMinutes: 0 },
+      expandTemplate(
+        { ...baseTemplate, recurrenceType: "infinite", recurrenceIntervalMinutes: 0 },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -172,9 +173,9 @@ describe("task expansion", () => {
   });
 
   it("includes long occurrences that start before one interval but overlap the window", () => {
-    const expanded = expandContainer(
+    const expanded = expandTemplate(
       {
-        ...baseContainer,
+        ...baseTemplate,
         recurrenceType: "finite",
         recurrenceIntervalMinutes: 60,
         recurrenceCount: 1

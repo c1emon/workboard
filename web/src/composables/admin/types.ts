@@ -3,7 +3,7 @@ import type { TimeTag } from "../../api/types";
 
 export type SectionKey = "operation" | "permit" | "patrol" | "other" | "leave" | "holiday";
 export type RecurrenceType = "once" | "finite" | "infinite";
-export type ModalKind = "permit" | "patrol" | "other" | "leave";
+export type ModalKind = "permit" | "other" | "leave";
 export type OperationModalMode = "create" | "edit" | "detail";
 export type OperationItemModalMode = "create" | "edit";
 export type HolidayImportSource = "remote" | "local";
@@ -89,6 +89,20 @@ export interface HolidayImportForm {
 export interface HolidayAdminContext {
   today: string;
   statusText: Ref<string>;
+  refresh: RefreshAdminList;
+  requestConfirmation: RequestConfirmation;
+}
+
+export interface TaskInstanceAdminContext {
+  selectedDate: Ref<string>;
+  today: string;
+  withStatus: WithStatus;
+  refresh: RefreshAdminList;
+  requestConfirmation: RequestConfirmation;
+}
+
+export interface PatrolPlanAdminContext {
+  withStatus: WithStatus;
   refresh: RefreshAdminList;
   requestConfirmation: RequestConfirmation;
 }

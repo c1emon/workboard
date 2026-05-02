@@ -15,27 +15,67 @@ describe("database schema", () => {
     expect(tables).toEqual([
       "holidays",
       "leave_people",
-      "task_containers",
-      "task_items"
+      "task_instances",
+      "task_template_items",
+      "task_templates"
     ]);
   });
 
-  it("keeps task item business fields in metadata instead of dedicated columns", () => {
+  it("creates task templates with extensible metadata", () => {
     const db = createTestDatabase();
     const columns = db
-      .prepare("pragma table_info(task_items)")
+      .prepare("pragma table_info(task_templates)")
       .all()
       .map((row) => (row as { name: string }).name);
 
-    expect(columns).toEqual([
-      "id",
-      "container_id",
-      "offset_minutes",
-      "duration_minutes",
-      "content",
-      "ext_data_json",
-      "sort_order"
-    ]);
+    expect(columns).toContain("ext_data_json");
+  });
+
+  it("references task templates from template items", () => {
+    const db = createTestDatabase();
+    const foreignKeys = db
+      .prepare("pragma foreign_key_list(task_template_items)")
+      .all()
+      .map((row) => row as { from: string; table: string; to: string });
+
+    expect(foreignKeys).toContainEqual(expect.objectContaining({
+      from: "template_id",
+      table: "task_templates",
+      to: "id"
+    }));
+  });
+
+  it("references task templates and source items from task instances", () => {
+    const db = createTestDatabase();
+    const foreignKeys = db
+      .prepare("pragma foreign_key_list(task_instances)")
+      .all()
+      .map((row) => row as { from: string; table: string; to: string });
+
+    expect(foreignKeys).toContainEqual(expect.objectContaining({
+      from: "template_id",
+      table: "task_templates",
+      to: "id"
+    }));
+    expect(foreignKeys).toContainEqual(expect.objectContaining({
+      from: "source_template_item_id",
+      table: "task_template_items",
+      to: "id"
+    }));
+  });
+
+  it("creates a unique index for non-null task instance generation keys", () => {
+    const db = createTestDatabase();
+    const indexes = db
+      .prepare("pragma index_list(task_instances)")
+      .all()
+      .map((row) => row as { name: string; unique: number; partial: number });
+
+    expect(indexes).toContainEqual(expect.objectContaining({
+      name: "task_instances_generation_key_unique",
+      unique: 1,
+      partial: 1
+    }));
   });
 
   it("enforces one leave person per date and name", () => {

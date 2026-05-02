@@ -2,25 +2,19 @@ import { computed, reactive, ref } from "vue";
 import {
   createLeavePerson,
   createOtherArrangement,
-  createPatrolArrangement,
   createPermit,
   deleteLeavePerson,
   deleteOtherArrangement,
-  deletePatrolArrangement,
   deletePermitArrangement,
   fetchLeavePeople,
   fetchOtherArrangements,
-  fetchPatrolArrangements,
   fetchPermitArrangements,
   type LeavePersonRecord,
   type OtherArrangementRecord,
-  type PatrolArrangementRecord,
   type PermitArrangementRecord,
   updateLeavePerson,
   updateOtherArrangement,
   updateOtherArrangementEnabled,
-  updatePatrolArrangement,
-  updatePatrolArrangementEnabled,
   updatePermitArrangement,
   updatePermitArrangementEnabled
 } from "../../api/client";
@@ -30,11 +24,9 @@ import type { ArrangementAdminContext, ModalKind } from "./types";
 export function useArrangementAdmin(context: ArrangementAdminContext) {
   const { activeSection, selectedDate, today, withStatus, refresh, requestConfirmation } = context;
   const permitRows = ref<PermitArrangementRecord[]>([]);
-  const patrolRows = ref<PatrolArrangementRecord[]>([]);
   const otherRows = ref<OtherArrangementRecord[]>([]);
   const leaveRows = ref<LeavePersonRecord[]>([]);
   const permitShowAll = ref(false);
-  const patrolShowAll = ref(false);
   const otherShowAll = ref(false);
   const leaveShowAll = ref(false);
   const modalKind = ref<ModalKind | null>(null);
@@ -52,10 +44,6 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
 
   async function loadPermitRows(): Promise<void> {
     permitRows.value = await fetchPermitArrangements(selectedDate.value, permitShowAll.value ? "all" : "date");
-  }
-
-  async function loadPatrolRows(): Promise<void> {
-    patrolRows.value = await fetchPatrolArrangements(selectedDate.value, patrolShowAll.value ? "all" : "date");
   }
 
   async function loadOtherRows(): Promise<void> {
@@ -87,18 +75,6 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
       modalForm.personnel = record.personnel;
       modalForm.secondary = record.task;
       modalForm.tertiary = record.vehicle;
-      modalForm.other = record.other;
-    }
-  }
-
-  function openPatrolModal(record?: PatrolArrangementRecord): void {
-    resetModal("patrol", record?.id ?? null);
-    if (record) {
-      modalForm.date = record.date;
-      modalForm.timeTag = record.timeTag;
-      modalForm.primary = record.target;
-      modalForm.personnel = record.personnel;
-      modalForm.secondary = record.vehicle;
       modalForm.other = record.other;
     }
   }
@@ -151,17 +127,6 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
         };
         if (modalRecordId.value) await updatePermitArrangement(modalRecordId.value, payload);
         else await createPermit(payload);
-      } else if (modalKind.value === "patrol") {
-        const payload = {
-          date: modalForm.date,
-          timeTag: modalForm.timeTag,
-          target: modalForm.primary,
-          personnel: modalForm.personnel,
-          vehicle: modalForm.secondary,
-          other: modalForm.other
-        };
-        if (modalRecordId.value) await updatePatrolArrangement(modalRecordId.value, payload);
-        else await createPatrolArrangement(payload);
       } else if (modalKind.value === "leave") {
         const payload = {
           date: modalForm.date,
@@ -194,13 +159,6 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
     });
   }
 
-  async function togglePatrol(record: PatrolArrangementRecord): Promise<void> {
-    await withStatus(async () => {
-      await updatePatrolArrangementEnabled(record.id, !record.enabled);
-      await refresh();
-    });
-  }
-
   async function toggleOther(record: OtherArrangementRecord): Promise<void> {
     await withStatus(async () => {
       await updateOtherArrangementEnabled(record.id, !record.enabled);
@@ -217,19 +175,6 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
     if (!confirmed) return;
     await withStatus(async () => {
       await deletePermitArrangement(id);
-      await refresh();
-    });
-  }
-
-  async function removePatrol(id: string): Promise<void> {
-    const confirmed = await requestConfirmation({
-      title: "删除巡视",
-      message: "确认删除这条巡视吗？",
-      confirmLabel: "删除"
-    });
-    if (!confirmed) return;
-    await withStatus(async () => {
-      await deletePatrolArrangement(id);
       await refresh();
     });
   }
@@ -268,31 +213,25 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
 
   return {
     permitRows,
-    patrolRows,
     otherRows,
     leaveRows,
     permitShowAll,
-    patrolShowAll,
     otherShowAll,
     leaveShowAll,
     modalKind,
     modalTitle,
     modalForm,
     loadPermitRows,
-    loadPatrolRows,
     loadOtherRows,
     loadLeaveRows,
     openPermitModal,
-    openPatrolModal,
     openOtherModal,
     openLeaveModal,
     closeModal,
     saveModal,
     togglePermit,
-    togglePatrol,
     toggleOther,
     removePermit,
-    removePatrol,
     removeOther,
     removeLeave
   };

@@ -1,5 +1,8 @@
 export const schemaSql = `
-create table if not exists task_containers (
+drop table if exists task_items;
+drop table if exists task_containers;
+
+create table if not exists task_templates (
   id text primary key,
   type text not null check (type in ('operation', 'permit', 'patrol', 'other')),
   name text not null,
@@ -12,18 +15,36 @@ create table if not exists task_containers (
   skip_weekends integer not null default 0,
   skip_holidays integer not null default 0,
   enabled integer not null default 1,
+  ext_data_json text not null default '{}',
   created_at text not null,
   updated_at text not null
 );
 
-create table if not exists task_items (
+create table if not exists task_template_items (
   id text primary key,
-  container_id text not null references task_containers(id) on delete cascade,
+  template_id text not null references task_templates(id) on delete cascade,
   offset_minutes integer not null,
   duration_minutes integer not null,
   content text not null default '',
   ext_data_json text not null default '{}',
   sort_order integer not null default 0
+);
+
+create table if not exists task_instances (
+  id text primary key,
+  type text not null check (type in ('operation', 'permit', 'patrol', 'other')),
+  template_id text null references task_templates(id) on delete set null,
+  source_template_item_id text null references task_template_items(id) on delete set null,
+  source_type text not null check (source_type in ('generated', 'manual', 'override')),
+  generation_key text null,
+  occurrence_date text not null,
+  start_at text not null,
+  end_at text not null,
+  content text not null default '',
+  ext_data_json text not null default '{}',
+  status text not null default 'pending' check (status in ('pending', 'in_progress', 'done', 'cancelled')),
+  generated_at text not null,
+  updated_at text not null
 );
 
 create table if not exists leave_people (
@@ -42,4 +63,7 @@ create table if not exists holidays (
 );
 
 create unique index if not exists leave_people_date_name_unique on leave_people (date, name);
+create index if not exists task_instances_date_type_idx on task_instances (occurrence_date, type);
+create index if not exists task_instances_time_idx on task_instances (start_at, end_at);
+create unique index if not exists task_instances_generation_key_unique on task_instances (generation_key) where generation_key is not null;
 `;

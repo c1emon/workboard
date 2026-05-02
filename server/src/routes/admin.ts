@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
-import { validateTaskItem } from "../domain/taskExpansion.js";
-import { durationMinutesForRange, timeRangeForDateTag } from "../domain/timeTags.js";
+import { validateTaskItem } from "../domain/templateExpansion.js";
+import { timeRangeForDateTag } from "../domain/timeTags.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 
 type TimeTag = "全天" | "上午" | "下午";
@@ -34,15 +34,6 @@ const otherInputSchema = z.object({
   other: z.string().default("")
 });
 
-const patrolArrangementInputSchema = z.object({
-  date: dateSchema,
-  timeTag: timeTagSchema,
-  target: z.string().min(1),
-  personnel: z.string().default(""),
-  vehicle: z.string().default(""),
-  other: z.string().default("")
-});
-
 const leaveInputSchema = z.object({
   date: dateSchema,
   name: z.string().min(1)
@@ -61,22 +52,7 @@ const chineseDaysPayloadSchema = z.object({
   inLieuDays: z.record(dateSchema, z.string()).default({})
 });
 
-const taskContainerInputSchema = z
-  .object({
-    type: z.enum(["operation", "permit", "patrol", "other"]),
-    name: z.string().min(1),
-    description: z.string().default(""),
-    startAt: dateTimeSchema,
-    endAt: dateTimeSchema,
-    recurrenceType: z.enum(["once", "finite", "infinite"]),
-    recurrenceIntervalMinutes: z.number().int().positive().nullable().optional(),
-    recurrenceCount: z.number().int().positive().nullable().optional(),
-    skipWeekends: z.boolean().default(false),
-    skipHolidays: z.boolean().default(false)
-  })
-  .superRefine(validateRecurrenceFields);
-
-const taskItemInputSchema = z.object({
+const templateItemInputSchema = z.object({
   containerId: resourceIdSchema,
   offsetMinutes: z.number().int(),
   durationMinutes: z.number().int(),
@@ -101,7 +77,7 @@ const operationPlanListQuerySchema = z.object({
   date: dateSchema.optional(),
   scope: z.enum(["date", "all"]).default("date")
 });
-const operationItemInputSchema = taskItemInputSchema.omit({
+const operationItemInputSchema = templateItemInputSchema.omit({
   containerId: true,
   timeTag: true,
   target: true,
@@ -160,20 +136,20 @@ function validateRecurrenceFields(input: RecurrenceFieldsInput, ctx: z.Refinemen
     });
   }
 }
-interface TaskContainerDurationRow {
+interface OperationPlanDurationRow {
   start_at: string;
   end_at: string;
 }
 
 interface ArrangementTaskAdminRow {
   id: string;
-  item_id: string;
+  item_id?: string;
   date: string;
   start_at: string;
   end_at: string;
   content: string;
   ext_data_json: string;
-  enabled: number;
+  status: "pending" | "in_progress" | "done" | "cancelled";
 }
 
 interface OperationPlanAdminRow {
@@ -199,17 +175,6 @@ interface OperationItemAdminRow {
   content: string;
   ext_data_json: string;
   sort_order: number;
-}
-
-interface PatrolArrangementAdminRow {
-  id: string;
-  item_id: string;
-  date: string;
-  start_at: string;
-  end_at: string;
-  content: string;
-  ext_data_json: string;
-  enabled: number;
 }
 
 interface LeavePersonAdminRow {
@@ -284,15 +249,15 @@ function validateOperationItem(input: z.infer<typeof operationPlanInputSchema>) 
   return validateTaskItem(parentDurationMinutes, input.item);
 }
 
-function insertOperationItem(db: AppDatabase, containerId: string, input: z.infer<typeof operationItemInputSchema>): string {
+function insertOperationItem(db: AppDatabase, templateId: string, input: z.infer<typeof operationItemInputSchema>): string {
   const id = nanoid();
   db.prepare(
-    `insert into task_items
-     (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+    `insert into task_template_items
+     (id, template_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
      values (?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
-    containerId,
+    templateId,
     input.offsetMinutes,
     input.durationMinutes,
     input.content,
@@ -302,34 +267,89 @@ function insertOperationItem(db: AppDatabase, containerId: string, input: z.infe
   return id;
 }
 
+function operationPlanDuration(db: AppDatabase, id: string): OperationPlanDurationRow | undefined {
+  return db
+    .prepare<[string], OperationPlanDurationRow>("select start_at, end_at from task_templates where id = ? and type = 'operation'")
+    .get(id);
+}
+
+function validateOperationPlanItem(db: AppDatabase, planId: string, item: z.infer<typeof operationItemInputSchema>) {
+  const parent = operationPlanDuration(db, planId);
+  if (!parent) {
+    return { ok: false, statusCode: 404, message: "Not found" } as const;
+  }
+
+  const parentDurationMinutes = Math.floor((new Date(parent.end_at).getTime() - new Date(parent.start_at).getTime()) / 60_000);
+  const itemValidation = validateTaskItem(parentDurationMinutes, item);
+  if (!itemValidation.ok) {
+    return { ok: false, statusCode: 400, message: itemValidation.message } as const;
+  }
+
+  return { ok: true } as const;
+}
+
+function validateOperationItemsForDuration(
+  db: AppDatabase,
+  planId: string,
+  parentDurationMinutes: number,
+  replacement?: z.infer<typeof operationItemInputSchema>
+) {
+  const rows = db
+    .prepare<[string], OperationItemAdminRow>(
+      `select id, offset_minutes, duration_minutes, content, ext_data_json, sort_order
+       from task_template_items
+       where template_id = ?
+       order by sort_order, offset_minutes`
+    )
+    .all(planId);
+  let targetId = replacement?.id;
+  if (replacement && !targetId) targetId = rows[0]?.id;
+  const candidateItems = rows.map((row) =>
+    row.id === targetId
+      ? { offsetMinutes: replacement?.offsetMinutes ?? row.offset_minutes, durationMinutes: replacement?.durationMinutes ?? row.duration_minutes }
+      : { offsetMinutes: row.offset_minutes, durationMinutes: row.duration_minutes }
+  );
+  if (replacement && !targetId) {
+    candidateItems.push({ offsetMinutes: replacement.offsetMinutes, durationMinutes: replacement.durationMinutes });
+  }
+
+  for (const item of candidateItems) {
+    const validation = validateTaskItem(parentDurationMinutes, item);
+    if (!validation.ok) return validation;
+  }
+
+  return { ok: true } as const;
+}
+
 function listArrangementTaskRows(
   db: AppDatabase,
-  type: "permit" | "patrol" | "other",
+  type: "permit" | "other",
   query: z.infer<typeof arrangementListQuerySchema>
 ): ArrangementTaskAdminRow[] {
-  return query.scope === "all"
-    ? db
-        .prepare<[string], ArrangementTaskAdminRow>(
-          `select c.id, i.id as item_id, substr(c.start_at, 1, 10) as date, c.start_at, c.end_at,
-                  i.content, i.ext_data_json, c.enabled
-           from task_containers c
-           join task_items i on i.container_id = c.id
-           where c.type = ?
-           order by c.start_at desc, i.sort_order, i.offset_minutes`
-        )
-        .all(type)
-    : db
-        .prepare<[string, string, string, string], ArrangementTaskAdminRow>(
-          `select c.id, i.id as item_id, ? as date, c.start_at, c.end_at,
-                  i.content, i.ext_data_json, c.enabled
-           from task_containers c
-           join task_items i on i.container_id = c.id
-           where c.type = ?
-             and c.start_at <= ?
-             and c.end_at >= ?
-           order by c.start_at, i.sort_order, i.offset_minutes`
-        )
-        .all(query.date as string, type, `${query.date as string}T23:59:59+08:00`, `${query.date as string}T00:00:00+08:00`);
+  const rows = db
+    .prepare<[string], ArrangementTaskAdminRow>(
+      `select id, occurrence_date as date, start_at, end_at, content, ext_data_json, status
+       from task_instances
+       where type = ?
+         and source_type = 'manual'
+         and template_id is null
+         and source_template_item_id is null
+         and generation_key is null
+       order by start_at, end_at, id`
+    )
+    .all(type);
+
+  if (query.scope === "all") return rows.reverse();
+
+  const date = query.date as string;
+  const window = {
+    start: new Date(`${date}T00:00:00+08:00`),
+    end: new Date(`${date}T23:59:59.999+08:00`)
+  };
+
+  return rows
+    .filter((row) => overlapsDateWindow(row.start_at, row.end_at, window))
+    .map((row) => ({ ...row, date }));
 }
 
 function parseArrangementMetadata(raw: string): Record<string, unknown> {
@@ -350,6 +370,12 @@ function metadataString(metadata: Record<string, unknown>, key: string): string 
 function metadataTimeTag(metadata: Record<string, unknown>): TimeTag {
   const value = metadata.timeTag;
   return value === "上午" || value === "下午" || value === "全天" ? value : "全天";
+}
+
+function overlapsDateWindow(startAt: string, endAt: string, window: { start: Date; end: Date }): boolean {
+  const startMs = new Date(startAt).getTime();
+  const endMs = new Date(endAt).getTime();
+  return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= window.end.getTime() && endMs >= window.start.getTime();
 }
 
 function arrangementMetadata(input: {
@@ -383,7 +409,7 @@ function mapPermitArrangementTaskRow(row: ArrangementTaskAdminRow) {
     personnel: metadataString(metadata, "personnel"),
     vehicle: metadataString(metadata, "vehicle"),
     other: metadataString(metadata, "other"),
-    enabled: row.enabled === 1
+    enabled: row.status !== "cancelled"
   };
 }
 
@@ -399,33 +425,14 @@ function mapOtherArrangementTaskRow(row: ArrangementTaskAdminRow) {
     personnel: metadataString(metadata, "personnel"),
     vehicle: metadataString(metadata, "vehicle"),
     other: metadataString(metadata, "other"),
-    enabled: row.enabled === 1
+    enabled: row.status !== "cancelled"
   };
 }
 
-function mapPatrolArrangementTaskRow(row: ArrangementTaskAdminRow) {
-  const metadata = parseArrangementMetadata(row.ext_data_json);
-  return {
-    id: row.id,
-    itemId: row.item_id,
-    date: row.date,
-    timeTag: metadataTimeTag(metadata),
-    startAt: row.start_at,
-    endAt: row.end_at,
-    target: metadataString(metadata, "target") || row.content,
-    personnel: metadataString(metadata, "personnel"),
-    vehicle: metadataString(metadata, "vehicle"),
-    other: metadataString(metadata, "other"),
-    enabled: row.enabled === 1
-  };
-}
-
-function createSingleItemArrangement(
+function createManualArrangementInstance(
   db: AppDatabase,
   input: {
-    type: "permit" | "patrol" | "other";
-    name: string;
-    description: string;
+    type: "permit" | "other";
     date: string;
     timeTag: "全天" | "上午" | "下午";
     content: string;
@@ -435,41 +442,36 @@ function createSingleItemArrangement(
     other: string;
     metadata: Record<string, unknown>;
   }
-): { id: string; itemId: string } {
+): { id: string } {
   const id = nanoid();
-  const itemId = nanoid();
   const now = new Date().toISOString();
   const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-  const durationMinutes = durationMinutesForRange(startAt, endAt);
 
-  db.transaction(() => {
-    db.prepare(
-      `insert into task_containers
-       (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-        recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
-    ).run(id, input.type, input.name, input.description, startAt, endAt, now, now);
-    db.prepare(
-      `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
-       values (?, ?, 0, ?, ?, ?, 0)`
-    ).run(
-      itemId,
-      id,
-      durationMinutes,
-      input.content,
-      JSON.stringify(arrangementMetadata(input))
-    );
-  })();
+  db.prepare(
+    `insert into task_instances
+     (id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
+      start_at, end_at, content, ext_data_json, status, generated_at, updated_at)
+     values (?, ?, null, null, 'manual', null, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+  ).run(
+    id,
+    input.type,
+    input.date,
+    startAt,
+    endAt,
+    input.content,
+    JSON.stringify(arrangementMetadata(input)),
+    now,
+    now
+  );
 
-  return { id, itemId };
+  return { id };
 }
 
-function updateSingleItemArrangement(
+function updateManualArrangementInstance(
   db: AppDatabase,
   id: string,
   input: {
-    type: "permit" | "patrol" | "other";
+    type: "permit" | "other";
     date: string;
     timeTag: "全天" | "上午" | "下午";
     content: string;
@@ -482,25 +484,36 @@ function updateSingleItemArrangement(
 ) {
   const now = new Date().toISOString();
   const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-  const durationMinutes = durationMinutesForRange(startAt, endAt);
-  return db.transaction(() => {
-    const result = db
-      .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = ?")
-      .run(startAt, endAt, now, id, input.type);
-    if (result.changes === 0) return result;
+  return db
+    .prepare(
+      `update task_instances
+       set occurrence_date = ?, start_at = ?, end_at = ?, content = ?, ext_data_json = ?, updated_at = ?
+       where id = ? and type = ?
+         and source_type = 'manual'
+         and template_id is null
+         and source_template_item_id is null
+         and generation_key is null`
+    )
+    .run(input.date, startAt, endAt, input.content, JSON.stringify(arrangementMetadata(input)), now, id, input.type);
+}
 
-    db.prepare(
-      `update task_items
-       set offset_minutes = 0, duration_minutes = ?, content = ?, ext_data_json = ?
-       where container_id = ?`
-    ).run(
-      durationMinutes,
-      input.content,
-      JSON.stringify(arrangementMetadata(input)),
-      id
-    );
-    return result;
-  })();
+function updateArrangementEnabled(db: AppDatabase, id: string, type: "permit" | "other", enabled: boolean) {
+  return db
+    .prepare(
+      `update task_instances
+       set status = case
+         when ? = 0 then 'cancelled'
+         when status = 'cancelled' then 'pending'
+         else status
+       end,
+       updated_at = ?
+       where id = ? and type = ?
+         and source_type = 'manual'
+         and template_id is null
+         and source_template_item_id is null
+         and generation_key is null`
+    )
+    .run(enabled ? 1 : 0, new Date().toISOString(), id, type);
 }
 
 function chineseDaysName(value: string): string {
@@ -551,10 +564,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     }
 
     const input = validation.data;
-    const { id } = createSingleItemArrangement(db, {
+    const { id } = createManualArrangementInstance(db, {
       type: "permit",
-      name: "许可",
-      description: "许可安排",
       date: input.date,
       timeTag: input.timeTag,
       content: input.task,
@@ -576,7 +587,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
-    const result = updateSingleItemArrangement(db, params.data.id, {
+    const result = updateManualArrangementInstance(db, params.data.id, {
       type: "permit",
       date: input.date,
       timeTag: input.timeTag,
@@ -599,9 +610,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!params.success) return reply.code(400).send(params.error);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const result = db
-      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'permit'")
-      .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
+    const result = updateArrangementEnabled(db, params.data.id, "permit", validation.data.enabled);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -612,7 +621,16 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const params = validateAdminPayload(idParamSchema, request.params);
     if (!params.success) return reply.code(400).send(params.error);
 
-    const result = db.prepare("delete from task_containers where id = ? and type = 'permit'").run(params.data.id);
+    const result = db
+      .prepare(
+        `delete from task_instances
+         where id = ? and type = 'permit'
+           and source_type = 'manual'
+           and template_id is null
+           and source_template_item_id is null
+           and generation_key is null`
+      )
+      .run(params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -637,10 +655,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     }
 
     const input = validation.data;
-    const { id } = createSingleItemArrangement(db, {
+    const { id } = createManualArrangementInstance(db, {
       type: "other",
-      name: "其他",
-      description: "其他安排",
       date: input.date,
       timeTag: input.timeTag,
       content: input.task,
@@ -662,7 +678,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
-    const result = updateSingleItemArrangement(db, params.data.id, {
+    const result = updateManualArrangementInstance(db, params.data.id, {
       type: "other",
       date: input.date,
       timeTag: input.timeTag,
@@ -685,9 +701,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!params.success) return reply.code(400).send(params.error);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const result = db
-      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'other'")
-      .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
+    const result = updateArrangementEnabled(db, params.data.id, "other", validation.data.enabled);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -698,129 +712,16 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const params = validateAdminPayload(idParamSchema, request.params);
     if (!params.success) return reply.code(400).send(params.error);
 
-    const result = db.prepare("delete from task_containers where id = ? and type = 'other'").run(params.data.id);
-    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
-    boardEvents.publish();
-
-    return reply.code(204).send();
-  });
-
-  app.get("/api/admin/patrol-arrangements", async (request, reply) => {
-    const validation = validateArrangementListQuery(request.query);
-    if (!validation.success) return reply.code(400).send(validation.error);
-
-    const rows = listArrangementTaskRows(db, "patrol", validation.data);
-
-    return rows.map(mapPatrolArrangementTaskRow);
-  });
-
-  app.post("/api/admin/patrol-arrangements", async (request, reply) => {
-    const validation = validateAdminPayload(patrolArrangementInputSchema, request.body);
-    if (!validation.success) return reply.code(400).send(validation.error);
-
-    const input = validation.data;
-    const id = nanoid();
-    const itemId = nanoid();
-    const now = new Date().toISOString();
-    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-    const durationMinutes = durationMinutesForRange(startAt, endAt);
-
-    db.transaction(() => {
-      db.prepare(
-        `insert into task_containers
-         (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-          recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
-         values (?, 'patrol', '巡视', '巡视安排', ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
-      ).run(id, startAt, endAt, now, now);
-      db.prepare(
-        `insert into task_items
-         (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
-         values (?, ?, 0, ?, ?, ?, 0)`
-      ).run(
-        itemId,
-        id,
-        durationMinutes,
-        input.target,
-        JSON.stringify(
-          arrangementMetadata({
-            timeTag: input.timeTag,
-            target: input.target,
-            personnel: input.personnel,
-            vehicle: input.vehicle,
-            other: input.other,
-            metadata: {}
-          })
-        )
-      );
-    })();
-    boardEvents.publish();
-
-    return reply.code(201).send({ id, itemId });
-  });
-
-  app.put("/api/admin/patrol-arrangements/:id", async (request, reply) => {
-    const params = validateAdminPayload(idParamSchema, request.params);
-    const validation = validateAdminPayload(patrolArrangementInputSchema, request.body);
-    if (!params.success) return reply.code(400).send(params.error);
-    if (!validation.success) return reply.code(400).send(validation.error);
-
-    const input = validation.data;
-    const now = new Date().toISOString();
-    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-    const durationMinutes = durationMinutesForRange(startAt, endAt);
-    const containerResult = db.transaction(() => {
-      const result = db
-        .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = 'patrol'")
-        .run(startAt, endAt, now, params.data.id);
-      if (result.changes === 0) return result;
-
-      db.prepare(
-        `update task_items
-         set offset_minutes = 0, duration_minutes = ?, content = ?, ext_data_json = ?
-         where container_id = ?`
-      ).run(
-        durationMinutes,
-        input.target,
-        JSON.stringify(
-          arrangementMetadata({
-            timeTag: input.timeTag,
-            target: input.target,
-            personnel: input.personnel,
-            vehicle: input.vehicle,
-            other: input.other,
-            metadata: {}
-          })
-        ),
-        params.data.id
-      );
-      return result;
-    })();
-    if (containerResult.changes === 0) return reply.code(404).send({ error: "Not found" });
-    boardEvents.publish();
-
-    return { id: params.data.id };
-  });
-
-  app.patch("/api/admin/patrol-arrangements/:id/enabled", async (request, reply) => {
-    const params = validateAdminPayload(idParamSchema, request.params);
-    const validation = validateAdminPayload(enabledInputSchema, request.body);
-    if (!params.success) return reply.code(400).send(params.error);
-    if (!validation.success) return reply.code(400).send(validation.error);
-
     const result = db
-      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'patrol'")
-      .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
-    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
-    boardEvents.publish();
-
-    return { id: params.data.id, enabled: validation.data.enabled };
-  });
-
-  app.delete("/api/admin/patrol-arrangements/:id", async (request, reply) => {
-    const params = validateAdminPayload(idParamSchema, request.params);
-    if (!params.success) return reply.code(400).send(params.error);
-
-    const result = db.prepare("delete from task_containers where id = ? and type = 'patrol'").run(params.data.id);
+      .prepare(
+        `delete from task_instances
+         where id = ? and type = 'other'
+           and source_type = 'manual'
+           and template_id is null
+           and source_template_item_id is null
+           and generation_key is null`
+      )
+      .run(params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -1001,24 +902,24 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
               count(i.id) as child_task_count,
               (
                 select first.content
-                from task_items first
-                where first.container_id = c.id
+                from task_template_items first
+                where first.template_id = c.id
                 order by first.sort_order, first.offset_minutes
                 limit 1
               ) as first_item_content
-       from task_containers c
-       left join task_items i on i.container_id = c.id
+       from task_templates c
+       left join task_template_items i on i.template_id = c.id
        where c.type = 'operation'`;
     const sql =
       validation.data.scope === "all"
         ? `${baseSql}
            group by c.id
            order by c.start_at desc, c.name`
-        : `${baseSql}
-           and c.start_at <= ?
-           and c.end_at >= ?
-           group by c.id
-           order by c.start_at, c.name`;
+	        : `${baseSql}
+	           and julianday(c.start_at) <= julianday(?)
+	           and julianday(c.end_at) >= julianday(?)
+	           group by c.id
+	           order by c.start_at, c.name`;
 
     const rows =
       validation.data.scope === "all"
@@ -1041,13 +942,13 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
                 count(i.id) as child_task_count,
                 (
                   select first.content
-                  from task_items first
-                  where first.container_id = c.id
+                  from task_template_items first
+                  where first.template_id = c.id
                   order by first.sort_order, first.offset_minutes
                   limit 1
                 ) as first_item_content
-         from task_containers c
-         left join task_items i on i.container_id = c.id
+         from task_templates c
+         left join task_template_items i on i.template_id = c.id
          where c.id = ? and c.type = 'operation'
          group by c.id`
       )
@@ -1057,8 +958,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const items = db
       .prepare<[string], OperationItemAdminRow>(
         `select id, offset_minutes, duration_minutes, content, ext_data_json, sort_order
-         from task_items
-         where container_id = ?
+         from task_template_items
+         where template_id = ?
          order by sort_order, offset_minutes`
       )
       .all(params.data.id);
@@ -1079,10 +980,10 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const id = nanoid();
     const now = new Date().toISOString();
     db.prepare(
-      `insert into task_containers
+      `insert into task_templates
        (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-        recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
-       values (?, 'operation', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+        recurrence_count, skip_weekends, skip_holidays, enabled, ext_data_json, created_at, updated_at)
+       values (?, 'operation', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, '{}', ?, ?)`
     ).run(
       id,
       input.name,
@@ -1109,16 +1010,23 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!params.success) return reply.code(400).send(params.error);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const input = validation.data;
-    const itemValidation = validateOperationItem(input);
-    if (!itemValidation.ok) {
-      return reply.code(400).send({ error: "Invalid admin payload", message: itemValidation.message });
-    }
+	    const input = validation.data;
+	    const itemValidation = validateOperationItem(input);
+	    if (!itemValidation.ok) {
+	      return reply.code(400).send({ error: "Invalid admin payload", message: itemValidation.message });
+	    }
+	    const existingPlan = operationPlanDuration(db, params.data.id);
+	    if (!existingPlan) return reply.code(404).send({ error: "Not found" });
+	    const parentDurationMinutes = Math.floor((new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 60_000);
+	    const existingItemsValidation = validateOperationItemsForDuration(db, params.data.id, parentDurationMinutes, input.item);
+	    if (!existingItemsValidation.ok) {
+	      return reply.code(400).send({ error: "Invalid admin payload", message: existingItemsValidation.message });
+	    }
 
-    const now = new Date().toISOString();
+	    const now = new Date().toISOString();
     const result = db
       .prepare(
-        `update task_containers
+        `update task_templates
          set name = ?, description = ?, start_at = ?, end_at = ?, recurrence_type = ?,
              recurrence_interval_minutes = ?, recurrence_count = ?, skip_weekends = ?, skip_holidays = ?, updated_at = ?
          where id = ? and type = 'operation'`
@@ -1141,20 +1049,20 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (input.item) {
       const existingItem = input.item.id
         ? db
-            .prepare<[string, string], { id: string }>("select id from task_items where id = ? and container_id = ?")
+            .prepare<[string, string], { id: string }>("select id from task_template_items where id = ? and template_id = ?")
             .get(input.item.id, params.data.id)
         : db
             .prepare<[string], { id: string }>(
               `select id
-         from task_items
-         where container_id = ?
+         from task_template_items
+         where template_id = ?
          order by sort_order, offset_minutes
          limit 1`
             )
             .get(params.data.id);
       if (existingItem) {
         db.prepare(
-          `update task_items
+          `update task_template_items
          set offset_minutes = ?, duration_minutes = ?, content = ?, ext_data_json = ?, sort_order = ?
          where id = ?`
         ).run(
@@ -1181,7 +1089,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const result = db
-      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'operation'")
+      .prepare("update task_templates set enabled = ?, updated_at = ? where id = ? and type = 'operation'")
       .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
@@ -1193,110 +1101,76 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const params = validateAdminPayload(idParamSchema, request.params);
     if (!params.success) return reply.code(400).send(params.error);
 
-    const result = db.prepare("delete from task_containers where id = ? and type = 'operation'").run(params.data.id);
+    const result = db.prepare("delete from task_templates where id = ? and type = 'operation'").run(params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
     return reply.code(204).send();
   });
 
-  app.post("/api/admin/task-containers", async (request, reply) => {
-    const validation = validateAdminPayload(taskContainerInputSchema, request.body);
-    if (!validation.success) {
-      return reply.code(400).send(validation.error);
-    }
-
-    const input = validation.data;
-    const id = nanoid();
-    const now = new Date().toISOString();
-
-    db.prepare(
-      `insert into task_containers
-       (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-        recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
-    ).run(
-      id,
-      input.type,
-      input.name,
-      input.description,
-      input.startAt,
-      input.endAt,
-      input.recurrenceType,
-      input.recurrenceIntervalMinutes ?? null,
-      input.recurrenceCount ?? null,
-      input.skipWeekends ? 1 : 0,
-      input.skipHolidays ? 1 : 0,
-      now,
-      now
-    );
-    boardEvents.publish();
-
-    return reply.code(201).send({ id });
-  });
-
-  app.post("/api/admin/task-items", async (request, reply) => {
-    const validation = validateAdminPayload(taskItemInputSchema, request.body);
-    if (!validation.success) {
-      return reply.code(400).send(validation.error);
-    }
-
-    const input = validation.data;
-    const parent = db
-      .prepare<[string], TaskContainerDurationRow>("select start_at, end_at from task_containers where id = ? and enabled = 1")
-      .get(input.containerId);
-    if (!parent) {
-      return reply.code(400).send({
-        error: "Invalid admin payload",
-        message: "parent task container not found"
-      });
-    }
-
-    const parentDurationMinutes = Math.floor((new Date(parent.end_at).getTime() - new Date(parent.start_at).getTime()) / 60_000);
-    const itemValidation = validateTaskItem(parentDurationMinutes, input);
-    if (!itemValidation.ok) {
-      return reply.code(400).send({
-        error: "Invalid admin payload",
-        message: itemValidation.message
-      });
-    }
-
-    const id = nanoid();
-    db.prepare(
-      `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      id,
-      input.containerId,
-      input.offsetMinutes,
-      input.durationMinutes,
-      input.content,
-      JSON.stringify(
-        arrangementMetadata({
-          timeTag: input.timeTag ?? "全天",
-          target: input.target,
-          personnel: input.personnel,
-          vehicle: input.vehicle,
-          other: input.other,
-          metadata: input.metadata
-        })
-      ),
-      input.sortOrder
-    );
-    boardEvents.publish();
-
-    return reply.code(201).send({ id });
-  });
-
-  app.delete("/api/admin/task-items/:id", async (request, reply) => {
+  app.post("/api/admin/operation-plans/:id/items", async (request, reply) => {
     const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(operationItemInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const itemValidation = validateOperationPlanItem(db, params.data.id, validation.data);
+    if (!itemValidation.ok) {
+      if (itemValidation.statusCode === 404) return reply.code(404).send({ error: itemValidation.message });
+      return reply.code(400).send({ error: "Invalid admin payload", message: itemValidation.message });
+    }
+
+    const id = insertOperationItem(db, params.data.id, validation.data);
+    boardEvents.publish();
+
+    return reply.code(201).send({ id });
+  });
+
+  app.put("/api/admin/operation-plans/:id/items/:itemId", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema.extend({ itemId: resourceIdSchema }), request.params);
+    const validation = validateAdminPayload(operationItemInputSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const itemValidation = validateOperationPlanItem(db, params.data.id, validation.data);
+    if (!itemValidation.ok) {
+      if (itemValidation.statusCode === 404) return reply.code(404).send({ error: itemValidation.message });
+      return reply.code(400).send({ error: "Invalid admin payload", message: itemValidation.message });
+    }
+
+    const result = db
+      .prepare(
+        `update task_template_items
+         set offset_minutes = ?, duration_minutes = ?, content = ?, ext_data_json = ?, sort_order = ?
+         where id = ? and template_id = ?`
+      )
+      .run(
+        validation.data.offsetMinutes,
+        validation.data.durationMinutes,
+        validation.data.content,
+        JSON.stringify(validation.data.metadata),
+        validation.data.sortOrder,
+        params.data.itemId,
+        params.data.id
+      );
+    if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    boardEvents.publish();
+
+    return { id: params.data.itemId };
+  });
+
+  app.delete("/api/admin/operation-plans/:id/items/:itemId", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema.extend({ itemId: resourceIdSchema }), request.params);
     if (!params.success) return reply.code(400).send(params.error);
 
-    const result = db.prepare("delete from task_items where id = ?").run(params.data.id);
+    const plan = operationPlanDuration(db, params.data.id);
+    if (!plan) return reply.code(404).send({ error: "Not found" });
+
+    const result = db.prepare("delete from task_template_items where id = ? and template_id = ?").run(params.data.itemId, params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
     return reply.code(204).send();
   });
+
 }

@@ -12,7 +12,7 @@ describe("board snapshot", () => {
 
   it("sorts permits by time tag", () => {
     const db = createTestDatabase();
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "p1",
       type: "permit",
       date: "2026-05-01",
@@ -22,7 +22,7 @@ describe("board snapshot", () => {
       personnel: "孙八",
       other: "待确认"
     });
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "p2",
       type: "permit",
       date: "2026-05-01",
@@ -40,7 +40,7 @@ describe("board snapshot", () => {
 
   it("sorts other arrangements by time tag", () => {
     const db = createTestDatabase();
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "o1",
       type: "other",
       date: "2026-05-01",
@@ -49,7 +49,7 @@ describe("board snapshot", () => {
       personnel: "李四",
       vehicle: "电瓶车"
     });
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "o2",
       type: "other",
       date: "2026-05-01",
@@ -58,7 +58,7 @@ describe("board snapshot", () => {
       personnel: "王五",
       vehicle: "皮卡"
     });
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "o3",
       type: "other",
       date: "2026-05-01",
@@ -75,7 +75,7 @@ describe("board snapshot", () => {
   it("returns board snapshot JSON from the board route", async () => {
     const db = createTestDatabase();
     const date = toChinaDate(new Date());
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "p1",
       type: "permit",
       date,
@@ -86,7 +86,7 @@ describe("board snapshot", () => {
       vehicle: "工程车",
       other: "已审批"
     });
-    insertArrangementContainer(db, {
+    insertTaskInstance(db, {
       id: "o1",
       type: "other",
       date,
@@ -177,34 +177,152 @@ describe("board snapshot", () => {
     expect(handlers.has("error")).toBe(false);
   });
 
+  it("shows manual instances with no template linkage inside the date window", () => {
+    const db = createTestDatabase();
+    insertTaskInstance(db, {
+      id: "manual-1",
+      type: "permit",
+      date: "2026-05-01",
+      sourceType: "manual",
+      templateId: null,
+      sourceTemplateItemId: null,
+      timeTag: "上午",
+      content: "临时作业许可",
+      target: "B区",
+      personnel: "周九"
+    });
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
+
+    expect(snapshot.permits).toEqual([
+      { timeTag: "上午", target: "B区", task: "临时作业许可", personnel: "周九", vehicle: "", other: "", status: "pending" }
+    ]);
+  });
+
+  it("uses generated instance snapshots instead of live template item content", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, { id: "template-1", type: "patrol" });
+    insertTemplateItem(db, {
+      id: "item-1",
+      templateId: "template-1",
+      content: "模板旧内容",
+      metadata: { timeTag: "上午", target: "模板旧目标", personnel: "模板旧人员", vehicle: "模板旧车辆", other: "模板旧备注" }
+    });
+    insertTaskInstance(db, {
+      id: "generated-1",
+      type: "patrol",
+      date: "2026-05-01",
+      templateId: "template-1",
+      sourceTemplateItemId: "item-1",
+      sourceType: "generated",
+      generationKey: "template-1:item-1:2026-05-01T00:00:00+08:00",
+      timeTag: "下午",
+      content: "生成时内容",
+      target: "生成时目标",
+      personnel: "生成时人员",
+      vehicle: "生成时车辆",
+      other: "生成时备注",
+      metadata: { cycleDay: 7 }
+    });
+    db.prepare("update task_template_items set content = ?, ext_data_json = ? where id = ?").run(
+      "模板新内容",
+      JSON.stringify({ timeTag: "上午", target: "模板新目标", personnel: "模板新人员" }),
+      "item-1"
+    );
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
+
+    expect(snapshot.patrols).toEqual([
+      {
+        timeTag: "下午",
+        target: "生成时目标",
+        personnel: "生成时人员",
+        vehicle: "生成时车辆",
+        other: "生成时备注",
+        status: "pending",
+        metadata: {
+          cycleDay: 7,
+          timeTag: "下午",
+          target: "生成时目标",
+          personnel: "生成时人员",
+          vehicle: "生成时车辆",
+          other: "生成时备注"
+        }
+      }
+    ]);
+  });
+
+  it("includes multi-day instances that overlap the requested board date", () => {
+    const db = createTestDatabase();
+    insertTaskInstance(db, {
+      id: "overnight-operation",
+      type: "operation",
+      date: "2026-04-30",
+      startAt: "2026-04-30T23:00:00+08:00",
+      endAt: "2026-05-01T02:00:00+08:00",
+      content: "跨日运行"
+    });
+    insertTaskInstance(db, {
+      id: "overnight-patrol",
+      type: "patrol",
+      date: "2026-04-30",
+      startAt: "2026-04-30T20:00:00+08:00",
+      endAt: "2026-05-01T04:00:00+08:00",
+      timeTag: "全天",
+      content: "跨日巡查",
+      target: "围界"
+    });
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
+
+    expect(snapshot.operation.items).toEqual([
+      { content: "跨日运行", startAt: "2026-04-30T23:00:00+08:00", endAt: "2026-05-01T02:00:00+08:00", status: "pending", metadata: {} }
+    ]);
+    expect(snapshot.patrols).toMatchObject([{ target: "围界" }]);
+  });
+
+  it("omits cancelled instances from the board", () => {
+    const db = createTestDatabase();
+    insertTaskInstance(db, {
+      id: "active-operation",
+      type: "operation",
+      date: "2026-05-01",
+      content: "保留任务",
+      status: "in_progress"
+    });
+    insertTaskInstance(db, {
+      id: "cancelled-operation",
+      type: "operation",
+      date: "2026-05-01",
+      content: "取消任务",
+      status: "cancelled"
+    });
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T08:30:00+08:00"));
+
+    expect(snapshot.operation.items).toEqual([
+      expect.objectContaining({ content: "保留任务", status: "in_progress" })
+    ]);
+  });
+
   it("warns and falls back when task metadata JSON is invalid", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const db = createTestDatabase();
     db.prepare(
-      `insert into task_containers
-       (id, type, name, start_at, end_at, recurrence_type, recurrence_interval_minutes, recurrence_count,
-        skip_weekends, skip_holidays, enabled, created_at, updated_at)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `insert into task_instances
+       (id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
+        start_at, end_at, content, ext_data_json, status, generated_at, updated_at)
+       values (?, 'operation', null, null, 'manual', null, ?, ?, ?, ?, ?, 'pending', ?, ?)`
     ).run(
       "operation-1",
-      "operation",
-      "运行",
+      "2026-05-01",
       "2026-05-01T08:00:00+08:00",
       "2026-05-01T09:00:00+08:00",
-      "once",
-      null,
-      null,
-      0,
-      0,
-      1,
+      "检查设备",
+      "{not-json",
       "2026-05-01T08:00:00+08:00",
       "2026-05-01T08:00:00+08:00"
     );
-    db.prepare(
-      `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?)`
-    ).run("item-1", "operation-1", 0, 60, "检查设备", "{not-json", 0);
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T08:30:00+08:00"));
 
@@ -218,13 +336,20 @@ function toChinaDate(date: Date): string {
   return shifted.toISOString().slice(0, 10);
 }
 
-function insertArrangementContainer(
+function insertTaskInstance(
   db: AppDatabase,
   input: {
     id: string;
-    type: "permit" | "other";
+    type: "operation" | "permit" | "patrol" | "other";
     date: string;
-    timeTag: "全天" | "上午" | "下午";
+    sourceType?: "generated" | "manual" | "override";
+    templateId?: string | null;
+    sourceTemplateItemId?: string | null;
+    generationKey?: string | null;
+    startAt?: string;
+    endAt?: string;
+    status?: "pending" | "in_progress" | "done" | "cancelled";
+    timeTag?: "全天" | "上午" | "下午";
     content: string;
     target?: string;
     personnel?: string;
@@ -238,40 +363,74 @@ function insertArrangementContainer(
     上午: ["08:00:00+08:00", "12:00:00+08:00", 240],
     下午: ["12:00:00+08:00", "17:00:00+08:00", 300]
   } as const;
-  const [start, end, durationMinutes] = rangeByTag[input.timeTag];
+  const timeTag = input.timeTag ?? "全天";
+  const [start, end] = rangeByTag[timeTag];
   const now = "2026-05-01T00:00:00.000Z";
 
+  const metadata =
+    input.type === "operation" && !input.metadata
+      ? {}
+      : {
+          ...(input.metadata ?? {}),
+          timeTag,
+          target: input.target ?? input.content,
+          personnel: input.personnel ?? "",
+          vehicle: input.vehicle ?? "",
+          other: input.other ?? ""
+        };
+
   db.prepare(
-    `insert into task_containers
-     (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-      recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
-     values (?, ?, ?, ?, ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
+    `insert into task_instances
+     (id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
+      start_at, end_at, content, ext_data_json, status, generated_at, updated_at)
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     input.id,
     input.type,
-    input.type === "permit" ? "许可" : "其他",
-    input.type === "permit" ? "许可安排" : "其他安排",
-    `${input.date}T${start}`,
-    `${input.date}T${end}`,
+    input.templateId ?? null,
+    input.sourceTemplateItemId ?? null,
+    input.sourceType ?? "generated",
+    input.generationKey ?? null,
+    input.date,
+    input.startAt ?? `${input.date}T${start}`,
+    input.endAt ?? `${input.date}T${end}`,
+    input.content,
+    JSON.stringify(metadata),
+    input.status ?? "pending",
     now,
     now
   );
+}
+
+function insertTemplate(
+  db: AppDatabase,
+  input: {
+    id: string;
+    type: "operation" | "permit" | "patrol" | "other";
+  }
+): void {
+  const now = "2026-05-01T00:00:00.000Z";
   db.prepare(
-    `insert into task_items
-     (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
-     values (?, ?, 0, ?, ?, ?, 0)`
-  ).run(
-    `${input.id}:item`,
-    input.id,
-    durationMinutes,
-    input.content,
-    JSON.stringify({
-      ...(input.metadata ?? {}),
-      timeTag: input.timeTag,
-      target: input.target ?? input.content,
-      personnel: input.personnel ?? "",
-      vehicle: input.vehicle ?? "",
-      other: input.other ?? ""
-    })
-  );
+    `insert into task_templates
+     (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
+      recurrence_count, skip_weekends, skip_holidays, enabled, ext_data_json, created_at, updated_at)
+     values (?, ?, ?, '', '2026-05-01T00:00:00+08:00', '2026-05-01T23:59:59+08:00',
+             'once', null, null, 0, 0, 1, '{}', ?, ?)`
+  ).run(input.id, input.type, input.id, now, now);
+}
+
+function insertTemplateItem(
+  db: AppDatabase,
+  input: {
+    id: string;
+    templateId: string;
+    content: string;
+    metadata?: Record<string, unknown>;
+  }
+): void {
+  db.prepare(
+    `insert into task_template_items
+     (id, template_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+     values (?, ?, 0, 60, ?, ?, 0)`
+  ).run(input.id, input.templateId, input.content, JSON.stringify(input.metadata ?? {}));
 }

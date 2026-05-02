@@ -3,13 +3,15 @@ import { useArrangementAdmin } from "./useArrangementAdmin";
 import { useConfirmation } from "./useConfirmation";
 import { useHolidayAdmin } from "./useHolidayAdmin";
 import { useOperationAdmin } from "./useOperationAdmin";
+import { usePatrolPlanAdmin } from "./usePatrolPlanAdmin";
+import { useTaskInstanceAdmin } from "./useTaskInstanceAdmin";
 import type { AdminSection, SectionKey } from "./types";
 
 const sections: AdminSection[] = [
   { key: "permit", label: "许可", description: "许可事项与执行区域" },
   { key: "other", label: "其他", description: "临时任务与协同事项" },
   { key: "leave", label: "休假", description: "休假人员名单" },
-  { key: "patrol", label: "巡视", description: "目标、人员、车辆与备注" },
+  { key: "patrol", label: "巡视", description: "实例与模板周期" },
   { key: "operation", label: "操作", description: "主任务与时间段子任务" },
   { key: "holiday", label: "节假日", description: "跳过规则基础数据" }
 ];
@@ -39,7 +41,10 @@ export function useAdminViewModel() {
     } else if (activeKey.value === "permit") {
       await withStatus(arrangementAdmin.loadPermitRows);
     } else if (activeKey.value === "patrol") {
-      await withStatus(arrangementAdmin.loadPatrolRows);
+      await withStatus(async () => {
+        await taskInstanceAdmin.loadTaskInstanceRows();
+        await patrolPlanAdmin.loadPatrolPlans();
+      });
     } else if (activeKey.value === "other") {
       await withStatus(arrangementAdmin.loadOtherRows);
     } else if (activeKey.value === "leave") {
@@ -61,6 +66,8 @@ export function useAdminViewModel() {
     activeSection
   });
   const operationAdmin = useOperationAdmin(sharedContext);
+  const taskInstanceAdmin = useTaskInstanceAdmin(sharedContext);
+  const patrolPlanAdmin = usePatrolPlanAdmin(sharedContext);
   const holidayAdmin = useHolidayAdmin({
     today,
     statusText,
@@ -75,7 +82,6 @@ export function useAdminViewModel() {
       selectedDate,
       operationAdmin.operationShowAll,
       arrangementAdmin.permitShowAll,
-      arrangementAdmin.patrolShowAll,
       arrangementAdmin.otherShowAll,
       arrangementAdmin.leaveShowAll
     ],
@@ -103,6 +109,8 @@ export function useAdminViewModel() {
     activeSection,
     ...arrangementAdmin,
     ...operationAdmin,
+    ...taskInstanceAdmin,
+    ...patrolPlanAdmin,
     ...holidayAdmin,
     confirmation: confirmationModel.confirmation,
     confirmConfirmation: confirmationModel.confirmConfirmation,
