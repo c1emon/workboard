@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
-import { createTestDatabase } from "../src/db/database.js";
+import { createTestDatabase, type AppDatabase } from "../src/db/database.js";
 import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
 import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
@@ -12,16 +12,26 @@ describe("board snapshot", () => {
 
   it("sorts permits by time tag", () => {
     const db = createTestDatabase();
-    db.prepare(
-      `insert into permit_arrangements
-       (id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("p1", "2026-05-01", "下午", "2026-05-01T12:00:00+08:00", "2026-05-01T17:00:00+08:00", "封闭许可", "孙八", "西侧", "待确认", 1, 0);
-    db.prepare(
-      `insert into permit_arrangements
-       (id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("p2", "2026-05-01", "全天", "2026-05-01T00:00:00+08:00", "2026-05-01T23:59:59+08:00", "动火许可", "张三", "A区", "已审批", 1, 0);
+    insertArrangementContainer(db, {
+      id: "p1",
+      type: "permit",
+      date: "2026-05-01",
+      timeTag: "下午",
+      content: "封闭许可",
+      personnel: "孙八",
+      other: "待确认",
+      metadata: { area: "西侧" }
+    });
+    insertArrangementContainer(db, {
+      id: "p2",
+      type: "permit",
+      date: "2026-05-01",
+      timeTag: "全天",
+      content: "动火许可",
+      personnel: "张三",
+      other: "已审批",
+      metadata: { area: "A区" }
+    });
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
@@ -30,21 +40,32 @@ describe("board snapshot", () => {
 
   it("sorts other arrangements by time tag", () => {
     const db = createTestDatabase();
-    db.prepare(
-      `insert into other_arrangements
-       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("o1", "2026-05-01", "下午", "2026-05-01T12:00:00+08:00", "2026-05-01T17:00:00+08:00", "清点物资", "李四", "电瓶车", "", 1, 0);
-    db.prepare(
-      `insert into other_arrangements
-       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("o2", "2026-05-01", "上午", "2026-05-01T08:00:00+08:00", "2026-05-01T12:00:00+08:00", "设备巡检", "王五", "皮卡", "", 1, 0);
-    db.prepare(
-      `insert into other_arrangements
-       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("o3", "2026-05-01", "全天", "2026-05-01T00:00:00+08:00", "2026-05-01T23:59:59+08:00", "值守", "赵六", "", "", 1, 0);
+    insertArrangementContainer(db, {
+      id: "o1",
+      type: "other",
+      date: "2026-05-01",
+      timeTag: "下午",
+      content: "清点物资",
+      personnel: "李四",
+      vehicle: "电瓶车"
+    });
+    insertArrangementContainer(db, {
+      id: "o2",
+      type: "other",
+      date: "2026-05-01",
+      timeTag: "上午",
+      content: "设备巡检",
+      personnel: "王五",
+      vehicle: "皮卡"
+    });
+    insertArrangementContainer(db, {
+      id: "o3",
+      type: "other",
+      date: "2026-05-01",
+      timeTag: "全天",
+      content: "值守",
+      personnel: "赵六"
+    });
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
@@ -54,16 +75,24 @@ describe("board snapshot", () => {
   it("returns board snapshot JSON from the board route", async () => {
     const db = createTestDatabase();
     const date = toChinaDate(new Date());
-    db.prepare(
-      `insert into permit_arrangements
-       (id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("p1", date, "上午", `${date}T08:00:00+08:00`, `${date}T12:00:00+08:00`, "动火许可", "张三", "A区", "已审批", 1, 0);
-    db.prepare(
-      `insert into other_arrangements
-       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run("o1", date, "全天", `${date}T00:00:00+08:00`, `${date}T23:59:59+08:00`, "值守", "赵六", "", "", 1, 0);
+    insertArrangementContainer(db, {
+      id: "p1",
+      type: "permit",
+      date,
+      timeTag: "上午",
+      content: "动火许可",
+      personnel: "张三",
+      other: "已审批",
+      metadata: { area: "A区" }
+    });
+    insertArrangementContainer(db, {
+      id: "o1",
+      type: "other",
+      date,
+      timeTag: "全天",
+      content: "值守",
+      personnel: "赵六"
+    });
     db.prepare("insert into leave_people values (?, ?, ?, ?, ?)")
       .run("l1", date, "钱七", 1, 0);
     const app = createApp(db);
@@ -172,7 +201,7 @@ describe("board snapshot", () => {
     );
     db.prepare(
       `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, metadata_json, sort_order)
+       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
        values (?, ?, ?, ?, ?, ?, ?)`
     ).run("item-1", "operation-1", 0, 60, "检查设备", "{not-json", 0);
 
@@ -186,4 +215,61 @@ describe("board snapshot", () => {
 function toChinaDate(date: Date): string {
   const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   return shifted.toISOString().slice(0, 10);
+}
+
+function insertArrangementContainer(
+  db: AppDatabase,
+  input: {
+    id: string;
+    type: "permit" | "other";
+    date: string;
+    timeTag: "全天" | "上午" | "下午";
+    content: string;
+    personnel?: string;
+    vehicle?: string;
+    other?: string;
+    metadata?: Record<string, unknown>;
+  }
+): void {
+  const rangeByTag = {
+    全天: ["00:00:00+08:00", "23:59:59+08:00", 1439],
+    上午: ["08:00:00+08:00", "12:00:00+08:00", 240],
+    下午: ["12:00:00+08:00", "17:00:00+08:00", 300]
+  } as const;
+  const [start, end, durationMinutes] = rangeByTag[input.timeTag];
+  const now = "2026-05-01T00:00:00.000Z";
+
+  db.prepare(
+    `insert into task_containers
+     (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
+      recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
+     values (?, ?, ?, ?, ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
+  ).run(
+    input.id,
+    input.type,
+    input.type === "permit" ? "许可" : "其他",
+    input.type === "permit" ? "许可安排" : "其他安排",
+    `${input.date}T${start}`,
+    `${input.date}T${end}`,
+    now,
+    now
+  );
+  db.prepare(
+    `insert into task_items
+     (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+     values (?, ?, 0, ?, ?, ?, 0)`
+  ).run(
+    `${input.id}:item`,
+    input.id,
+    durationMinutes,
+    input.content,
+    JSON.stringify({
+      ...(input.metadata ?? {}),
+      timeTag: input.timeTag,
+      target: input.content,
+      personnel: input.personnel ?? "",
+      vehicle: input.vehicle ?? "",
+      other: input.other ?? ""
+    })
+  );
 }

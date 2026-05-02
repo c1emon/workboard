@@ -6,6 +6,8 @@ import { validateTaskItem } from "../domain/taskExpansion.js";
 import { durationMinutesForRange, timeRangeForDateTag } from "../domain/timeTags.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 
+type TimeTag = "全天" | "上午" | "下午";
+
 const timeTagSchema = z.enum(["全天", "上午", "下午"]);
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const dateTimeSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
@@ -60,7 +62,7 @@ const chineseDaysPayloadSchema = z.object({
 
 const taskContainerInputSchema = z
   .object({
-    type: z.enum(["operation", "patrol"]),
+    type: z.enum(["operation", "permit", "patrol", "other"]),
     name: z.string().min(1),
     description: z.string().default(""),
     startAt: dateTimeSchema,
@@ -89,6 +91,10 @@ const taskItemInputSchema = z.object({
 
 const idParamSchema = z.object({ id: resourceIdSchema });
 const dateQuerySchema = z.object({ date: dateSchema });
+const arrangementListQuerySchema = z.object({
+  date: dateSchema.optional(),
+  scope: z.enum(["date", "all"]).default("date")
+});
 const enabledInputSchema = z.object({ enabled: z.boolean() });
 const operationPlanListQuerySchema = z.object({
   date: dateSchema.optional(),
@@ -158,6 +164,17 @@ interface TaskContainerDurationRow {
   end_at: string;
 }
 
+interface ArrangementTaskAdminRow {
+  id: string;
+  item_id: string;
+  date: string;
+  start_at: string;
+  end_at: string;
+  content: string;
+  ext_data_json: string;
+  enabled: number;
+}
+
 interface OperationPlanAdminRow {
   id: string;
   name: string;
@@ -179,46 +196,18 @@ interface OperationItemAdminRow {
   offset_minutes: number;
   duration_minutes: number;
   content: string;
-  metadata_json: string;
+  ext_data_json: string;
   sort_order: number;
-}
-
-interface PermitArrangementAdminRow {
-  id: string;
-  date: string;
-  time_tag: "全天" | "上午" | "下午";
-  start_at: string;
-  end_at: string;
-  permit: string;
-  personnel: string;
-  area: string;
-  other: string;
-  enabled: number;
-}
-
-interface OtherArrangementAdminRow {
-  id: string;
-  date: string;
-  time_tag: "全天" | "上午" | "下午";
-  start_at: string;
-  end_at: string;
-  task: string;
-  personnel: string;
-  vehicle: string;
-  other: string;
-  enabled: number;
 }
 
 interface PatrolArrangementAdminRow {
   id: string;
   item_id: string;
-  time_tag: "全天" | "上午" | "下午" | null;
+  date: string;
   start_at: string;
   end_at: string;
-  target: string;
-  personnel: string;
-  vehicle: string;
-  other: string;
+  content: string;
+  ext_data_json: string;
   enabled: number;
 }
 
@@ -283,7 +272,7 @@ function mapOperationItemRow(row: OperationItemAdminRow) {
     offsetMinutes: row.offset_minutes,
     durationMinutes: row.duration_minutes,
     content: row.content,
-    metadata: JSON.parse(row.metadata_json) as Record<string, unknown>,
+    metadata: JSON.parse(row.ext_data_json) as Record<string, unknown>,
     sortOrder: row.sort_order
   };
 }
@@ -298,9 +287,8 @@ function insertOperationItem(db: AppDatabase, containerId: string, input: z.infe
   const id = nanoid();
   db.prepare(
     `insert into task_items
-     (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
-      metadata_json, sort_order)
-     values (?, ?, ?, ?, ?, null, '', '', '', '', ?, ?)`
+     (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+     values (?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     containerId,
@@ -311,6 +299,206 @@ function insertOperationItem(db: AppDatabase, containerId: string, input: z.infe
     input.sortOrder
   );
   return id;
+}
+
+function listArrangementTaskRows(
+  db: AppDatabase,
+  type: "permit" | "patrol" | "other",
+  query: z.infer<typeof arrangementListQuerySchema>
+): ArrangementTaskAdminRow[] {
+  return query.scope === "all"
+    ? db
+        .prepare<[string], ArrangementTaskAdminRow>(
+          `select c.id, i.id as item_id, substr(c.start_at, 1, 10) as date, c.start_at, c.end_at,
+                  i.content, i.ext_data_json, c.enabled
+           from task_containers c
+           join task_items i on i.container_id = c.id
+           where c.type = ?
+           order by c.start_at desc, i.sort_order, i.offset_minutes`
+        )
+        .all(type)
+    : db
+        .prepare<[string, string, string, string], ArrangementTaskAdminRow>(
+          `select c.id, i.id as item_id, ? as date, c.start_at, c.end_at,
+                  i.content, i.ext_data_json, c.enabled
+           from task_containers c
+           join task_items i on i.container_id = c.id
+           where c.type = ?
+             and c.start_at <= ?
+             and c.end_at >= ?
+           order by c.start_at, i.sort_order, i.offset_minutes`
+        )
+        .all(query.date as string, type, `${query.date as string}T23:59:59+08:00`, `${query.date as string}T00:00:00+08:00`);
+}
+
+function parseArrangementMetadata(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+  return {};
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string {
+  const value = metadata[key];
+  return typeof value === "string" ? value : "";
+}
+
+function metadataTimeTag(metadata: Record<string, unknown>): TimeTag {
+  const value = metadata.timeTag;
+  return value === "上午" || value === "下午" || value === "全天" ? value : "全天";
+}
+
+function arrangementMetadata(input: {
+  timeTag: TimeTag;
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
+  metadata: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    ...input.metadata,
+    timeTag: input.timeTag,
+    target: input.target,
+    personnel: input.personnel,
+    vehicle: input.vehicle,
+    other: input.other
+  };
+}
+
+function mapPermitArrangementTaskRow(row: ArrangementTaskAdminRow) {
+  const metadata = parseArrangementMetadata(row.ext_data_json);
+  return {
+    id: row.id,
+    date: row.date,
+    timeTag: metadataTimeTag(metadata),
+    startAt: row.start_at,
+    endAt: row.end_at,
+    permit: metadataString(metadata, "target") || row.content,
+    personnel: metadataString(metadata, "personnel"),
+    area: metadataString(metadata, "area"),
+    other: metadataString(metadata, "other"),
+    enabled: row.enabled === 1
+  };
+}
+
+function mapOtherArrangementTaskRow(row: ArrangementTaskAdminRow) {
+  const metadata = parseArrangementMetadata(row.ext_data_json);
+  return {
+    id: row.id,
+    date: row.date,
+    timeTag: metadataTimeTag(metadata),
+    startAt: row.start_at,
+    endAt: row.end_at,
+    task: metadataString(metadata, "target") || row.content,
+    personnel: metadataString(metadata, "personnel"),
+    vehicle: metadataString(metadata, "vehicle"),
+    other: metadataString(metadata, "other"),
+    enabled: row.enabled === 1
+  };
+}
+
+function mapPatrolArrangementTaskRow(row: ArrangementTaskAdminRow) {
+  const metadata = parseArrangementMetadata(row.ext_data_json);
+  return {
+    id: row.id,
+    itemId: row.item_id,
+    date: row.date,
+    timeTag: metadataTimeTag(metadata),
+    startAt: row.start_at,
+    endAt: row.end_at,
+    target: metadataString(metadata, "target") || row.content,
+    personnel: metadataString(metadata, "personnel"),
+    vehicle: metadataString(metadata, "vehicle"),
+    other: metadataString(metadata, "other"),
+    enabled: row.enabled === 1
+  };
+}
+
+function createSingleItemArrangement(
+  db: AppDatabase,
+  input: {
+    type: "permit" | "patrol" | "other";
+    name: string;
+    description: string;
+    date: string;
+    timeTag: "全天" | "上午" | "下午";
+    content: string;
+    target: string;
+    personnel: string;
+    vehicle: string;
+    other: string;
+    metadata: Record<string, unknown>;
+  }
+): { id: string; itemId: string } {
+  const id = nanoid();
+  const itemId = nanoid();
+  const now = new Date().toISOString();
+  const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
+  const durationMinutes = durationMinutesForRange(startAt, endAt);
+
+  db.transaction(() => {
+    db.prepare(
+      `insert into task_containers
+       (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
+        recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
+       values (?, ?, ?, ?, ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
+    ).run(id, input.type, input.name, input.description, startAt, endAt, now, now);
+    db.prepare(
+      `insert into task_items
+       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+       values (?, ?, 0, ?, ?, ?, 0)`
+    ).run(
+      itemId,
+      id,
+      durationMinutes,
+      input.content,
+      JSON.stringify(arrangementMetadata(input))
+    );
+  })();
+
+  return { id, itemId };
+}
+
+function updateSingleItemArrangement(
+  db: AppDatabase,
+  id: string,
+  input: {
+    type: "permit" | "patrol" | "other";
+    date: string;
+    timeTag: "全天" | "上午" | "下午";
+    content: string;
+    target: string;
+    personnel: string;
+    vehicle: string;
+    other: string;
+    metadata: Record<string, unknown>;
+  }
+) {
+  const now = new Date().toISOString();
+  const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
+  const durationMinutes = durationMinutesForRange(startAt, endAt);
+  return db.transaction(() => {
+    const result = db
+      .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = ?")
+      .run(startAt, endAt, now, id, input.type);
+    if (result.changes === 0) return result;
+
+    db.prepare(
+      `update task_items
+       set offset_minutes = 0, duration_minutes = ?, content = ?, ext_data_json = ?
+       where container_id = ?`
+    ).run(
+      durationMinutes,
+      input.content,
+      JSON.stringify(arrangementMetadata(input)),
+      id
+    );
+    return result;
+  })();
 }
 
 function chineseDaysName(value: string): string {
@@ -327,31 +515,30 @@ function hasDuplicateLeavePerson(db: AppDatabase, date: string, name: string, ex
   return row !== undefined;
 }
 
+function validateArrangementListQuery(query: unknown) {
+  const validation = validateAdminPayload(arrangementListQuerySchema, query);
+  if (!validation.success) return validation;
+  if (validation.data.scope === "date" && !validation.data.date) {
+    return {
+      success: false,
+      error: {
+        error: "Invalid admin payload",
+        issues: [{ code: z.ZodIssueCode.custom, path: ["date"], message: "Required when scope is date" }]
+      }
+    } as const;
+  }
+  return validation;
+}
+
 export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, boardEvents: BoardEventBroadcaster): void {
   app.get("/api/admin/permit-arrangements", async (request, reply) => {
-    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    const validation = validateArrangementListQuery(request.query);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const rows = db
-      .prepare<[string], PermitArrangementAdminRow>(
-        `select id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled
-         from permit_arrangements
-         where date = ?
-         order by sort_order, time_tag, permit`
-      )
-      .all(validation.data.date);
+    const rows = listArrangementTaskRows(db, "permit", validation.data);
 
     return rows.map((row) => ({
-      id: row.id,
-      date: row.date,
-      timeTag: row.time_tag,
-      startAt: row.start_at,
-      endAt: row.end_at,
-      permit: row.permit,
-      personnel: row.personnel,
-      area: row.area,
-      other: row.other,
-      enabled: row.enabled === 1
+      ...mapPermitArrangementTaskRow(row)
     }));
   });
 
@@ -362,14 +549,19 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     }
 
     const input = validation.data;
-    const id = nanoid();
-    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-
-    db.prepare(
-      `insert into permit_arrangements
-       (id, date, time_tag, start_at, end_at, permit, personnel, area, other)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, input.date, input.timeTag, startAt, endAt, input.permit, input.personnel, input.area, input.other);
+    const { id } = createSingleItemArrangement(db, {
+      type: "permit",
+      name: "许可",
+      description: "许可安排",
+      date: input.date,
+      timeTag: input.timeTag,
+      content: input.permit,
+      target: input.permit,
+      personnel: input.personnel,
+      vehicle: "",
+      other: input.other,
+      metadata: { area: input.area }
+    });
     boardEvents.publish();
 
     return reply.code(201).send({ id });
@@ -382,14 +574,17 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
-    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-    const result = db
-      .prepare(
-        `update permit_arrangements
-         set date = ?, time_tag = ?, start_at = ?, end_at = ?, permit = ?, personnel = ?, area = ?, other = ?
-         where id = ?`
-      )
-      .run(input.date, input.timeTag, startAt, endAt, input.permit, input.personnel, input.area, input.other, params.data.id);
+    const result = updateSingleItemArrangement(db, params.data.id, {
+      type: "permit",
+      date: input.date,
+      timeTag: input.timeTag,
+      content: input.permit,
+      target: input.permit,
+      personnel: input.personnel,
+      vehicle: "",
+      other: input.other,
+      metadata: { area: input.area }
+    });
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -403,8 +598,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const result = db
-      .prepare("update permit_arrangements set enabled = ? where id = ?")
-      .run(validation.data.enabled ? 1 : 0, params.data.id);
+      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'permit'")
+      .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -415,7 +610,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const params = validateAdminPayload(idParamSchema, request.params);
     if (!params.success) return reply.code(400).send(params.error);
 
-    const result = db.prepare("delete from permit_arrangements where id = ?").run(params.data.id);
+    const result = db.prepare("delete from task_containers where id = ? and type = 'permit'").run(params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -423,29 +618,13 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
   });
 
   app.get("/api/admin/other-arrangements", async (request, reply) => {
-    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    const validation = validateArrangementListQuery(request.query);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const rows = db
-      .prepare<[string], OtherArrangementAdminRow>(
-        `select id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled
-         from other_arrangements
-         where date = ?
-         order by sort_order, time_tag, task`
-      )
-      .all(validation.data.date);
+    const rows = listArrangementTaskRows(db, "other", validation.data);
 
     return rows.map((row) => ({
-      id: row.id,
-      date: row.date,
-      timeTag: row.time_tag,
-      startAt: row.start_at,
-      endAt: row.end_at,
-      task: row.task,
-      personnel: row.personnel,
-      vehicle: row.vehicle,
-      other: row.other,
-      enabled: row.enabled === 1
+      ...mapOtherArrangementTaskRow(row)
     }));
   });
 
@@ -456,14 +635,19 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     }
 
     const input = validation.data;
-    const id = nanoid();
-    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-
-    db.prepare(
-      `insert into other_arrangements
-       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(id, input.date, input.timeTag, startAt, endAt, input.task, input.personnel, input.vehicle, input.other);
+    const { id } = createSingleItemArrangement(db, {
+      type: "other",
+      name: "其他",
+      description: "其他安排",
+      date: input.date,
+      timeTag: input.timeTag,
+      content: input.task,
+      target: input.task,
+      personnel: input.personnel,
+      vehicle: input.vehicle,
+      other: input.other,
+      metadata: {}
+    });
     boardEvents.publish();
 
     return reply.code(201).send({ id });
@@ -476,14 +660,17 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
-    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
-    const result = db
-      .prepare(
-        `update other_arrangements
-         set date = ?, time_tag = ?, start_at = ?, end_at = ?, task = ?, personnel = ?, vehicle = ?, other = ?
-         where id = ?`
-      )
-      .run(input.date, input.timeTag, startAt, endAt, input.task, input.personnel, input.vehicle, input.other, params.data.id);
+    const result = updateSingleItemArrangement(db, params.data.id, {
+      type: "other",
+      date: input.date,
+      timeTag: input.timeTag,
+      content: input.task,
+      target: input.task,
+      personnel: input.personnel,
+      vehicle: input.vehicle,
+      other: input.other,
+      metadata: {}
+    });
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -497,8 +684,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const result = db
-      .prepare("update other_arrangements set enabled = ? where id = ?")
-      .run(validation.data.enabled ? 1 : 0, params.data.id);
+      .prepare("update task_containers set enabled = ?, updated_at = ? where id = ? and type = 'other'")
+      .run(validation.data.enabled ? 1 : 0, new Date().toISOString(), params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -509,7 +696,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const params = validateAdminPayload(idParamSchema, request.params);
     if (!params.success) return reply.code(400).send(params.error);
 
-    const result = db.prepare("delete from other_arrangements where id = ?").run(params.data.id);
+    const result = db.prepare("delete from task_containers where id = ? and type = 'other'").run(params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -517,34 +704,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
   });
 
   app.get("/api/admin/patrol-arrangements", async (request, reply) => {
-    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    const validation = validateArrangementListQuery(request.query);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const rows = db
-      .prepare<[string, string], PatrolArrangementAdminRow>(
-        `select c.id, i.id as item_id, i.time_tag, c.start_at, c.end_at, i.target, i.personnel, i.vehicle, i.other, c.enabled
-         from task_containers c
-         join task_items i on i.container_id = c.id
-         where c.type = 'patrol'
-           and c.start_at <= ?
-           and c.end_at >= ?
-         order by c.start_at, i.sort_order, i.offset_minutes`
-      )
-      .all(`${validation.data.date}T23:59:59+08:00`, `${validation.data.date}T00:00:00+08:00`);
+    const rows = listArrangementTaskRows(db, "patrol", validation.data);
 
-    return rows.map((row) => ({
-      id: row.id,
-      itemId: row.item_id,
-      date: validation.data.date,
-      timeTag: row.time_tag ?? "全天",
-      startAt: row.start_at,
-      endAt: row.end_at,
-      target: row.target,
-      personnel: row.personnel,
-      vehicle: row.vehicle,
-      other: row.other,
-      enabled: row.enabled === 1
-    }));
+    return rows.map(mapPatrolArrangementTaskRow);
   });
 
   app.post("/api/admin/patrol-arrangements", async (request, reply) => {
@@ -567,10 +732,24 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       ).run(id, startAt, endAt, now, now);
       db.prepare(
         `insert into task_items
-         (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
-          metadata_json, sort_order)
-         values (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, '{}', 0)`
-      ).run(itemId, id, durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other);
+         (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+         values (?, ?, 0, ?, ?, ?, 0)`
+      ).run(
+        itemId,
+        id,
+        durationMinutes,
+        input.target,
+        JSON.stringify(
+          arrangementMetadata({
+            timeTag: input.timeTag,
+            target: input.target,
+            personnel: input.personnel,
+            vehicle: input.vehicle,
+            other: input.other,
+            metadata: {}
+          })
+        )
+      );
     })();
     boardEvents.publish();
 
@@ -595,9 +774,23 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
       db.prepare(
         `update task_items
-         set offset_minutes = 0, duration_minutes = ?, content = ?, time_tag = ?, target = ?, personnel = ?, vehicle = ?, other = ?
+         set offset_minutes = 0, duration_minutes = ?, content = ?, ext_data_json = ?
          where container_id = ?`
-      ).run(durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other, params.data.id);
+      ).run(
+        durationMinutes,
+        input.target,
+        JSON.stringify(
+          arrangementMetadata({
+            timeTag: input.timeTag,
+            target: input.target,
+            personnel: input.personnel,
+            vehicle: input.vehicle,
+            other: input.other,
+            metadata: {}
+          })
+        ),
+        params.data.id
+      );
       return result;
     })();
     if (containerResult.changes === 0) return reply.code(404).send({ error: "Not found" });
@@ -633,17 +826,26 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
   });
 
   app.get("/api/admin/leave-people", async (request, reply) => {
-    const validation = validateAdminPayload(dateQuerySchema, request.query);
+    const validation = validateArrangementListQuery(request.query);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-    const rows = db
-      .prepare<[string], LeavePersonAdminRow>(
-        `select id, date, name, enabled
-         from leave_people
-         where date = ?
-         order by sort_order, name`
-      )
-      .all(validation.data.date);
+    const rows =
+      validation.data.scope === "all"
+        ? db
+            .prepare<[], LeavePersonAdminRow>(
+              `select id, date, name, enabled
+               from leave_people
+               order by date desc, sort_order, name`
+            )
+            .all()
+        : db
+            .prepare<[string], LeavePersonAdminRow>(
+              `select id, date, name, enabled
+               from leave_people
+               where date = ?
+               order by sort_order, name`
+            )
+            .all(validation.data.date as string);
 
     return rows.map((row) => ({
       id: row.id,
@@ -852,7 +1054,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const items = db
       .prepare<[string], OperationItemAdminRow>(
-        `select id, offset_minutes, duration_minutes, content, metadata_json, sort_order
+        `select id, offset_minutes, duration_minutes, content, ext_data_json, sort_order
          from task_items
          where container_id = ?
          order by sort_order, offset_minutes`
@@ -951,7 +1153,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       if (existingItem) {
         db.prepare(
           `update task_items
-         set offset_minutes = ?, duration_minutes = ?, content = ?, metadata_json = ?, sort_order = ?
+         set offset_minutes = ?, duration_minutes = ?, content = ?, ext_data_json = ?, sort_order = ?
          where id = ?`
         ).run(
           input.item.offsetMinutes,
@@ -1060,21 +1262,24 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const id = nanoid();
     db.prepare(
       `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
-        metadata_json, sort_order)
-       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       input.containerId,
       input.offsetMinutes,
       input.durationMinutes,
       input.content,
-      input.timeTag ?? null,
-      input.target,
-      input.personnel,
-      input.vehicle,
-      input.other,
-      JSON.stringify(input.metadata),
+      JSON.stringify(
+        arrangementMetadata({
+          timeTag: input.timeTag ?? "全天",
+          target: input.target,
+          personnel: input.personnel,
+          vehicle: input.vehicle,
+          other: input.other,
+          metadata: input.metadata
+        })
+      ),
       input.sortOrder
     );
     boardEvents.publish();

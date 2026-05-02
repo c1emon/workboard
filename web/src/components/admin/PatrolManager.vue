@@ -3,6 +3,9 @@
     <ListHeader title="巡视列表" />
     <DateToolbar
       :model-value="selectedDate"
+      :show-all="showAll"
+      :allow-show-all="true"
+      :disabled="showAll"
       :today="today"
       :yesterday="yesterday"
       add-label="新增巡视"
@@ -10,6 +13,7 @@
       @today="emit('today')"
       @yesterday="emit('yesterday')"
       @update:model-value="emit('update:selectedDate', $event)"
+      @update:show-all="emit('update:showAll', $event)"
     />
     <div class="table-shell">
       <table>
@@ -54,11 +58,13 @@ defineProps<{
   selectedDate: string;
   today: string;
   yesterday: string;
+  showAll: boolean;
   rows: PatrolArrangementRecord[];
 }>();
 
 const emit = defineEmits<{
   "update:selectedDate": [value: string];
+  "update:showAll": [value: boolean];
   add: [];
   today: [];
   yesterday: [];

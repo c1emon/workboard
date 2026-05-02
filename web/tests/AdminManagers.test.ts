@@ -19,6 +19,7 @@ describe("admin managers", () => {
     const wrapper = mount(PermitManager, {
       props: {
         ...calendarProps,
+        showAll: false,
         rows: [
           {
             id: "permit-1",
@@ -42,16 +43,19 @@ describe("admin managers", () => {
     await wrapper.find('[aria-label="禁用许可"]').trigger("click");
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
     await wrapper.find("tbody .row-actions .danger").trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
 
     expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "permit-1" });
     expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "permit-1" });
     expect(wrapper.emitted("delete")).toEqual([["permit-1"]]);
+    expect(wrapper.emitted("update:showAll")).toEqual([[true]]);
   });
 
   it("renders patrol rows and emits row actions", async () => {
     const wrapper = mount(PatrolManager, {
       props: {
         ...calendarProps,
+        showAll: false,
         rows: [
           {
             id: "patrol-1",
@@ -76,16 +80,19 @@ describe("admin managers", () => {
     await wrapper.findAll("tbody .row-actions button")[0].trigger("click");
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
     await wrapper.find("tbody .row-actions .danger").trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
 
     expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "patrol-1" });
     expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "patrol-1" });
     expect(wrapper.emitted("delete")).toEqual([["patrol-1"]]);
+    expect(wrapper.emitted("update:showAll")).toEqual([[true]]);
   });
 
   it("renders other rows and emits row actions", async () => {
     const wrapper = mount(OtherManager, {
       props: {
         ...calendarProps,
+        showAll: false,
         rows: [
           {
             id: "other-1",
@@ -109,10 +116,12 @@ describe("admin managers", () => {
     await wrapper.findAll("tbody .row-actions button")[0].trigger("click");
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
     await wrapper.find("tbody .row-actions .danger").trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
 
     expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "other-1" });
     expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "other-1" });
     expect(wrapper.emitted("delete")).toEqual([["other-1"]]);
+    expect(wrapper.emitted("update:showAll")).toEqual([[true]]);
   });
 
   it("renders operation rows and emits row actions", async () => {

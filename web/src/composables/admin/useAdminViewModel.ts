@@ -69,7 +69,18 @@ export function useAdminViewModel() {
   });
 
   onMounted(loadActiveList);
-  watch([activeKey, selectedDate, operationAdmin.operationShowAll], loadActiveList);
+  watch(
+    [
+      activeKey,
+      selectedDate,
+      operationAdmin.operationShowAll,
+      arrangementAdmin.permitShowAll,
+      arrangementAdmin.patrolShowAll,
+      arrangementAdmin.otherShowAll,
+      arrangementAdmin.leaveShowAll
+    ],
+    loadActiveList
+  );
   watch(holidayAdmin.holidayYear, () => {
     if (activeKey.value === "holiday") void loadActiveList();
   });

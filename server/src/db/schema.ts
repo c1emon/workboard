@@ -1,7 +1,7 @@
 export const schemaSql = `
 create table if not exists task_containers (
   id text primary key,
-  type text not null check (type in ('operation', 'patrol')),
+  type text not null check (type in ('operation', 'permit', 'patrol', 'other')),
   name text not null,
   description text not null default '',
   start_at text not null,
@@ -22,40 +22,7 @@ create table if not exists task_items (
   offset_minutes integer not null,
   duration_minutes integer not null,
   content text not null default '',
-  time_tag text check (time_tag in ('全天', '上午', '下午')),
-  target text not null default '',
-  personnel text not null default '',
-  vehicle text not null default '',
-  other text not null default '',
-  metadata_json text not null default '{}',
-  sort_order integer not null default 0
-);
-
-create table if not exists permit_arrangements (
-  id text primary key,
-  date text not null,
-  time_tag text not null check (time_tag in ('全天', '上午', '下午')),
-  start_at text not null,
-  end_at text not null,
-  permit text not null,
-  personnel text not null default '',
-  area text not null default '',
-  other text not null default '',
-  enabled integer not null default 1,
-  sort_order integer not null default 0
-);
-
-create table if not exists other_arrangements (
-  id text primary key,
-  date text not null,
-  time_tag text not null check (time_tag in ('全天', '上午', '下午')),
-  start_at text not null,
-  end_at text not null,
-  task text not null,
-  personnel text not null default '',
-  vehicle text not null default '',
-  other text not null default '',
-  enabled integer not null default 1,
+  ext_data_json text not null default '{}',
   sort_order integer not null default 0
 );
 
@@ -73,4 +40,6 @@ create table if not exists holidays (
   name text not null default '',
   type text not null default 'holiday' check (type in ('holiday', 'adjusted_workday'))
 );
+
+create unique index if not exists leave_people_date_name_unique on leave_people (date, name);
 `;

@@ -3,6 +3,9 @@
     <ListHeader title="休假列表" />
     <DateToolbar
       :model-value="selectedDate"
+      :show-all="showAll"
+      :allow-show-all="true"
+      :disabled="showAll"
       :today="today"
       :yesterday="yesterday"
       add-label="新增休假"
@@ -10,6 +13,7 @@
       @today="emit('today')"
       @yesterday="emit('yesterday')"
       @update:model-value="emit('update:selectedDate', $event)"
+      @update:show-all="emit('update:showAll', $event)"
     />
     <div class="table-shell leave-table-shell">
       <table class="leave-table">
@@ -44,11 +48,13 @@ defineProps<{
   selectedDate: string;
   today: string;
   yesterday: string;
+  showAll: boolean;
   rows: LeavePersonRecord[];
 }>();
 
 const emit = defineEmits<{
   "update:selectedDate": [value: string];
+  "update:showAll": [value: boolean];
   add: [];
   today: [];
   yesterday: [];
@@ -112,13 +118,14 @@ tr.disabled td:not(.row-actions) {
 }
 
 .actions-column {
-  width: 160px;
+  width: 210px;
 }
 
 .row-actions {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .row-actions button {
@@ -128,8 +135,10 @@ tr.disabled td:not(.row-actions) {
   color: #172033;
   cursor: pointer;
   font: inherit;
+  font-size: 13px;
   font-weight: 700;
-  padding: 7px 10px;
+  line-height: 1.2;
+  padding: 5px 8px;
 }
 
 .row-actions .danger {

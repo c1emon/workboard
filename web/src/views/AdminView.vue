@@ -33,6 +33,7 @@
         <PermitManager
           v-if="activeKey === 'permit'"
           v-model:selected-date="selectedDate"
+          v-model:show-all="permitShowAll"
           :today="today"
           :yesterday="yesterday"
           :rows="permitRows"
@@ -47,6 +48,7 @@
         <PatrolManager
           v-else-if="activeKey === 'patrol'"
           v-model:selected-date="selectedDate"
+          v-model:show-all="patrolShowAll"
           :today="today"
           :yesterday="yesterday"
           :rows="patrolRows"
@@ -61,6 +63,7 @@
         <OtherManager
           v-else-if="activeKey === 'other'"
           v-model:selected-date="selectedDate"
+          v-model:show-all="otherShowAll"
           :today="today"
           :yesterday="yesterday"
           :rows="otherRows"
@@ -91,6 +94,7 @@
         <LeaveManager
           v-else-if="activeKey === 'leave'"
           v-model:selected-date="selectedDate"
+          v-model:show-all="leaveShowAll"
           :today="today"
           :yesterday="yesterday"
           :rows="leaveRows"
@@ -194,7 +198,7 @@ import { useAdminViewModel } from "../composables/admin/useAdminViewModel";
 
 const {
   sections, today, yesterday, activeKey, selectedDate, statusText, activeSection,
-  permitRows, patrolRows, otherRows, leaveRows, operationRows, operationShowAll,
+  permitRows, patrolRows, otherRows, leaveRows, permitShowAll, patrolShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
   holidayYear, holidayRows, adjustedWorkdayRows, holidayImportModalOpen, holidayImportForm,
   modalKind, modalTitle, modalForm, operationModalOpen, operationModalMode, operationRecordId,
   operationForm, operationReadOnly, operationModalTitle, operationDurationMinutes, operationHasEndAt,

@@ -2,7 +2,7 @@ export type RecurrenceType = "once" | "finite" | "infinite";
 
 export interface TaskContainer {
   id: string;
-  type: "operation" | "patrol";
+  type: "operation" | "permit" | "patrol" | "other";
   name: string;
   startAt: string;
   endAt: string;
@@ -19,11 +19,6 @@ export interface TaskItemInput {
   offsetMinutes: number;
   durationMinutes: number;
   content?: string;
-  timeTag?: "全天" | "上午" | "下午";
-  target?: string;
-  personnel?: string;
-  vehicle?: string;
-  other?: string;
   metadata: Record<string, unknown>;
   sortOrder?: number;
 }

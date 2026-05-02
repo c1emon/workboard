@@ -33,12 +33,16 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
   const patrolRows = ref<PatrolArrangementRecord[]>([]);
   const otherRows = ref<OtherArrangementRecord[]>([]);
   const leaveRows = ref<LeavePersonRecord[]>([]);
+  const permitShowAll = ref(false);
+  const patrolShowAll = ref(false);
+  const otherShowAll = ref(false);
+  const leaveShowAll = ref(false);
   const modalKind = ref<ModalKind | null>(null);
   const modalRecordId = ref<string | null>(null);
   const modalTitle = computed(() => `${modalRecordId.value ? "修改" : "新增"}${activeSection.value.label}`);
   const modalForm = reactive({
     date: today,
-    timeTag: "全天" as TimeTag,
+    timeTag: "上午" as TimeTag,
     primary: "",
     personnel: "",
     secondary: "",
@@ -46,26 +50,26 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
   });
 
   async function loadPermitRows(): Promise<void> {
-    permitRows.value = await fetchPermitArrangements(selectedDate.value);
+    permitRows.value = await fetchPermitArrangements(selectedDate.value, permitShowAll.value ? "all" : "date");
   }
 
   async function loadPatrolRows(): Promise<void> {
-    patrolRows.value = await fetchPatrolArrangements(selectedDate.value);
+    patrolRows.value = await fetchPatrolArrangements(selectedDate.value, patrolShowAll.value ? "all" : "date");
   }
 
   async function loadOtherRows(): Promise<void> {
-    otherRows.value = await fetchOtherArrangements(selectedDate.value);
+    otherRows.value = await fetchOtherArrangements(selectedDate.value, otherShowAll.value ? "all" : "date");
   }
 
   async function loadLeaveRows(): Promise<void> {
-    leaveRows.value = await fetchLeavePeople(selectedDate.value);
+    leaveRows.value = await fetchLeavePeople(selectedDate.value, leaveShowAll.value ? "all" : "date");
   }
 
   function resetModal(kind: ModalKind, recordId: string | null): void {
     modalKind.value = kind;
     modalRecordId.value = recordId;
     modalForm.date = selectedDate.value || today;
-    modalForm.timeTag = "全天";
+    modalForm.timeTag = "上午";
     modalForm.primary = "";
     modalForm.personnel = "";
     modalForm.secondary = "";
@@ -123,6 +127,14 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
 
   async function saveModal(): Promise<void> {
     if (!modalKind.value) return;
+    if (modalKind.value === "leave" && hasDuplicateLeavePerson(modalForm.date, modalForm.primary, modalRecordId.value ?? undefined)) {
+      await requestConfirmation({
+        title: "人员重复",
+        message: `${modalForm.date} 已存在休假人员「${modalForm.primary.trim()}」，不会重复添加。`,
+        confirmLabel: "知道了"
+      });
+      return;
+    }
     await withStatus(async () => {
       if (modalKind.value === "permit") {
         const payload = {
@@ -244,11 +256,21 @@ export function useArrangementAdmin(context: ArrangementAdminContext) {
     });
   }
 
+  function hasDuplicateLeavePerson(date: string, name: string, excludeId?: string): boolean {
+    const normalizedName = name.trim();
+    if (!normalizedName) return false;
+    return leaveRows.value.some((record) => record.date === date && record.name.trim() === normalizedName && record.id !== excludeId);
+  }
+
   return {
     permitRows,
     patrolRows,
     otherRows,
     leaveRows,
+    permitShowAll,
+    patrolShowAll,
+    otherShowAll,
+    leaveShowAll,
     modalKind,
     modalTitle,
     modalForm,

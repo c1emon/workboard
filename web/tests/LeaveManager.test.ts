@@ -11,6 +11,7 @@ describe("LeaveManager", () => {
         selectedDate: "2026-05-01",
         today: "2026-05-02",
         yesterday: "2026-05-01",
+        showAll: false,
         rows: [
           {
             id: "leave-1",
@@ -29,10 +30,12 @@ describe("LeaveManager", () => {
     await wrapper.find('input[type="date"]').setValue("2026-05-03");
     await wrapper.find(".yesterday-button").trigger("click");
     await wrapper.find(".today-button").trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
     await wrapper.find('[aria-label="新增休假"]').trigger("click");
     await wrapper.find("tbody .row-actions .danger").trigger("click");
 
     expect(wrapper.emitted("update:selectedDate")).toEqual([["2026-05-03"]]);
+    expect(wrapper.emitted("update:showAll")).toEqual([[true]]);
     expect(wrapper.emitted("yesterday")).toEqual([[]]);
     expect(wrapper.emitted("today")).toEqual([[]]);
     expect(wrapper.emitted("add")).toEqual([[]]);
@@ -45,6 +48,7 @@ describe("LeaveManager", () => {
         selectedDate: "2026-05-01",
         today: "2026-05-02",
         yesterday: "2026-05-01",
+        showAll: false,
         rows: []
       }
     });

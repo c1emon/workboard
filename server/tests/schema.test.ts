@@ -15,10 +15,26 @@ describe("database schema", () => {
     expect(tables).toEqual([
       "holidays",
       "leave_people",
-      "other_arrangements",
-      "permit_arrangements",
       "task_containers",
       "task_items"
+    ]);
+  });
+
+  it("keeps task item business fields in metadata instead of dedicated columns", () => {
+    const db = createTestDatabase();
+    const columns = db
+      .prepare("pragma table_info(task_items)")
+      .all()
+      .map((row) => (row as { name: string }).name);
+
+    expect(columns).toEqual([
+      "id",
+      "container_id",
+      "offset_minutes",
+      "duration_minutes",
+      "content",
+      "ext_data_json",
+      "sort_order"
     ]);
   });
 

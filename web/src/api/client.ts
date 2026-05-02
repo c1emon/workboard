@@ -3,6 +3,7 @@ import type { BoardSnapshot } from "./types";
 const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 type TimeTag = "全天" | "上午" | "下午";
+type ListScope = "date" | "all";
 
 export interface PermitArrangementRecord {
   id: string;
@@ -203,8 +204,14 @@ export async function fetchBoard(): Promise<BoardSnapshot> {
   return response.json();
 }
 
-export async function fetchPermitArrangements(date: string): Promise<PermitArrangementRecord[]> {
-  return fetchAdmin(`permit-arrangements?date=${encodeURIComponent(date)}`);
+function arrangementListPath(path: string, date: string, scope: ListScope = "date"): string {
+  const params = new URLSearchParams({ scope });
+  if (scope === "date") params.set("date", date);
+  return `${path}?${params.toString()}`;
+}
+
+export async function fetchPermitArrangements(date: string, scope: ListScope = "date"): Promise<PermitArrangementRecord[]> {
+  return fetchAdmin(arrangementListPath("permit-arrangements", date, scope));
 }
 
 export async function createPermit(input: {
@@ -233,8 +240,8 @@ export async function deletePermitArrangement(id: string): Promise<void> {
   return deleteAdmin(`permit-arrangements/${encodeURIComponent(id)}`);
 }
 
-export async function fetchOtherArrangements(date: string): Promise<OtherArrangementRecord[]> {
-  return fetchAdmin(`other-arrangements?date=${encodeURIComponent(date)}`);
+export async function fetchOtherArrangements(date: string, scope: ListScope = "date"): Promise<OtherArrangementRecord[]> {
+  return fetchAdmin(arrangementListPath("other-arrangements", date, scope));
 }
 
 export async function createOtherArrangement(input: {
@@ -263,8 +270,8 @@ export async function deleteOtherArrangement(id: string): Promise<void> {
   return deleteAdmin(`other-arrangements/${encodeURIComponent(id)}`);
 }
 
-export async function fetchPatrolArrangements(date: string): Promise<PatrolArrangementRecord[]> {
-  return fetchAdmin(`patrol-arrangements?date=${encodeURIComponent(date)}`);
+export async function fetchPatrolArrangements(date: string, scope: ListScope = "date"): Promise<PatrolArrangementRecord[]> {
+  return fetchAdmin(arrangementListPath("patrol-arrangements", date, scope));
 }
 
 export async function createPatrolArrangement(input: {
@@ -297,8 +304,8 @@ export async function createLeavePerson(input: { date: string; name: string }): 
   return postAdmin("leave-people", input);
 }
 
-export async function fetchLeavePeople(date: string): Promise<LeavePersonRecord[]> {
-  return fetchAdmin(`leave-people?date=${encodeURIComponent(date)}`);
+export async function fetchLeavePeople(date: string, scope: ListScope = "date"): Promise<LeavePersonRecord[]> {
+  return fetchAdmin(arrangementListPath("leave-people", date, scope));
 }
 
 export async function updateLeavePerson(id: string, input: Omit<LeavePersonRecord, "id" | "enabled">): Promise<void> {

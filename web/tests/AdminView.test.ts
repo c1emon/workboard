@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminView from "../src/views/AdminView.vue";
 import OperationTaskTimeline from "../src/components/OperationTaskTimeline.vue";
 import {
+  createLeavePerson,
   createOperationPlan,
   createPermit,
   createTaskItem,
@@ -16,6 +17,8 @@ import {
   fetchLeavePeople,
   fetchOperationPlan,
   fetchOperationPlans,
+  fetchOtherArrangements,
+  fetchPatrolArrangements,
   fetchPermitArrangements,
   importChineseDaysHolidays,
   updateOperationPlan,
@@ -307,7 +310,7 @@ describe("AdminView", () => {
 
     expect(createPermit).toHaveBeenCalledWith({
       date: expect.any(String),
-      timeTag: "全天",
+      timeTag: "上午",
       permit: "动火许可",
       personnel: "张三",
       area: "A区",
@@ -320,7 +323,7 @@ describe("AdminView", () => {
     await wrapper.findAll(".section-nav button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(fetchPermitArrangements).toHaveBeenCalledWith(expect.any(String));
+    expect(fetchPermitArrangements).toHaveBeenCalledWith(expect.any(String), "date");
     expect(wrapper.text()).toContain("动火许可");
 
     await wrapper.find('[aria-label="禁用许可"]').trigger("click");
@@ -341,7 +344,7 @@ describe("AdminView", () => {
     await wrapper.find(".today-button").trigger("click");
 
     expect(wrapper.find('input[type="date"]').element).toHaveProperty("value", expect.any(String));
-    expect(fetchPermitArrangements).toHaveBeenCalledWith(expect.any(String));
+    expect(fetchPermitArrangements).toHaveBeenCalledWith(expect.any(String), "date");
   });
 
   it("loads operation plans and disables date controls when showing all", async () => {
@@ -357,6 +360,47 @@ describe("AdminView", () => {
     expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
     expect(wrapper.find(".yesterday-button").attributes("disabled")).toBeDefined();
     expect(wrapper.find(".today-button").attributes("disabled")).toBeDefined();
+  });
+
+  it("loads arrangement lists with all scope and disables date controls when showing all", async () => {
+    const wrapper = mountAdmin();
+
+    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
+    expect(fetchPermitArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
+    expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
+
+    await wrapper.findAll(".section-nav button")[2].trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
+    expect(fetchPatrolArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
+    expect(wrapper.find(".yesterday-button").attributes("disabled")).toBeDefined();
+
+    await wrapper.findAll(".section-nav button")[3].trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
+    expect(fetchOtherArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
+
+    await wrapper.findAll(".section-nav button")[4].trigger("click");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
+    expect(fetchLeavePeople).toHaveBeenLastCalledWith(expect.any(String), "all");
+  });
+
+  it("shows a prompt instead of saving when adding a duplicate leave person", async () => {
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[4].trigger("click");
+    await wrapper.find('input[type="date"]').setValue("2026-05-01");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(wrapper.find(".admin-toolbar").text()).toContain("已同步");
+
+    await wrapper.find('[aria-label="新增休假"]').trigger("click");
+    await wrapper.find('input[name="leaveName"]').setValue("王五");
+    await wrapper.find(".modal-form").trigger("submit.prevent");
+
+    expect(wrapper.find(".confirmation-modal").exists()).toBe(true);
+    expect(wrapper.find(".confirmation-modal").text()).toContain("人员重复");
+    expect(wrapper.find(".confirmation-modal").text()).toContain("王五");
+    expect(createLeavePerson).not.toHaveBeenCalled();
+    expect(wrapper.find(".admin-toolbar").text()).toContain("已同步");
   });
 
   it("creates operation plans from a modal instead of the main page", async () => {
@@ -844,7 +888,7 @@ describe("AdminView", () => {
     await wrapper.findAll(".section-nav button")[4].trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(fetchLeavePeople).toHaveBeenCalledWith(expect.any(String));
+    expect(fetchLeavePeople).toHaveBeenCalledWith(expect.any(String), "date");
     expect(wrapper.text()).toContain("休假列表");
     expect(wrapper.find(".leave-table-shell").exists()).toBe(true);
     expect(wrapper.find(".leave-table").exists()).toBe(true);

@@ -609,6 +609,55 @@ describe("admin routes", () => {
     ]);
   });
 
+  it("lists arrangement records across dates when scope is all", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/permit-arrangements",
+      payload: { date: "2026-05-01", timeTag: "上午", permit: "动火许可" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/permit-arrangements",
+      payload: { date: "2026-05-02", timeTag: "下午", permit: "登高许可" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-arrangements",
+      payload: { date: "2026-05-01", timeTag: "上午", target: "1号线" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-arrangements",
+      payload: { date: "2026-05-02", timeTag: "下午", target: "2号线" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/other-arrangements",
+      payload: { date: "2026-05-01", timeTag: "上午", task: "清点物资" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/other-arrangements",
+      payload: { date: "2026-05-02", timeTag: "下午", task: "现场协调" }
+    });
+    await app.inject({ method: "POST", url: "/api/admin/leave-people", payload: { date: "2026-05-01", name: "王五" } });
+    await app.inject({ method: "POST", url: "/api/admin/leave-people", payload: { date: "2026-05-02", name: "赵六" } });
+
+    const permitResponse = await app.inject({ method: "GET", url: "/api/admin/permit-arrangements?scope=all" });
+    const patrolResponse = await app.inject({ method: "GET", url: "/api/admin/patrol-arrangements?scope=all" });
+    const otherResponse = await app.inject({ method: "GET", url: "/api/admin/other-arrangements?scope=all" });
+    const leaveResponse = await app.inject({ method: "GET", url: "/api/admin/leave-people?scope=all" });
+    await app.close();
+
+    expect(permitResponse.json().map((record: { permit: string }) => record.permit)).toEqual(["登高许可", "动火许可"]);
+    expect(patrolResponse.json().map((record: { target: string }) => record.target)).toEqual(["2号线", "1号线"]);
+    expect(otherResponse.json().map((record: { task: string }) => record.task)).toEqual(["现场协调", "清点物资"]);
+    expect(leaveResponse.json().map((record: { name: string }) => record.name)).toEqual(["赵六", "王五"]);
+  });
+
   it("lists, updates, disables, and deletes permit arrangements by date", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
@@ -684,6 +733,103 @@ describe("admin routes", () => {
     expect(disableResponse.statusCode).toBe(200);
     expect(deleteResponse.statusCode).toBe(204);
     expect(finalListResponse.json()).toEqual([]);
+  });
+
+  it("stores permit arrangements as one-off task containers with permit metadata", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/permit-arrangements",
+      payload: {
+        date: "2026-05-01",
+        timeTag: "上午",
+        permit: "动火许可",
+        personnel: "张三",
+        area: "A区",
+        other: "已审批"
+      }
+    });
+    const { id } = response.json() as { id: string };
+    const container = db.prepare("select type, name, description, start_at, end_at, recurrence_type from task_containers where id = ?").get(id);
+    const item = db
+      .prepare("select offset_minutes, duration_minutes, content, ext_data_json from task_items where container_id = ?")
+      .get(id) as { ext_data_json: string } | undefined;
+    const legacyTable = db.prepare("select name from sqlite_master where type = 'table' and name = 'permit_arrangements'").get();
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(container).toEqual({
+      type: "permit",
+      name: "许可",
+      description: "许可安排",
+      start_at: "2026-05-01T08:00:00+08:00",
+      end_at: "2026-05-01T12:00:00+08:00",
+      recurrence_type: "once"
+    });
+    expect(item).toMatchObject({
+      offset_minutes: 0,
+      duration_minutes: 240,
+      content: "动火许可"
+    });
+    expect(JSON.parse(item?.ext_data_json ?? "{}")).toEqual({
+      timeTag: "上午",
+      target: "动火许可",
+      personnel: "张三",
+      vehicle: "",
+      other: "已审批",
+      area: "A区"
+    });
+    expect(legacyTable).toBeUndefined();
+  });
+
+  it("stores other arrangements as one-off task containers with metadata reserved for non-common fields", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/other-arrangements",
+      payload: {
+        date: "2026-05-01",
+        timeTag: "下午",
+        task: "设备巡检",
+        personnel: "李四",
+        vehicle: "皮卡",
+        other: "带工具"
+      }
+    });
+    const { id } = response.json() as { id: string };
+    const container = db.prepare("select type, name, description, start_at, end_at, recurrence_type from task_containers where id = ?").get(id);
+    const item = db
+      .prepare("select offset_minutes, duration_minutes, content, ext_data_json from task_items where container_id = ?")
+      .get(id) as { ext_data_json: string } | undefined;
+    const legacyTable = db.prepare("select name from sqlite_master where type = 'table' and name = 'other_arrangements'").get();
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(container).toEqual({
+      type: "other",
+      name: "其他",
+      description: "其他安排",
+      start_at: "2026-05-01T12:00:00+08:00",
+      end_at: "2026-05-01T17:00:00+08:00",
+      recurrence_type: "once"
+    });
+    expect(item).toMatchObject({
+      offset_minutes: 0,
+      duration_minutes: 300,
+      content: "设备巡检"
+    });
+    expect(JSON.parse(item?.ext_data_json ?? "{}")).toEqual({
+      timeTag: "下午",
+      target: "设备巡检",
+      personnel: "李四",
+      vehicle: "皮卡",
+      other: "带工具"
+    });
+    expect(legacyTable).toBeUndefined();
   });
 
   it("lists and manages patrol arrangements by date", async () => {

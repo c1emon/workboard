@@ -90,7 +90,7 @@ describe("BoardView", () => {
     expect(wrapper.text()).toContain("动火许可");
     expect(wrapper.text()).toContain("开挖许可");
     expect(wrapper.findAll("[data-testid='permit-row']")).toHaveLength(6);
-    expect(wrapper.findAll(".dense-head")[0].text()).toBe("时间对象人员车辆其他");
+    expect(wrapper.findAll(".dense-head")[0].text()).toBe("时间许可人员区域其他");
     expect(wrapper.text()).toContain("陈一");
     expect(wrapper.text()).toContain("刘二");
     expect(wrapper.text()).toContain("黄三");
