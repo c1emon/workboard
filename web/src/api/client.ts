@@ -8,6 +8,8 @@ export interface PermitArrangementRecord {
   id: string;
   date: string;
   timeTag: TimeTag;
+  startAt: string;
+  endAt: string;
   permit: string;
   personnel: string;
   area: string;
@@ -19,6 +21,8 @@ export interface OtherArrangementRecord {
   id: string;
   date: string;
   timeTag: TimeTag;
+  startAt: string;
+  endAt: string;
   task: string;
   personnel: string;
   vehicle: string;
@@ -31,6 +35,8 @@ export interface PatrolArrangementRecord {
   itemId: string;
   date: string;
   timeTag: TimeTag;
+  startAt: string;
+  endAt: string;
   target: string;
   personnel: string;
   vehicle: string;
@@ -181,7 +187,10 @@ export async function createPermit(input: {
   return postAdmin("permit-arrangements", input);
 }
 
-export async function updatePermitArrangement(id: string, input: Omit<PermitArrangementRecord, "id" | "enabled">): Promise<void> {
+export async function updatePermitArrangement(
+  id: string,
+  input: Omit<PermitArrangementRecord, "id" | "enabled" | "startAt" | "endAt">
+): Promise<void> {
   return putAdmin(`permit-arrangements/${encodeURIComponent(id)}`, input);
 }
 
@@ -208,7 +217,10 @@ export async function createOtherArrangement(input: {
   return postAdmin("other-arrangements", input);
 }
 
-export async function updateOtherArrangement(id: string, input: Omit<OtherArrangementRecord, "id" | "enabled">): Promise<void> {
+export async function updateOtherArrangement(
+  id: string,
+  input: Omit<OtherArrangementRecord, "id" | "enabled" | "startAt" | "endAt">
+): Promise<void> {
   return putAdmin(`other-arrangements/${encodeURIComponent(id)}`, input);
 }
 
@@ -235,7 +247,10 @@ export async function createPatrolArrangement(input: {
   return postAdmin("patrol-arrangements", input);
 }
 
-export async function updatePatrolArrangement(id: string, input: Omit<PatrolArrangementRecord, "id" | "itemId" | "enabled">): Promise<void> {
+export async function updatePatrolArrangement(
+  id: string,
+  input: Omit<PatrolArrangementRecord, "id" | "itemId" | "enabled" | "startAt" | "endAt">
+): Promise<void> {
   return putAdmin(`patrol-arrangements/${encodeURIComponent(id)}`, input);
 }
 

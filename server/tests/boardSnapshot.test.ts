@@ -7,10 +7,16 @@ import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 describe("board snapshot", () => {
   it("sorts permits by time tag", () => {
     const db = createTestDatabase();
-    db.prepare("insert into permit_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("p1", "2026-05-01", "下午", "封闭许可", "孙八", "西侧", "待确认", 1, 0);
-    db.prepare("insert into permit_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("p2", "2026-05-01", "全天", "动火许可", "张三", "A区", "已审批", 1, 0);
+    db.prepare(
+      `insert into permit_arrangements
+       (id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("p1", "2026-05-01", "下午", "2026-05-01T12:00:00+08:00", "2026-05-01T17:00:00+08:00", "封闭许可", "孙八", "西侧", "待确认", 1, 0);
+    db.prepare(
+      `insert into permit_arrangements
+       (id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("p2", "2026-05-01", "全天", "2026-05-01T00:00:00+08:00", "2026-05-01T23:59:59+08:00", "动火许可", "张三", "A区", "已审批", 1, 0);
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
@@ -19,12 +25,21 @@ describe("board snapshot", () => {
 
   it("sorts other arrangements by time tag", () => {
     const db = createTestDatabase();
-    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("o1", "2026-05-01", "下午", "清点物资", "李四", "电瓶车", "", 1, 0);
-    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("o2", "2026-05-01", "上午", "设备巡检", "王五", "皮卡", "", 1, 0);
-    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("o3", "2026-05-01", "全天", "值守", "赵六", "", "", 1, 0);
+    db.prepare(
+      `insert into other_arrangements
+       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("o1", "2026-05-01", "下午", "2026-05-01T12:00:00+08:00", "2026-05-01T17:00:00+08:00", "清点物资", "李四", "电瓶车", "", 1, 0);
+    db.prepare(
+      `insert into other_arrangements
+       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("o2", "2026-05-01", "上午", "2026-05-01T08:00:00+08:00", "2026-05-01T12:00:00+08:00", "设备巡检", "王五", "皮卡", "", 1, 0);
+    db.prepare(
+      `insert into other_arrangements
+       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("o3", "2026-05-01", "全天", "2026-05-01T00:00:00+08:00", "2026-05-01T23:59:59+08:00", "值守", "赵六", "", "", 1, 0);
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
@@ -34,10 +49,16 @@ describe("board snapshot", () => {
   it("returns board snapshot JSON from the board route", async () => {
     const db = createTestDatabase();
     const date = toChinaDate(new Date());
-    db.prepare("insert into permit_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("p1", date, "上午", "动火许可", "张三", "A区", "已审批", 1, 0);
-    db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("o1", date, "全天", "值守", "赵六", "", "", 1, 0);
+    db.prepare(
+      `insert into permit_arrangements
+       (id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("p1", date, "上午", `${date}T08:00:00+08:00`, `${date}T12:00:00+08:00`, "动火许可", "张三", "A区", "已审批", 1, 0);
+    db.prepare(
+      `insert into other_arrangements
+       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run("o1", date, "全天", `${date}T00:00:00+08:00`, `${date}T23:59:59+08:00`, "值守", "赵六", "", "", 1, 0);
     db.prepare("insert into leave_people values (?, ?, ?, ?, ?)")
       .run("l1", date, "钱七", 1, 0);
     const app = createApp(db);

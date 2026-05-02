@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 import { validateTaskItem } from "../domain/taskExpansion.js";
+import { durationMinutesForRange, timeRangeForDateTag } from "../domain/timeTags.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 
 const timeTagSchema = z.enum(["全天", "上午", "下午"]);
@@ -202,6 +203,8 @@ interface PermitArrangementAdminRow {
   id: string;
   date: string;
   time_tag: "全天" | "上午" | "下午";
+  start_at: string;
+  end_at: string;
   permit: string;
   personnel: string;
   area: string;
@@ -213,6 +216,8 @@ interface OtherArrangementAdminRow {
   id: string;
   date: string;
   time_tag: "全天" | "上午" | "下午";
+  start_at: string;
+  end_at: string;
   task: string;
   personnel: string;
   vehicle: string;
@@ -224,6 +229,8 @@ interface PatrolArrangementAdminRow {
   id: string;
   item_id: string;
   time_tag: "全天" | "上午" | "下午" | null;
+  start_at: string;
+  end_at: string;
   target: string;
   personnel: string;
   vehicle: string;
@@ -330,7 +337,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const rows = db
       .prepare<[string], PermitArrangementAdminRow>(
-        `select id, date, time_tag, permit, personnel, area, other, enabled
+        `select id, date, time_tag, start_at, end_at, permit, personnel, area, other, enabled
          from permit_arrangements
          where date = ?
          order by sort_order, time_tag, permit`
@@ -341,6 +348,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       id: row.id,
       date: row.date,
       timeTag: row.time_tag,
+      startAt: row.start_at,
+      endAt: row.end_at,
       permit: row.permit,
       personnel: row.personnel,
       area: row.area,
@@ -357,10 +366,13 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const input = validation.data;
     const id = nanoid();
+    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
 
     db.prepare(
-      "insert into permit_arrangements (id, date, time_tag, permit, personnel, area, other) values (?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, input.date, input.timeTag, input.permit, input.personnel, input.area, input.other);
+      `insert into permit_arrangements
+       (id, date, time_tag, start_at, end_at, permit, personnel, area, other)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, input.date, input.timeTag, startAt, endAt, input.permit, input.personnel, input.area, input.other);
     boardEvents.publish();
 
     return reply.code(201).send({ id });
@@ -373,9 +385,14 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
+    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
     const result = db
-      .prepare("update permit_arrangements set date = ?, time_tag = ?, permit = ?, personnel = ?, area = ?, other = ? where id = ?")
-      .run(input.date, input.timeTag, input.permit, input.personnel, input.area, input.other, params.data.id);
+      .prepare(
+        `update permit_arrangements
+         set date = ?, time_tag = ?, start_at = ?, end_at = ?, permit = ?, personnel = ?, area = ?, other = ?
+         where id = ?`
+      )
+      .run(input.date, input.timeTag, startAt, endAt, input.permit, input.personnel, input.area, input.other, params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -414,7 +431,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const rows = db
       .prepare<[string], OtherArrangementAdminRow>(
-        `select id, date, time_tag, task, personnel, vehicle, other, enabled
+        `select id, date, time_tag, start_at, end_at, task, personnel, vehicle, other, enabled
          from other_arrangements
          where date = ?
          order by sort_order, time_tag, task`
@@ -425,6 +442,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       id: row.id,
       date: row.date,
       timeTag: row.time_tag,
+      startAt: row.start_at,
+      endAt: row.end_at,
       task: row.task,
       personnel: row.personnel,
       vehicle: row.vehicle,
@@ -441,10 +460,13 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const input = validation.data;
     const id = nanoid();
+    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
 
     db.prepare(
-      "insert into other_arrangements (id, date, time_tag, task, personnel, vehicle, other) values (?, ?, ?, ?, ?, ?, ?)"
-    ).run(id, input.date, input.timeTag, input.task, input.personnel, input.vehicle, input.other);
+      `insert into other_arrangements
+       (id, date, time_tag, start_at, end_at, task, personnel, vehicle, other)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, input.date, input.timeTag, startAt, endAt, input.task, input.personnel, input.vehicle, input.other);
     boardEvents.publish();
 
     return reply.code(201).send({ id });
@@ -457,9 +479,14 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
+    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
     const result = db
-      .prepare("update other_arrangements set date = ?, time_tag = ?, task = ?, personnel = ?, vehicle = ?, other = ? where id = ?")
-      .run(input.date, input.timeTag, input.task, input.personnel, input.vehicle, input.other, params.data.id);
+      .prepare(
+        `update other_arrangements
+         set date = ?, time_tag = ?, start_at = ?, end_at = ?, task = ?, personnel = ?, vehicle = ?, other = ?
+         where id = ?`
+      )
+      .run(input.date, input.timeTag, startAt, endAt, input.task, input.personnel, input.vehicle, input.other, params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
@@ -498,7 +525,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const rows = db
       .prepare<[string, string], PatrolArrangementAdminRow>(
-        `select c.id, i.id as item_id, i.time_tag, i.target, i.personnel, i.vehicle, i.other, c.enabled
+        `select c.id, i.id as item_id, i.time_tag, c.start_at, c.end_at, i.target, i.personnel, i.vehicle, i.other, c.enabled
          from task_containers c
          join task_items i on i.container_id = c.id
          where c.type = 'patrol'
@@ -513,6 +540,8 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       itemId: row.item_id,
       date: validation.data.date,
       timeTag: row.time_tag ?? "全天",
+      startAt: row.start_at,
+      endAt: row.end_at,
       target: row.target,
       personnel: row.personnel,
       vehicle: row.vehicle,
@@ -529,19 +558,21 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const id = nanoid();
     const itemId = nanoid();
     const now = new Date().toISOString();
+    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
+    const durationMinutes = durationMinutesForRange(startAt, endAt);
 
     db.prepare(
       `insert into task_containers
        (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
         recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
        values (?, 'patrol', '巡视', '巡视安排', ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
-    ).run(id, `${input.date}T00:00:00+08:00`, `${input.date}T23:59:59+08:00`, now, now);
+    ).run(id, startAt, endAt, now, now);
     db.prepare(
       `insert into task_items
        (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
         metadata_json, sort_order)
-       values (?, ?, 0, 1439, ?, ?, ?, ?, ?, ?, '{}', 0)`
-    ).run(itemId, id, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other);
+       values (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, '{}', 0)`
+    ).run(itemId, id, durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other);
     boardEvents.publish();
 
     return reply.code(201).send({ id, itemId });
@@ -555,14 +586,18 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const input = validation.data;
     const now = new Date().toISOString();
+    const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
+    const durationMinutes = durationMinutesForRange(startAt, endAt);
     const containerResult = db
       .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = 'patrol'")
-      .run(`${input.date}T00:00:00+08:00`, `${input.date}T23:59:59+08:00`, now, params.data.id);
+      .run(startAt, endAt, now, params.data.id);
     if (containerResult.changes === 0) return reply.code(404).send({ error: "Not found" });
 
     db.prepare(
-      "update task_items set content = ?, time_tag = ?, target = ?, personnel = ?, vehicle = ?, other = ? where container_id = ?"
-    ).run(input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other, params.data.id);
+      `update task_items
+       set offset_minutes = 0, duration_minutes = ?, content = ?, time_tag = ?, target = ?, personnel = ?, vehicle = ?, other = ?
+       where container_id = ?`
+    ).run(durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other, params.data.id);
     boardEvents.publish();
 
     return { id: params.data.id };

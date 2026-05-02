@@ -532,6 +532,52 @@ describe("admin routes", () => {
     expect(boardEvents.getVersion()).toBe(2);
   });
 
+  it("derives actual start and end datetimes from arrangement time tags", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const date = "2026-05-01";
+
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/permit-arrangements",
+      payload: { date, timeTag: "上午", permit: "动火许可" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-arrangements",
+      payload: { date, timeTag: "下午", target: "1号线" }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/other-arrangements",
+      payload: { date, timeTag: "全天", task: "值守" }
+    });
+
+    const permitListResponse = await app.inject({ method: "GET", url: `/api/admin/permit-arrangements?date=${date}` });
+    const patrolListResponse = await app.inject({ method: "GET", url: `/api/admin/patrol-arrangements?date=${date}` });
+    const otherListResponse = await app.inject({ method: "GET", url: `/api/admin/other-arrangements?date=${date}` });
+    await app.close();
+
+    expect(permitListResponse.json()).toEqual([
+      expect.objectContaining({
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00"
+      })
+    ]);
+    expect(patrolListResponse.json()).toEqual([
+      expect.objectContaining({
+        startAt: "2026-05-01T12:00:00+08:00",
+        endAt: "2026-05-01T17:00:00+08:00"
+      })
+    ]);
+    expect(otherListResponse.json()).toEqual([
+      expect.objectContaining({
+        startAt: "2026-05-01T00:00:00+08:00",
+        endAt: "2026-05-01T23:59:59+08:00"
+      })
+    ]);
+  });
+
   it("lists, updates, disables, and deletes permit arrangements by date", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
@@ -564,6 +610,7 @@ describe("admin routes", () => {
         other: "待复核"
       }
     });
+    const updatedListResponse = await app.inject({ method: "GET", url: `/api/admin/permit-arrangements?date=${date}` });
     const disableResponse = await app.inject({
       method: "PATCH",
       url: `/api/admin/permit-arrangements/${id}/enabled`,
@@ -583,10 +630,26 @@ describe("admin routes", () => {
         personnel: "张三",
         area: "A区",
         other: "已审批",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
         enabled: true
       }
     ]);
     expect(updateResponse.statusCode).toBe(200);
+    expect(updatedListResponse.json()).toEqual([
+      {
+        id,
+        date,
+        timeTag: "下午",
+        permit: "受限空间",
+        personnel: "李四",
+        area: "B区",
+        other: "待复核",
+        startAt: "2026-05-01T12:00:00+08:00",
+        endAt: "2026-05-01T17:00:00+08:00",
+        enabled: true
+      }
+    ]);
     expect(disableResponse.statusCode).toBe(200);
     expect(deleteResponse.statusCode).toBe(204);
     expect(finalListResponse.json()).toEqual([]);
@@ -633,6 +696,8 @@ describe("admin routes", () => {
         personnel: "赵六",
         vehicle: "巡检车",
         other: "带测温仪",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
         enabled: true
       }
     ]);
