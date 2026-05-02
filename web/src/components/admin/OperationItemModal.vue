@@ -96,13 +96,6 @@
           />
         </label>
       </div>
-      <details class="operation-item-json" :open="form.metadataExpanded" @toggle="emit('sync-metadata-open', $event)">
-        <summary>JSON</summary>
-        <label>
-          Metadata JSON
-          <textarea v-model="form.metadataJson" name="operationItemMetadata" rows="5" :disabled="readOnly"></textarea>
-        </label>
-      </details>
       <div class="modal-actions">
         <button v-if="!readOnly && mode === 'edit'" type="button" class="danger-action operation-item-delete" @click="emit('delete')">
           删除
@@ -146,7 +139,6 @@ const emit = defineEmits<{
   delete: [];
   "normalize-offset": [];
   "normalize-duration": [];
-  "sync-metadata-open": [event: Event];
 }>();
 
 function formatMinutesAsHoursMinutes(totalMinutes: number): string {
@@ -214,22 +206,6 @@ function formatBaseOption(item: OperationPlanItemRecord): string {
   color: #64748b;
   font-size: 13px;
   font-weight: 700;
-}
-
-.operation-item-json {
-  display: grid;
-  gap: 10px;
-}
-
-.operation-item-json summary {
-  cursor: pointer;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.operation-item-json[open] summary {
-  margin-bottom: 10px;
 }
 
 @media (max-width: 900px) {

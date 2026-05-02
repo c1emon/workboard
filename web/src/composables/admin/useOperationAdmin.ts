@@ -141,10 +141,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
     return operationItemBaseEndMinutes() + operationItemOffsetTotalMinutes();
   }
 
-  function syncOperationItemMetadataOpen(event: Event): void {
-    operationItemForm.metadataExpanded = (event.target as HTMLDetailsElement).open;
-  }
-
   function addMinutesToDateTimeLocal(value: string, minutes: number): string {
     const start = new Date(normalizeDateTime(value)).getTime();
     if (Number.isNaN(start)) return value;
@@ -444,7 +440,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
     saveOperationItem,
     removeOperationItem,
     normalizeOperationItemOffset,
-    normalizeOperationItemDuration,
-    syncOperationItemMetadataOpen
+    normalizeOperationItemDuration
   };
 }

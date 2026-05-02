@@ -113,6 +113,9 @@ describe("admin modals", () => {
       }
     });
 
+    expect(wrapper.text()).not.toContain("Metadata JSON");
+    expect(wrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(false);
+
     await wrapper.find('input[name="operationItemContent"]').setValue("复核记录2");
     await wrapper.find('input[name="operationItemOffsetMinutes"]').trigger("change");
     await wrapper.find(".operation-item-delete").trigger("click");

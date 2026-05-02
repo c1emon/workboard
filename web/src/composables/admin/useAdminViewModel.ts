@@ -6,11 +6,11 @@ import { useOperationAdmin } from "./useOperationAdmin";
 import type { AdminSection, SectionKey } from "./types";
 
 const sections: AdminSection[] = [
-  { key: "operation", label: "操作", description: "主任务与时间段子任务" },
   { key: "permit", label: "许可", description: "许可事项与执行区域" },
-  { key: "patrol", label: "巡视", description: "目标、人员、车辆与备注" },
   { key: "other", label: "其他", description: "临时任务与协同事项" },
   { key: "leave", label: "休假", description: "休假人员名单" },
+  { key: "patrol", label: "巡视", description: "目标、人员、车辆与备注" },
+  { key: "operation", label: "操作", description: "主任务与时间段子任务" },
   { key: "holiday", label: "节假日", description: "跳过规则基础数据" }
 ];
 

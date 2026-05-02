@@ -165,7 +165,6 @@
       @normalize-duration="normalizeOperationItemDuration"
       @normalize-offset="normalizeOperationItemOffset"
       @save="saveOperationItem"
-      @sync-metadata-open="syncOperationItemMetadataOpen"
     />
 
     <ConfirmationDialog
@@ -211,7 +210,7 @@ const {
   closeOperationItemModal, saveModal, togglePermit, togglePatrol, toggleOther, toggleOperation,
   confirmConfirmation, cancelConfirmation, removePermit, removePatrol, removeOther, removeLeave,
   removeOperation, saveOperation, saveOperationItem, removeOperationItem, submitHolidayImport,
-  normalizeOperationItemOffset, normalizeOperationItemDuration, syncOperationItemMetadataOpen
+  normalizeOperationItemOffset, normalizeOperationItemDuration
 } = useAdminViewModel();
 </script>
 

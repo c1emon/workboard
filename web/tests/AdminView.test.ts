@@ -163,12 +163,14 @@ describe("AdminView", () => {
   it("renders the admin management sections", () => {
     const wrapper = mountAdmin();
 
-    expect(wrapper.text()).toContain("操作");
-    expect(wrapper.text()).toContain("许可");
-    expect(wrapper.text()).toContain("巡视");
-    expect(wrapper.text()).toContain("其他");
-    expect(wrapper.text()).toContain("休假");
-    expect(wrapper.text()).toContain("节假日");
+    expect(wrapper.findAll(".section-nav button strong").map((label) => label.text())).toEqual([
+      "许可",
+      "其他",
+      "休假",
+      "巡视",
+      "操作",
+      "节假日"
+    ]);
   });
 
   it("lists holidays by year in holiday and adjusted workday sections", async () => {
@@ -277,7 +279,7 @@ describe("AdminView", () => {
   it("deletes permit rows after in-app confirmation", async () => {
     const confirmSpy = vi.spyOn(window, "confirm");
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await wrapper.findAll(".section-nav button")[0].trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
 
     await wrapper.find("tbody .row-actions .danger").trigger("click");
@@ -300,7 +302,7 @@ describe("AdminView", () => {
 
   it("submits a permit arrangement", async () => {
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await wrapper.findAll(".section-nav button")[0].trigger("click");
     await wrapper.find('[aria-label="新增许可"]').trigger("click");
 
     await wrapper.find('input[name="target"]').setValue("A区");
@@ -323,7 +325,7 @@ describe("AdminView", () => {
 
   it("shows permit rows and toggles enabled state from the action column", async () => {
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await wrapper.findAll(".section-nav button")[0].trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
 
     expect(fetchPermitArrangements).toHaveBeenCalledWith(expect.any(String), "date");
@@ -336,7 +338,7 @@ describe("AdminView", () => {
 
   it("uses date shortcut buttons for yesterday and today", async () => {
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await wrapper.findAll(".section-nav button")[0].trigger("click");
 
     await wrapper.find('input[type="date"]').setValue("2026-05-10");
     await wrapper.find(".yesterday-button").trigger("click");
@@ -368,28 +370,28 @@ describe("AdminView", () => {
   it("loads arrangement lists with all scope and disables date controls when showing all", async () => {
     const wrapper = mountAdmin();
 
-    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await wrapper.findAll(".section-nav button")[0].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
     expect(fetchPermitArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
     expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
 
-    await wrapper.findAll(".section-nav button")[2].trigger("click");
+    await wrapper.findAll(".section-nav button")[3].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
     expect(fetchPatrolArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
     expect(wrapper.find(".yesterday-button").attributes("disabled")).toBeDefined();
 
-    await wrapper.findAll(".section-nav button")[3].trigger("click");
+    await wrapper.findAll(".section-nav button")[1].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
     expect(fetchOtherArrangements).toHaveBeenLastCalledWith(expect.any(String), "all");
 
-    await wrapper.findAll(".section-nav button")[4].trigger("click");
+    await wrapper.findAll(".section-nav button")[2].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
     expect(fetchLeavePeople).toHaveBeenLastCalledWith(expect.any(String), "all");
   });
 
   it("shows a prompt instead of saving when adding a duplicate leave person", async () => {
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[4].trigger("click");
+    await wrapper.findAll(".section-nav button")[2].trigger("click");
     await wrapper.find('input[type="date"]').setValue("2026-05-01");
     await new Promise((resolve) => setTimeout(resolve));
 
@@ -655,7 +657,7 @@ describe("AdminView", () => {
     expect(durationFields[0].find(".duration-unit").text()).toBe("时");
     expect(durationFields[1].find('input[name="operationItemDurationMinutes"]').exists()).toBe(true);
     expect(durationFields[1].find(".duration-unit").text()).toBe("分");
-    expect((wrapper.find(".operation-item-json").element as HTMLDetailsElement).open).toBe(false);
+    expect(wrapper.find(".operation-item-json").exists()).toBe(false);
 
     await wrapper.find('select[name="operationItemBaseItem"]').setValue("item-1");
     await wrapper.find('input[name="operationItemOffsetHours"]').setValue("0");
@@ -888,7 +890,7 @@ describe("AdminView", () => {
 
   it("shows leave people as one-name rows with only delete in the action column", async () => {
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[4].trigger("click");
+    await wrapper.findAll(".section-nav button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
 
     expect(fetchLeavePeople).toHaveBeenCalledWith(expect.any(String), "date");
@@ -906,7 +908,7 @@ describe("AdminView", () => {
 
   it("places the add action in the date toolbar after the shortcut buttons", async () => {
     const wrapper = mountAdmin();
-    await wrapper.findAll(".section-nav button")[2].trigger("click");
+    await wrapper.findAll(".section-nav button")[3].trigger("click");
 
     const toolbar = wrapper.find(".date-toolbar");
 
