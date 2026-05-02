@@ -885,20 +885,26 @@ describe("AdminView", () => {
   });
 
   it("keeps enabled table text dark and weakens disabled rows", () => {
-    const source = readFileSync(resolve(__dirname, "../src/views/AdminView.vue"), "utf8");
+    const adminViewSource = readFileSync(resolve(__dirname, "../src/views/AdminView.vue"), "utf8");
+    const managerStylesSource = readFileSync(resolve(__dirname, "../src/components/admin/managerStyles.css"), "utf8");
     const dateToolbarSource = readFileSync(resolve(__dirname, "../src/components/admin/DateToolbar.vue"), "utf8");
+    const leaveManagerSource = readFileSync(resolve(__dirname, "../src/components/admin/LeaveManager.vue"), "utf8");
+    const operationItemModalSource = readFileSync(resolve(__dirname, "../src/components/admin/OperationItemModal.vue"), "utf8");
 
-    expect(source).toContain("td {\n  color: #0f172a;");
-    expect(source).toContain("tr.disabled td:not(.row-actions) {\n  color: #94a3b8;");
-    expect(source).toContain("justify-content: space-between;");
+    expect(adminViewSource).toContain("useAdminViewModel");
+    expect(adminViewSource.split("\n").length).toBeLessThan(360);
+    expect(managerStylesSource).toContain("td {\n  color: #0f172a;");
+    expect(managerStylesSource).toContain("tr.disabled td:not(.row-actions) {\n  color: #94a3b8;");
+    expect(adminViewSource).toContain("justify-content: space-between;");
     expect(dateToolbarSource).toMatch(/button \{[^}]*height: 32px;/);
     expect(dateToolbarSource).toMatch(/\.date-field input \{[^}]*height: 32px;/);
     expect(dateToolbarSource).toMatch(/\.toolbar-add-action \{[^}]*height: 32px;/);
-    expect(source).toMatch(/\.leave-table-shell \{[^}]*width: 100%;/);
-    expect(source).toMatch(/\.leave-table \{[^}]*width: 100%;[^}]*table-layout: fixed;/);
-    expect(source).toMatch(/\.leave-name-column \{[^}]*width: 120px;/);
-    expect(source).toMatch(/\.operation-item-start-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(240px, 280px\);/);
-    expect(source).toMatch(/\.operation-item-duration-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(240px, 280px\);/);
-    expect(source).toMatch(/\.operation-item-offset-field input,[\s\S]*\.operation-item-duration-field input \{[^}]*text-align: center;/);
+    expect(leaveManagerSource).toMatch(/\.leave-table-shell \{[^}]*width: 100%;/);
+    expect(leaveManagerSource).toMatch(/\.leave-table \{[^}]*width: 100%;[^}]*table-layout: fixed;/);
+    expect(leaveManagerSource).toMatch(/\.leave-name-column \{[^}]*width: 120px;/);
+    expect(operationItemModalSource).toMatch(
+      /\.operation-item-start-row,[\s\S]*\.operation-item-duration-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(240px, 280px\);/
+    );
+    expect(operationItemModalSource).toMatch(/\.operation-item-offset-field input,[\s\S]*\.operation-item-duration-field input \{[^}]*text-align: center;/);
   });
 });
