@@ -19,13 +19,13 @@
             v-for="column in columns"
             :key="column.key"
             class="dense-cell"
-            :class="{ 'time-cell': column.key === 'timeTag' }"
-            :title="String(row[column.key] ?? '')"
+            :class="{ 'time-cell': column.key === 'timeTag', 'muted-cell': isEmptyValue(row[column.key]) }"
+            :title="cellValue(row, column.key)"
           >
-            <span v-if="column.key === 'timeTag'" class="time-tag" :class="timeTagClass(String(row[column.key] ?? ''))">
-              {{ row[column.key] }}
+            <span v-if="column.key === 'timeTag' && !isEmptyValue(row[column.key])" class="time-tag" :class="timeTagClass(cellValue(row, column.key))">
+              {{ cellValue(row, column.key) }}
             </span>
-            <template v-else>{{ row[column.key] }}</template>
+            <template v-else>{{ displayValue(row[column.key]) }}</template>
           </span>
         </div>
 
@@ -73,6 +73,18 @@ function originalRowIndex(index: number) {
   return props.rows.length === 0 ? index : index % props.rows.length;
 }
 
+function cellValue(row: Record<string, string>, key: string): string {
+  return String(row[key] ?? "");
+}
+
+function isEmptyValue(value: unknown): boolean {
+  return String(value ?? "").trim() === "";
+}
+
+function displayValue(value: unknown): string {
+  return isEmptyValue(value) ? "-" : String(value);
+}
+
 function timeTagClass(value: string) {
   return {
     "tag-all": value === "全天",
@@ -111,6 +123,7 @@ function timeTagClass(value: string) {
   min-width: 0;
   padding: 0 10px;
   overflow: hidden;
+  text-align: center;
   white-space: nowrap;
   text-overflow: ellipsis;
   border-right: 1px solid rgba(148, 163, 184, 0.12);
@@ -169,6 +182,11 @@ function timeTagClass(value: string) {
 .time-cell {
   display: flex;
   align-items: center;
+  justify-content: center;
+}
+
+.muted-cell {
+  color: rgba(148, 163, 184, 0.54);
 }
 
 .time-tag {

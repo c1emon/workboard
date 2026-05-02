@@ -86,7 +86,7 @@ export function useAdminViewModel() {
   });
 
   function jumpToToday(): void {
-    selectedDate.value = today;
+    selectedDate.value = toChinaDate();
   }
 
   function jumpToYesterday(): void {

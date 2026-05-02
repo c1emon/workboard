@@ -149,6 +149,24 @@ describe("BoardView", () => {
     expect(wrapper.find(".leave-line.empty-plan").text()).toBe("无");
   });
 
+  it("centers dense board tables and fills empty cells with muted dashes", async () => {
+    mockedFetchBoard.mockResolvedValue(
+      makeSnapshot({
+        permits: [{ timeTag: "上午", target: "", task: "动火许可", personnel: "", vehicle: "", other: "" }],
+        patrols: [{ timeTag: "下午", target: "罐区", personnel: "", vehicle: "", other: "", metadata: {} }],
+        others: [{ timeTag: "全天", task: "值守", personnel: "", vehicle: "", other: "" }]
+      })
+    );
+
+    const wrapper = mount(BoardView);
+    await flushPromises();
+
+    const mutedCells = wrapper.findAll(".dense-cell.muted-cell");
+
+    expect(mutedCells.length).toBeGreaterThanOrEqual(8);
+    expect(mutedCells.every((cell) => cell.text() === "-")).toBe(true);
+  });
+
   it("refreshes with a fallback interval and clears it on unmount", async () => {
     const wrapper = mount(BoardView);
     await flushPromises();

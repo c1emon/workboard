@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DenseRows, { type DenseColumn } from "../src/components/DenseRows.vue";
 
@@ -71,5 +73,27 @@ describe("DenseRows", () => {
 
     expect(wrapper.find(".empty-plan").text()).toBe("无计划安排");
     expect(wrapper.findAll(".empty-row")).toHaveLength(0);
+  });
+
+  it("fills empty cells with a muted dash", () => {
+    const wrapper = mount(DenseRows, {
+      props: {
+        columns,
+        rows: [{ timeTag: "上午", task: "" }],
+        visibleRows: 2
+      }
+    });
+
+    const cells = wrapper.findAll(".dense-cell");
+
+    expect(cells[1].text()).toBe("-");
+    expect(cells[1].classes()).toContain("muted-cell");
+  });
+
+  it("centers dense table headers and cells", () => {
+    const source = readFileSync(resolve(__dirname, "../src/components/DenseRows.vue"), "utf8");
+
+    expect(source).toMatch(/\.dense-head span,[\s\S]*\.dense-cell \{[^}]*text-align: center;/);
+    expect(source).toMatch(/\.time-cell \{[^}]*justify-content: center;/);
   });
 });

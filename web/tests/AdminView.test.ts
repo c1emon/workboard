@@ -352,6 +352,20 @@ describe("AdminView", () => {
     expect(fetchPermitArrangements).toHaveBeenCalledWith(expect.any(String), "date");
   });
 
+  it("refreshes current date when today shortcut is clicked after midnight", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-01T16:30:00.000Z"));
+    const wrapper = mountAdmin();
+
+    expect(wrapper.find('input[type="date"]').element).toHaveProperty("value", "2026-05-02");
+
+    vi.setSystemTime(new Date("2026-05-02T16:30:00.000Z"));
+    await wrapper.find(".today-button").trigger("click");
+
+    expect(wrapper.find('input[type="date"]').element).toHaveProperty("value", "2026-05-03");
+    expect(fetchOperationPlans).toHaveBeenCalledWith("2026-05-03", "date");
+  });
+
   it("loads operation plans and disables date controls when showing all", async () => {
     const wrapper = mountAdmin();
     await new Promise((resolve) => setTimeout(resolve));
