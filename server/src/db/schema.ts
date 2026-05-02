@@ -66,6 +66,7 @@ create table if not exists leave_people (
 create table if not exists holidays (
   id text primary key,
   date text not null unique,
-  name text not null default ''
+  name text not null default '',
+  type text not null default 'holiday' check (type in ('holiday', 'adjusted_workday'))
 );
 `;

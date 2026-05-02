@@ -248,17 +248,64 @@
           </div>
         </section>
 
-        <form v-else class="admin-form" @submit.prevent="saveHoliday">
+        <section v-else class="list-panel holiday-panel">
           <div class="form-heading">
             <h2>节假日</h2>
-            <p>节假日用于周期任务的跳过规则。</p>
+            <p>节假日用于周期任务的跳过规则，导入会全量覆盖现有节假日数据。</p>
           </div>
-          <div class="form-grid">
-            <label>日期<input v-model="holidayForm.date" required type="date" /></label>
-            <label>名称<input v-model="holidayForm.name" /></label>
+          <div class="holiday-toolbar">
+            <label class="holiday-year-field">年度<input v-model.number="holidayYear" name="holidayYear" min="1900" max="2100" type="number" /></label>
+            <button class="primary-action" type="button" aria-label="导入 chinese-days" @click="openHolidayImportModal">
+              导入 chinese-days
+            </button>
           </div>
-          <button class="primary-action" type="submit">保存节假日</button>
-        </form>
+          <div class="holiday-lists">
+            <section class="holiday-list-block">
+              <h3>休假</h3>
+              <div class="table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>名称</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="record in holidayRows" :key="record.id">
+                      <td>{{ record.date }}</td>
+                      <td>{{ record.name }}</td>
+                    </tr>
+                    <tr v-if="holidayRows.length === 0">
+                      <td class="empty-cell" colspan="2">当前年度暂无休假记录</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section class="holiday-list-block">
+              <h3>调休</h3>
+              <div class="table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>名称</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="record in adjustedWorkdayRows" :key="record.id">
+                      <td>{{ record.date }}</td>
+                      <td>{{ record.name }}</td>
+                    </tr>
+                    <tr v-if="adjustedWorkdayRows.length === 0">
+                      <td class="empty-cell" colspan="2">当前年度暂无调休记录</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
       </section>
     </section>
 
@@ -296,6 +343,38 @@
         <div class="modal-actions">
           <button type="button" class="secondary-action" @click="closeModal">取消</button>
           <button type="submit" class="primary-action">保存</button>
+        </div>
+      </form>
+    </div>
+
+    <div v-if="holidayImportModalOpen" class="modal-backdrop" role="presentation" @click.self="closeHolidayImportModal">
+      <form class="modal-form holiday-import-modal" @submit.prevent="submitHolidayImport">
+        <div class="modal-heading">
+          <h2>导入 chinese-days</h2>
+          <button type="button" aria-label="关闭导入弹窗" @click="closeHolidayImportModal">×</button>
+        </div>
+        <div class="import-source-options">
+          <label>
+            <input v-model="holidayImportForm.source" name="holidayImportSource" type="radio" value="remote" />
+            远程导入
+          </label>
+          <label>
+            <input v-model="holidayImportForm.source" name="holidayImportSource" type="radio" value="local" />
+            本地文件
+          </label>
+        </div>
+        <label v-if="holidayImportForm.source === 'remote'">
+          远程地址
+          <input v-model="holidayImportForm.url" name="holidayImportUrl" required type="url" />
+        </label>
+        <label v-else>
+          JSON 文件
+          <input name="holidayImportFile" accept="application/json,.json" required type="file" @change="selectHolidayImportFile" />
+        </label>
+        <p class="danger-note">导入会全量覆盖系统内所有节假日数据，不保留历史节假日数据。</p>
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" @click="closeHolidayImportModal">取消</button>
+          <button type="submit" class="primary-action">开始导入</button>
         </div>
       </form>
     </div>
@@ -425,7 +504,6 @@ import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "v
 import { RouterLink } from "vue-router";
 import OperationTaskTimeline from "../components/OperationTaskTimeline.vue";
 import {
-  createHoliday,
   createLeavePerson,
   createOperationPlan,
   createOtherArrangement,
@@ -438,12 +516,16 @@ import {
   deletePatrolArrangement,
   deletePermitArrangement,
   deleteTaskItem,
+  fetchHolidays,
   fetchLeavePeople,
   fetchOperationPlan,
   fetchOperationPlans,
   fetchOtherArrangements,
   fetchPatrolArrangements,
   fetchPermitArrangements,
+  importChineseDaysHolidays,
+  type ChineseDaysPayload,
+  type HolidayRecord,
   updateLeavePerson,
   updateOperationPlan,
   updateOperationPlanEnabled,
@@ -468,6 +550,7 @@ type RecurrenceType = "once" | "finite" | "infinite";
 type ModalKind = "permit" | "patrol" | "other" | "leave";
 type OperationModalMode = "create" | "edit" | "detail";
 type OperationItemModalMode = "create" | "edit";
+type HolidayImportSource = "remote" | "local";
 
 const TimeTagSelect = defineComponent({
   props: {
@@ -582,6 +665,7 @@ const sections: Array<{ key: SectionKey; label: string; description: string }> =
 const today = toChinaDate();
 const yesterday = toChinaDate(new Date(Date.now() - 24 * 60 * 60_000));
 const OPERATION_DETAIL_LOADING_MIN_MS = 300;
+const CHINESE_DAYS_DEFAULT_URL = "https://cdn.jsdelivr.net/npm/chinese-days/dist/chinese-days.json";
 const activeKey = ref<SectionKey>("operation");
 const selectedDate = ref(today);
 const statusText = ref("待保存");
@@ -593,6 +677,10 @@ const operationRows = ref<OperationPlanRecord[]>([]);
 const operationDetailItems = ref<OperationPlanItemRecord[]>([]);
 const operationSelectedItemId = ref<string | null>(null);
 const operationShowAll = ref(false);
+const holidayYear = ref(Number(today.slice(0, 4)));
+const holidayRecords = ref<HolidayRecord[]>([]);
+const holidayImportModalOpen = ref(false);
+const holidayImportFile = ref<File | null>(null);
 const modalKind = ref<ModalKind | null>(null);
 const modalRecordId = ref<string | null>(null);
 const operationModalOpen = ref(false);
@@ -626,6 +714,8 @@ const operationHasEndAt = computed(() => operationForm.recurrenceType !== "infin
 const operationDerivedRecurrenceIntervalMinutes = computed(() => operationCycleDurationMinutes.value);
 const operationDerivedRecurrenceCount = computed(() => recurrenceCountForItems(operationDetailItems.value));
 const operationComputedEndAt = computed(() => computedEndAtForItems(operationDetailItems.value));
+const holidayRows = computed(() => holidayRecords.value.filter((record) => record.type === "holiday"));
+const adjustedWorkdayRows = computed(() => holidayRecords.value.filter((record) => record.type === "adjusted_workday"));
 
 const operationForm = reactive({
   name: "操作",
@@ -648,7 +738,11 @@ const operationItemForm = reactive({
   sortOrder: 0
 });
 
-const holidayForm = reactive({ date: today, name: "" });
+const holidayImportForm = reactive({
+  source: "remote" as HolidayImportSource,
+  url: CHINESE_DAYS_DEFAULT_URL
+});
+
 const modalForm = reactive({
   date: today,
   timeTag: "全天" as TimeTag,
@@ -660,6 +754,9 @@ const modalForm = reactive({
 
 onMounted(loadActiveList);
 watch([activeKey, selectedDate, operationShowAll], loadActiveList);
+watch(holidayYear, () => {
+  if (activeKey.value === "holiday") void loadActiveList();
+});
 
 function toChinaDate(date = new Date()): string {
   const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
@@ -762,6 +859,10 @@ async function loadActiveList(): Promise<void> {
   } else if (activeKey.value === "leave") {
     await withStatus(async () => {
       leaveRows.value = await fetchLeavePeople(selectedDate.value);
+    });
+  } else if (activeKey.value === "holiday") {
+    await withStatus(async () => {
+      holidayRecords.value = await fetchHolidays(holidayYear.value);
     });
   }
 }
@@ -936,6 +1037,23 @@ function openOperationItemCreate(): void {
 function closeModal(): void {
   modalKind.value = null;
   modalRecordId.value = null;
+}
+
+function openHolidayImportModal(): void {
+  holidayImportForm.source = "remote";
+  holidayImportForm.url = CHINESE_DAYS_DEFAULT_URL;
+  holidayImportFile.value = null;
+  holidayImportModalOpen.value = true;
+}
+
+function closeHolidayImportModal(): void {
+  holidayImportModalOpen.value = false;
+  holidayImportFile.value = null;
+}
+
+function selectHolidayImportFile(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  holidayImportFile.value = input.files?.[0] ?? null;
 }
 
 function closeOperationModal(): void {
@@ -1142,8 +1260,51 @@ async function removeOperationItem(): Promise<void> {
   });
 }
 
-async function saveHoliday(): Promise<void> {
-  await withStatus(() => createHoliday(holidayForm).then(() => undefined));
+async function submitHolidayImport(): Promise<void> {
+  if (!window.confirm("导入会清空并覆盖全部历史节假日数据，确认继续吗？")) return;
+  if (!window.confirm("请再次确认：当前系统内所有节假日数据都会被删除并替换为 chinese-days 数据。")) return;
+
+  statusText.value = "同步中";
+  try {
+    const payload =
+      holidayImportForm.source === "remote" ? await loadHolidayImportRemotePayload() : await loadHolidayImportLocalPayload();
+    const result = await importChineseDaysHolidays(payload);
+    await loadActiveList();
+    closeHolidayImportModal();
+    statusText.value = `已导入 ${result.imported} 条`;
+  } catch (error) {
+    statusText.value = error instanceof Error ? error.message : "导入失败";
+  }
+}
+
+async function loadHolidayImportRemotePayload(): Promise<ChineseDaysPayload> {
+  const response = await fetch(holidayImportForm.url);
+  if (!response.ok) throw new Error(`节假日数据下载失败: ${response.status}`);
+  return normalizeChineseDaysPayload((await response.json()) as Partial<ChineseDaysPayload>);
+}
+
+async function loadHolidayImportLocalPayload(): Promise<ChineseDaysPayload> {
+  if (!holidayImportFile.value) throw new Error("请选择本地 JSON 文件");
+  const raw = await readHolidayImportFile(holidayImportFile.value);
+  return normalizeChineseDaysPayload(JSON.parse(raw) as Partial<ChineseDaysPayload>);
+}
+
+function normalizeChineseDaysPayload(payload: Partial<ChineseDaysPayload>): ChineseDaysPayload {
+  return {
+    holidays: payload.holidays ?? {},
+    workdays: payload.workdays ?? {},
+    inLieuDays: payload.inLieuDays ?? {}
+  };
+}
+
+function readHolidayImportFile(file: File): Promise<string> {
+  if (typeof file.text === "function") return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result ?? "")));
+    reader.addEventListener("error", () => reject(new Error("本地 JSON 文件读取失败")));
+    reader.readAsText(file);
+  });
 }
 </script>
 
@@ -1388,6 +1549,65 @@ async function saveHoliday(): Promise<void> {
   font-size: 20px;
   line-height: 1;
   box-shadow: 0 8px 18px rgb(37 99 235 / 24%);
+}
+
+.holiday-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d8dee8;
+  background: #f8fafc;
+}
+
+.holiday-year-field {
+  width: 180px;
+}
+
+.holiday-lists {
+  display: grid;
+  gap: 18px;
+}
+
+.holiday-list-block {
+  display: grid;
+  gap: 10px;
+}
+
+.holiday-list-block h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 17px;
+}
+
+.import-source-options {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.import-source-options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.import-source-options input {
+  width: auto;
+  min-height: auto;
+}
+
+.danger-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .form-grid {

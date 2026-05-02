@@ -70,7 +70,9 @@ interface SnapshotTaskItem extends TaskItemInput {
 
 export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapshot {
   const date = toChinaDate(now);
-  const holidays = new Set(db.prepare<[], HolidayRow>("select date from holidays").all().map((row) => row.date));
+  const holidays = new Set(
+    db.prepare<[], HolidayRow>("select date from holidays where type = 'holiday'").all().map((row) => row.date)
+  );
   const containers = loadTaskContainers(db);
   const itemsByContainer = loadTaskItems(db);
   const operationItems = containers

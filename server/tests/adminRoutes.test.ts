@@ -68,6 +68,57 @@ describe("admin routes", () => {
     });
   });
 
+  it("imports chinese-days holidays with full replacement and lists them by year", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    await app.inject({
+      method: "POST",
+      url: "/api/admin/holidays",
+      payload: {
+        date: "2025-01-01",
+        name: "旧节假日"
+      }
+    });
+
+    const importResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/holidays/import",
+      payload: {
+        holidays: {
+          "2026-05-01": "Labour Day,劳动节,2",
+          "2026-05-02": "Labour Day,劳动节,2",
+          "2027-01-01": "New Year's Day,元旦,1"
+        },
+        workdays: {
+          "2026-04-26": "Labour Day,劳动节,2"
+        },
+        inLieuDays: {
+          "2026-05-02": "Labour Day,劳动节,2"
+        }
+      }
+    });
+    const listResponse = await app.inject({
+      method: "GET",
+      url: "/api/admin/holidays?year=2026"
+    });
+    const oldYearResponse = await app.inject({
+      method: "GET",
+      url: "/api/admin/holidays?year=2025"
+    });
+    await app.close();
+
+    expect(importResponse.statusCode).toBe(200);
+    expect(importResponse.json()).toEqual({ imported: 4, holidays: 3, adjustedWorkdays: 1 });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual([
+      { id: expect.any(String), date: "2026-04-26", name: "劳动节", type: "adjusted_workday" },
+      { id: expect.any(String), date: "2026-05-01", name: "劳动节", type: "holiday" },
+      { id: expect.any(String), date: "2026-05-02", name: "劳动节", type: "holiday" }
+    ]);
+    expect(oldYearResponse.json()).toEqual([]);
+  });
+
   it("creates operation task plans and exposes expanded board items", async () => {
     const db = createTestDatabase();
     const app = createApp(db);

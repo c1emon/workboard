@@ -8,6 +8,10 @@ export type AppDatabase = Database.Database;
 export function migrate(db: AppDatabase): void {
   db.pragma("foreign_keys = ON");
   db.exec(schemaSql);
+  const holidayColumns = db.prepare("pragma table_info(holidays)").all() as Array<{ name: string }>;
+  if (!holidayColumns.some((column) => column.name === "type")) {
+    db.exec("alter table holidays add column type text not null default 'holiday' check (type in ('holiday', 'adjusted_workday'))");
+  }
 }
 
 export function openDatabase(filename = "server/db/workboard.sqlite"): AppDatabase {

@@ -45,6 +45,25 @@ export interface LeavePersonRecord {
   enabled: boolean;
 }
 
+export interface HolidayRecord {
+  id: string;
+  date: string;
+  name: string;
+  type: "holiday" | "adjusted_workday";
+}
+
+export interface ChineseDaysPayload {
+  holidays: Record<string, string>;
+  workdays: Record<string, string>;
+  inLieuDays: Record<string, string>;
+}
+
+export interface HolidayImportResult {
+  imported: number;
+  holidays: number;
+  adjustedWorkdays: number;
+}
+
 export interface OperationPlanItemRecord {
   id: string;
   offsetMinutes: number;
@@ -250,6 +269,21 @@ export async function deleteLeavePerson(id: string): Promise<void> {
 
 export async function createHoliday(input: { date: string; name: string }): Promise<{ id: string }> {
   return postAdmin("holidays", input);
+}
+
+export async function fetchHolidays(year: number): Promise<HolidayRecord[]> {
+  return fetchAdmin(`holidays?year=${encodeURIComponent(String(year))}`);
+}
+
+export async function importChineseDaysHolidays(input: ChineseDaysPayload): Promise<HolidayImportResult> {
+  const response = await fetch(`${apiBase}/api/admin/holidays/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+
+  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  return response.json();
 }
 
 export async function fetchOperationPlans(date: string, scope: "date" | "all"): Promise<OperationPlanRecord[]> {

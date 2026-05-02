@@ -47,6 +47,14 @@ const holidayInputSchema = z.object({
   date: dateSchema,
   name: z.string().default("")
 });
+const holidayYearQuerySchema = z.object({
+  year: z.coerce.number().int().min(1900).max(2100)
+});
+const chineseDaysPayloadSchema = z.object({
+  holidays: z.record(dateSchema, z.string()),
+  workdays: z.record(dateSchema, z.string()),
+  inLieuDays: z.record(dateSchema, z.string()).default({})
+});
 
 const taskContainerInputSchema = z
   .object({
@@ -230,6 +238,13 @@ interface LeavePersonAdminRow {
   enabled: number;
 }
 
+interface HolidayAdminRow {
+  id: string;
+  date: string;
+  name: string;
+  type: "holiday" | "adjusted_workday";
+}
+
 function validateAdminPayload<TSchema extends z.ZodTypeAny>(
   schema: TSchema,
   body: unknown
@@ -301,6 +316,11 @@ function insertOperationItem(db: AppDatabase, containerId: string, input: z.infe
     input.sortOrder
   );
   return id;
+}
+
+function chineseDaysName(value: string): string {
+  const [, chineseName] = value.split(",");
+  return chineseName?.trim() || value.trim();
 }
 
 export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, boardEvents: BoardEventBroadcaster): void {
@@ -648,6 +668,60 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     return reply.code(204).send();
   });
 
+  app.get("/api/admin/holidays", async (request, reply) => {
+    const validation = validateAdminPayload(holidayYearQuerySchema, request.query);
+    if (!validation.success) {
+      return reply.code(400).send(validation.error);
+    }
+
+    const yearPrefix = `${validation.data.year}-`;
+    const rows = db
+      .prepare<[string], HolidayAdminRow>(
+        `select id, date, name, type
+         from holidays
+         where date like ?
+         order by date, type`
+      )
+      .all(`${yearPrefix}%`);
+
+    return rows;
+  });
+
+  app.post("/api/admin/holidays/import", async (request, reply) => {
+    const validation = validateAdminPayload(chineseDaysPayloadSchema, request.body);
+    if (!validation.success) {
+      return reply.code(400).send(validation.error);
+    }
+
+    const input = validation.data;
+    const importHolidays = db.transaction(() => {
+      db.prepare("delete from holidays").run();
+      const insert = db.prepare("insert into holidays (id, date, name, type) values (?, ?, ?, ?)");
+      let holidayCount = 0;
+      let adjustedWorkdayCount = 0;
+
+      for (const [date, name] of Object.entries(input.holidays).sort(([left], [right]) => left.localeCompare(right))) {
+        insert.run(nanoid(), date, chineseDaysName(name), "holiday");
+        holidayCount += 1;
+      }
+
+      for (const [date, name] of Object.entries(input.workdays).sort(([left], [right]) => left.localeCompare(right))) {
+        insert.run(nanoid(), date, chineseDaysName(name), "adjusted_workday");
+        adjustedWorkdayCount += 1;
+      }
+
+      return {
+        imported: holidayCount + adjustedWorkdayCount,
+        holidays: holidayCount,
+        adjustedWorkdays: adjustedWorkdayCount
+      };
+    });
+
+    const result = importHolidays();
+    boardEvents.publish();
+    return result;
+  });
+
   app.post("/api/admin/holidays", async (request, reply) => {
     const validation = validateAdminPayload(holidayInputSchema, request.body);
     if (!validation.success) {
@@ -657,7 +731,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const input = validation.data;
     const id = nanoid();
 
-    db.prepare("insert into holidays (id, date, name) values (?, ?, ?)").run(id, input.date, input.name);
+    db.prepare("insert into holidays (id, date, name, type) values (?, ?, ?, 'holiday')").run(id, input.date, input.name);
     boardEvents.publish();
 
     return reply.code(201).send({ id });

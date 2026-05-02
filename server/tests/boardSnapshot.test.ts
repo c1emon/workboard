@@ -33,12 +33,13 @@ describe("board snapshot", () => {
 
   it("returns board snapshot JSON from the board route", async () => {
     const db = createTestDatabase();
+    const date = toChinaDate(new Date());
     db.prepare("insert into permit_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("p1", "2026-05-01", "上午", "动火许可", "张三", "A区", "已审批", 1, 0);
+      .run("p1", date, "上午", "动火许可", "张三", "A区", "已审批", 1, 0);
     db.prepare("insert into other_arrangements values (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("o1", "2026-05-01", "全天", "值守", "赵六", "", "", 1, 0);
+      .run("o1", date, "全天", "值守", "赵六", "", "", 1, 0);
     db.prepare("insert into leave_people values (?, ?, ?, ?, ?)")
-      .run("l1", "2026-05-01", "钱七", 1, 0);
+      .run("l1", date, "钱七", 1, 0);
     const app = createApp(db);
 
     const response = await app.inject({ method: "GET", url: "/api/board" });
@@ -86,3 +87,8 @@ describe("board snapshot", () => {
     ]);
   });
 });
+
+function toChinaDate(date: Date): string {
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return shifted.toISOString().slice(0, 10);
+}

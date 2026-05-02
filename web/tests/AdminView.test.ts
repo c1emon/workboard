@@ -10,11 +10,13 @@ import {
   createOperationPlan,
   createPermit,
   createTaskItem,
+  fetchHolidays,
   deleteTaskItem,
   fetchLeavePeople,
   fetchOperationPlan,
   fetchOperationPlans,
   fetchPermitArrangements,
+  importChineseDaysHolidays,
   updateOperationPlan,
   updatePermitArrangementEnabled
 } from "../src/api/client";
@@ -104,6 +106,11 @@ vi.mock("../src/api/client", () => ({
       enabled: true
     }
   ]),
+  fetchHolidays: vi.fn().mockResolvedValue([
+    { id: "holiday-1", date: "2026-05-01", name: "劳动节", type: "holiday" },
+    { id: "workday-1", date: "2026-04-26", name: "劳动节", type: "adjusted_workday" }
+  ]),
+  importChineseDaysHolidays: vi.fn().mockResolvedValue({ imported: 2, holidays: 1, adjustedWorkdays: 1 }),
   updateOtherArrangement: vi.fn().mockResolvedValue(undefined),
   updateOtherArrangementEnabled: vi.fn().mockResolvedValue(undefined),
   updateOperationPlan: vi.fn().mockResolvedValue(undefined),
@@ -125,6 +132,20 @@ function mountAdmin() {
   });
 }
 
+async function waitForAssertion(assertion: () => void): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve));
+    }
+  }
+  throw lastError;
+}
+
 describe("AdminView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -143,6 +164,107 @@ describe("AdminView", () => {
     expect(wrapper.text()).toContain("其他");
     expect(wrapper.text()).toContain("休假");
     expect(wrapper.text()).toContain("节假日");
+  });
+
+  it("lists holidays by year in holiday and adjusted workday sections", async () => {
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[5].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(fetchHolidays).toHaveBeenCalledWith(Number(new Date().getFullYear()));
+    expect(wrapper.find('input[name="holidayYear"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("休假");
+    expect(wrapper.text()).toContain("调休");
+    expect(wrapper.text()).toContain("2026-05-01");
+    expect(wrapper.text()).toContain("2026-04-26");
+  });
+
+  it("opens a chinese-days import modal with the remote source selected", async () => {
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[5].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    await wrapper.find('[aria-label="导入 chinese-days"]').trigger("click");
+
+    expect(wrapper.find(".holiday-import-modal").exists()).toBe(true);
+    expect(wrapper.find('input[name="holidayImportSource"][value="remote"]').element).toHaveProperty("checked", true);
+    expect(wrapper.find('input[name="holidayImportUrl"]').element).toHaveProperty(
+      "value",
+      "https://cdn.jsdelivr.net/npm/chinese-days/dist/chinese-days.json"
+    );
+  });
+
+  it("imports chinese-days holidays from the remote URL after two confirmations", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ holidays: { "2026-05-01": "Labour Day,劳动节,2" }, workdays: {}, inLieuDays: {} })
+    } as unknown as Response);
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[5].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    await wrapper.find('[aria-label="导入 chinese-days"]').trigger("click");
+    await wrapper.find('input[name="holidayImportUrl"]').setValue("https://example.test/chinese-days.json");
+    await wrapper.find(".holiday-import-modal").trigger("submit.prevent");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledWith("https://example.test/chinese-days.json");
+    expect(importChineseDaysHolidays).toHaveBeenCalledWith({
+      holidays: { "2026-05-01": "Labour Day,劳动节,2" },
+      workdays: {},
+      inLieuDays: {}
+    });
+    expect(fetchHolidays).toHaveBeenLastCalledWith(Number(new Date().getFullYear()));
+    expect(wrapper.find(".holiday-import-modal").exists()).toBe(false);
+
+    confirmSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("imports chinese-days holidays from a local JSON file", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[5].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    await wrapper.find('[aria-label="导入 chinese-days"]').trigger("click");
+    await wrapper.find('input[name="holidayImportSource"][value="local"]').setValue(true);
+    const file = new File([JSON.stringify({ holidays: {}, workdays: { "2026-04-26": "Labour Day,劳动节,2" }, inLieuDays: {} })], "days.json", {
+      type: "application/json"
+    });
+    const input = wrapper.find('input[name="holidayImportFile"]');
+    Object.defineProperty(input.element, "files", { value: [file] });
+    await input.trigger("change");
+    await wrapper.find(".holiday-import-modal").trigger("submit.prevent");
+    await waitForAssertion(() => {
+      expect(importChineseDaysHolidays).toHaveBeenCalledWith({
+        holidays: {},
+        workdays: { "2026-04-26": "Labour Day,劳动节,2" },
+        inLieuDays: {}
+      });
+    });
+
+    confirmSpy.mockRestore();
+  });
+
+  it("does not import chinese-days holidays when confirmation is cancelled", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[5].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    await wrapper.find('[aria-label="导入 chinese-days"]').trigger("click");
+    await wrapper.find(".holiday-import-modal").trigger("submit.prevent");
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(importChineseDaysHolidays).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+    fetchSpy.mockRestore();
   });
 
   it("submits a permit arrangement", async () => {
