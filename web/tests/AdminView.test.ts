@@ -569,6 +569,65 @@ describe("AdminView", () => {
     expect(wrapper.find(".operation-task-timeline").text()).toContain("新增班次");
   });
 
+  it("extends an operation plan before adding a child task beyond the current duration", async () => {
+    vi.mocked(fetchOperationPlans).mockResolvedValueOnce([
+      {
+        id: "operation-single",
+        name: "操作",
+        description: "操作安排",
+        startAt: "2026-05-02T08:00:00+08:00",
+        endAt: "2026-05-02T16:30:00+08:00",
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 510,
+        recurrenceCount: null,
+        skipWeekends: false,
+        skipHolidays: false,
+        enabled: true,
+        childTaskCount: 1,
+        firstItemContent: "白班1"
+      }
+    ]);
+    vi.mocked(fetchOperationPlan).mockResolvedValueOnce({
+      id: "operation-single",
+      name: "操作",
+      description: "操作安排",
+      startAt: "2026-05-02T08:00:00+08:00",
+      endAt: "2026-05-02T16:30:00+08:00",
+      recurrenceType: "infinite",
+      recurrenceIntervalMinutes: 510,
+      recurrenceCount: null,
+      skipWeekends: false,
+      skipHolidays: false,
+      enabled: true,
+      childTaskCount: 1,
+      firstItemContent: "白班1",
+      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 510, content: "白班1", metadata: {}, sortOrder: 0 }]
+    });
+    vi.mocked(createTaskItem).mockResolvedValueOnce({ id: "item-2" });
+    const wrapper = mountAdmin();
+    await new Promise((resolve) => setTimeout(resolve));
+
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve, 310));
+    await wrapper.find('[aria-label="新增子任务"]').trigger("click");
+    await wrapper.find('input[name="operationItemOffset"]').setValue("510");
+    await wrapper.find('input[name="operationItemDuration"]').setValue("510");
+    await wrapper.find('input[name="operationItemContent"]').setValue("晚班1");
+    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
+
+    expect(updateOperationPlan).toHaveBeenCalledWith(
+      "operation-single",
+      expect.objectContaining({
+        endAt: "2026-05-03T01:00:00+08:00",
+        recurrenceIntervalMinutes: 1020
+      })
+    );
+    expect(createTaskItem).toHaveBeenCalledWith(expect.objectContaining({ containerId: "operation-single", offsetMinutes: 510, durationMinutes: 510 }));
+    expect(vi.mocked(updateOperationPlan).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(createTaskItem).mock.invocationCallOrder[0]
+    );
+  });
+
   it("deletes operation child tasks with confirmation while editing", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
     const wrapper = mountAdmin();

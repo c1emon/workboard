@@ -1212,6 +1212,11 @@ async function saveOperationItem(): Promise<void> {
       sortOrder: operationItemForm.sortOrder
     };
     if (operationItemModalMode.value === "create") {
+      const draftItem = { id: "", ...itemPayload };
+      const nextItems = [...operationDetailItems.value, draftItem].sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes
+      );
+      await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
       const created = await createTaskItem({
         containerId: recordId,
         ...itemPayload,
@@ -1221,9 +1226,7 @@ async function saveOperationItem(): Promise<void> {
         other: ""
       });
       const newItem = { id: created.id, ...itemPayload };
-      const nextItems = [...operationDetailItems.value, newItem].sort((a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes);
-      await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
-      operationDetailItems.value = nextItems;
+      operationDetailItems.value = nextItems.map((item) => (item.id ? item : newItem));
       closeOperationItemModal();
       await loadActiveList();
       return;
