@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import OperationTaskTimeline from "../src/components/OperationTaskTimeline.vue";
 
@@ -63,6 +65,26 @@ const items = [
   { id: "item-2", offsetMinutes: 180, durationMinutes: 60, content: "复核记录", metadata: { crew: "B" }, sortOrder: 1 }
 ];
 
+async function waitForTimelineLoad() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve));
+}
+
+async function waitForAssertion(assertion: () => void): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await waitForTimelineLoad();
+    }
+  }
+  throw lastError;
+}
+
 describe("OperationTaskTimeline", () => {
   beforeEach(() => {
     visMocks.dataSetPayloads.length = 0;
@@ -73,13 +95,13 @@ describe("OperationTaskTimeline", () => {
     const wrapper = mount(OperationTaskTimeline, {
       props: { items, durationMinutes: 480, readonly: true, startAt: "2026-05-01T08:30" }
     });
-    await wrapper.vm.$nextTick();
-    await Promise.resolve();
+    await waitForAssertion(() => {
+      expect(visMocks.timelineInstances).toHaveLength(1);
+    });
 
     expect(wrapper.text()).toContain("子任务预览");
     expect(wrapper.text()).not.toContain("子任务时间轴");
     expect(wrapper.text()).not.toContain("视窗");
-    expect(visMocks.timelineInstances).toHaveLength(1);
     expect(visMocks.dataSetPayloads[0]).toEqual([
       expect.objectContaining({
         id: "item-1",
@@ -120,25 +142,38 @@ describe("OperationTaskTimeline", () => {
     const wrapper = mount(OperationTaskTimeline, {
       props: { items: [], durationMinutes: 480, readonly: false, startAt: "2026-05-01T08:30" }
     });
-    await wrapper.vm.$nextTick();
-    await Promise.resolve();
+    await waitForAssertion(() => {
+      expect(visMocks.timelineInstances).toHaveLength(1);
+    });
 
     visMocks.timelineInstances[0].redraw.mockClear();
     await wrapper.setProps({ items });
 
-    expect(visMocks.timelineInstances[0].setItems).toHaveBeenCalled();
-    expect(visMocks.timelineInstances[0].redraw).toHaveBeenCalled();
+    await waitForAssertion(() => {
+      expect(visMocks.timelineInstances[0].setItems).toHaveBeenCalled();
+      expect(visMocks.timelineInstances[0].redraw).toHaveBeenCalled();
+    });
   });
 
   it("emits select when a vis-timeline item is selected", async () => {
     const wrapper = mount(OperationTaskTimeline, {
       props: { items, durationMinutes: 480, readonly: true, startAt: "2026-05-01T08:30" }
     });
-    await wrapper.vm.$nextTick();
-    await Promise.resolve();
+    await waitForAssertion(() => {
+      expect(visMocks.timelineInstances).toHaveLength(1);
+    });
 
     visMocks.timelineInstances[0].handlers.select({ items: ["item-2"] });
 
     expect(wrapper.emitted("select")?.[0]).toEqual([items[1]]);
+  });
+
+  it("loads vis-timeline with dynamic imports instead of route-level static imports", () => {
+    const source = readFileSync(resolve(__dirname, "../src/components/OperationTaskTimeline.vue"), "utf8");
+
+    expect(source).toContain('import("vis-timeline/standalone")');
+    expect(source).toContain('import("vis-timeline/styles/vis-timeline-graph2d.css")');
+    expect(source).not.toMatch(/^import \{[^}]*Timeline[^}]*\} from "vis-timeline\/standalone";/m);
+    expect(source).not.toMatch(/^import "vis-timeline\/styles\/vis-timeline-graph2d\.css";/m);
   });
 });

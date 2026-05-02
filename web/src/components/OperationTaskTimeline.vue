@@ -18,8 +18,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { DataSet, Timeline, type DataItem, type TimelineOptions } from "vis-timeline/standalone";
-import "vis-timeline/styles/vis-timeline-graph2d.css";
+import type { DataItem, TimelineOptions } from "vis-timeline/standalone";
 import type { OperationPlanItemRecord } from "../api/client";
 
 const props = defineProps<{
@@ -37,7 +36,12 @@ const emit = defineEmits<{
 }>();
 
 const timelineElement = ref<HTMLElement | null>(null);
-let timeline: Timeline | null = null;
+type VisTimelineModule = typeof import("vis-timeline/standalone");
+type TimelineInstance = InstanceType<VisTimelineModule["Timeline"]>;
+
+let timeline: TimelineInstance | null = null;
+let visTimelineModule: VisTimelineModule | null = null;
+let isUnmounted = false;
 
 const timelineColorCount = 6;
 const cycleStart = computed(() => new Date(`2026-01-01T${startTimeOfDay.value}:00+08:00`));
@@ -50,8 +54,11 @@ const startTimeOfDay = computed(() => {
 
 onMounted(async () => {
   await nextTick();
-  if (!timelineElement.value) return;
-  timeline = new Timeline(timelineElement.value, new DataSet(toTimelineItems()), timelineOptions());
+  const element = timelineElement.value;
+  if (!element) return;
+  const { DataSet, Timeline } = await loadVisTimeline();
+  if (isUnmounted || timelineElement.value !== element) return;
+  timeline = new Timeline(element, new DataSet(toTimelineItems()), timelineOptions());
   timeline.on("select", (event: { items?: string[] }) => {
     const selectedId = event.items?.[0];
     const selected = props.items.find((item) => item.id === selectedId);
@@ -62,6 +69,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  isUnmounted = true;
   timeline?.destroy();
   timeline = null;
 });
@@ -69,7 +77,8 @@ onBeforeUnmount(() => {
 watch(
   () => [props.items, props.durationMinutes, props.readonly] as const,
   () => {
-    if (!timeline) return;
+    if (!timeline || !visTimelineModule) return;
+    const { DataSet } = visTimelineModule;
     timeline.setItems(new DataSet(toTimelineItems()));
     timeline.setOptions(timelineOptions());
     updateSelection();
@@ -98,6 +107,17 @@ function toTimelineItems(): DataItem[] {
       .filter(Boolean)
       .join(" ")
   }));
+}
+
+async function loadVisTimeline(): Promise<VisTimelineModule> {
+  if (!visTimelineModule) {
+    const [module] = await Promise.all([
+      import("vis-timeline/standalone"),
+      import("vis-timeline/styles/vis-timeline-graph2d.css")
+    ]);
+    visTimelineModule = module;
+  }
+  return visTimelineModule;
 }
 
 function timelineOptions(): TimelineOptions {

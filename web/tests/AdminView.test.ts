@@ -907,4 +907,14 @@ describe("AdminView", () => {
     );
     expect(operationItemModalSource).toMatch(/\.operation-item-offset-field input,[\s\S]*\.operation-item-duration-field input \{[^}]*text-align: center;/);
   });
+
+  it("keeps the admin view model split by domain", () => {
+    const source = readFileSync(resolve(__dirname, "../src/composables/admin/useAdminViewModel.ts"), "utf8");
+
+    expect(source).toContain("useConfirmation");
+    expect(source).toContain("useArrangementAdmin");
+    expect(source).toContain("useHolidayAdmin");
+    expect(source).toContain("useOperationAdmin");
+    expect(source.split("\n").length).toBeLessThan(260);
+  });
 });
