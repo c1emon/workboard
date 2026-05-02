@@ -124,6 +124,37 @@ export interface BoardUpdateConnectionHandlers {
   onError: () => void;
 }
 
+interface ApiIssue {
+  path?: Array<string | number>;
+  message?: string;
+}
+
+interface ApiErrorBody {
+  error?: string;
+  message?: string;
+  issues?: ApiIssue[];
+}
+
+async function throwApiError(response: Response, fallback: string): Promise<never> {
+  let body: ApiErrorBody | null = null;
+  try {
+    const parsed = (await response.json()) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) body = parsed as ApiErrorBody;
+  } catch {
+    body = null;
+  }
+
+  const issueDetails =
+    body?.issues
+      ?.map((issue) => {
+        const path = issue.path?.join(".");
+        return [path, issue.message].filter(Boolean).join(": ");
+      })
+      .filter(Boolean) ?? [];
+  const details = [body?.error, body?.message, ...issueDetails].filter(Boolean);
+  throw new Error(details.length > 0 ? details.join(": ") : `${fallback}: ${response.status}`);
+}
+
 async function postAdmin<TInput extends object>(path: string, input: TInput): Promise<{ id: string }> {
   const response = await fetch(`${apiBase}/api/admin/${path}`, {
     method: "POST",
@@ -131,13 +162,13 @@ async function postAdmin<TInput extends object>(path: string, input: TInput): Pr
     body: JSON.stringify(input)
   });
 
-  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Admin request failed");
   return response.json();
 }
 
 async function fetchAdmin<TOutput>(path: string): Promise<TOutput> {
   const response = await fetch(`${apiBase}/api/admin/${path}`);
-  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Admin request failed");
   return response.json();
 }
 
@@ -148,7 +179,7 @@ async function putAdmin<TInput extends object>(path: string, input: TInput): Pro
     body: JSON.stringify(input)
   });
 
-  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Admin request failed");
 }
 
 async function patchAdmin<TInput extends object>(path: string, input: TInput): Promise<void> {
@@ -158,17 +189,17 @@ async function patchAdmin<TInput extends object>(path: string, input: TInput): P
     body: JSON.stringify(input)
   });
 
-  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Admin request failed");
 }
 
 async function deleteAdmin(path: string): Promise<void> {
   const response = await fetch(`${apiBase}/api/admin/${path}`, { method: "DELETE" });
-  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Admin request failed");
 }
 
 export async function fetchBoard(): Promise<BoardSnapshot> {
   const response = await fetch(`${apiBase}/api/board`);
-  if (!response.ok) throw new Error(`Board fetch failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Board fetch failed");
   return response.json();
 }
 
@@ -297,7 +328,7 @@ export async function importChineseDaysHolidays(input: ChineseDaysPayload): Prom
     body: JSON.stringify(input)
   });
 
-  if (!response.ok) throw new Error(`Admin request failed: ${response.status}`);
+  if (!response.ok) await throwApiError(response, "Admin request failed");
   return response.json();
 }
 

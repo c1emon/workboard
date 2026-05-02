@@ -556,12 +556,26 @@
         </div>
       </form>
     </div>
+
+    <ConfirmationDialog
+      v-if="confirmation"
+      :title="confirmation.title"
+      :message="confirmation.message"
+      :detail="confirmation.detail"
+      :confirm-label="confirmation.confirmLabel"
+      @cancel="cancelConfirmation"
+      @confirm="confirmConfirmation"
+    />
   </main>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
+import ConfirmationDialog from "../components/admin/ConfirmationDialog.vue";
+import DateToolbar from "../components/admin/DateToolbar.vue";
+import ListHeader from "../components/admin/ListHeader.vue";
+import TimeTagSelect from "../components/admin/TimeTagSelect.vue";
 import OperationTaskTimeline from "../components/OperationTaskTimeline.vue";
 import {
   createLeavePerson,
@@ -611,107 +625,15 @@ type ModalKind = "permit" | "patrol" | "other" | "leave";
 type OperationModalMode = "create" | "edit" | "detail";
 type OperationItemModalMode = "create" | "edit";
 type HolidayImportSource = "remote" | "local";
-
-const TimeTagSelect = defineComponent({
-  props: {
-    modelValue: { type: String, required: true }
-  },
-  emits: ["update:modelValue"],
-  setup(props, { emit }) {
-    return () =>
-      h(
-        "select",
-        {
-          value: props.modelValue,
-          onChange: (event: Event) => emit("update:modelValue", (event.target as HTMLSelectElement).value)
-        },
-        ["全天", "上午", "下午"].map((value) => h("option", { value }, value))
-      );
-  }
-});
-
-const ListHeader = defineComponent({
-  props: {
-    title: { type: String, required: true }
-  },
-  setup(props) {
-    return () =>
-      h("div", { class: "list-heading" }, [
-        h("div", [h("h2", props.title), h("p", "默认展示当天，可以切换日期查看历史或未来安排")])
-      ]);
-  }
-});
-
-const DateToolbar = defineComponent({
-  props: {
-    modelValue: { type: String, required: true },
-    today: { type: String, required: true },
-    yesterday: { type: String, required: true },
-    addLabel: { type: String, required: true },
-    disabled: { type: Boolean, default: false },
-    allowShowAll: { type: Boolean, default: false },
-    showAll: { type: Boolean, default: false }
-  },
-  emits: ["update:modelValue", "update:showAll", "today", "yesterday", "add"],
-  setup(props, { emit }) {
-    return () =>
-      h("div", { class: "date-toolbar" }, [
-        h("div", { class: "date-shortcuts" }, [
-          h("label", { class: "date-field" }, [
-            h("span", "日期:"),
-            h("input", {
-              type: "date",
-              value: props.modelValue,
-              disabled: props.disabled,
-              onInput: (event: Event) => emit("update:modelValue", (event.target as HTMLInputElement).value)
-            })
-          ]),
-          h(
-            "button",
-            {
-              class: "yesterday-button secondary-action",
-              type: "button",
-              disabled: props.disabled,
-              onClick: () => emit("yesterday")
-            },
-            "昨日"
-          ),
-          h(
-            "button",
-            {
-              class: "today-button secondary-action",
-              type: "button",
-              disabled: props.disabled,
-              onClick: () => emit("today")
-            },
-            "今天"
-          ),
-          props.allowShowAll
-            ? h("label", { class: "show-all-field" }, [
-                h("input", {
-                  name: "operationShowAll",
-                  type: "checkbox",
-                  checked: props.showAll,
-                  onChange: (event: Event) => emit("update:showAll", (event.target as HTMLInputElement).checked)
-                }),
-                h("span", "显示全部")
-              ])
-            : null
-        ]),
-        h(
-          "button",
-          {
-            class: "icon-action toolbar-add-action",
-            type: "button",
-            "aria-label": props.addLabel,
-            title: props.addLabel,
-            onClick: () => emit("add")
-          },
-          "+"
-        )
-      ]);
-  }
-});
+type ConfirmationRequest = {
+  title: string;
+  message: string;
+  detail?: string;
+  confirmLabel: string;
+};
+type ConfirmationState = ConfirmationRequest & {
+  resolve: (confirmed: boolean) => void;
+};
 
 const sections: Array<{ key: SectionKey; label: string; description: string }> = [
   { key: "operation", label: "操作", description: "主任务与时间段子任务" },
@@ -749,6 +671,7 @@ const operationRecordId = ref<string | null>(null);
 const operationItemModalOpen = ref(false);
 const operationItemModalMode = ref<OperationItemModalMode>("edit");
 const operationDetailLoading = ref(false);
+const confirmation = ref<ConfirmationState | null>(null);
 const activeSection = computed(() => sections.find((section) => section.key === activeKey.value) ?? sections[0]);
 const modalTitle = computed(() => `${modalRecordId.value ? "修改" : "新增"}${activeSection.value.label}`);
 const operationReadOnly = computed(() => operationModalMode.value === "detail");
@@ -1286,8 +1209,34 @@ async function toggleOperation(record: OperationPlanRecord): Promise<void> {
   });
 }
 
+function requestConfirmation(request: ConfirmationRequest): Promise<boolean> {
+  confirmation.value?.resolve(false);
+  return new Promise((resolve) => {
+    confirmation.value = { ...request, resolve };
+  });
+}
+
+function settleConfirmation(confirmed: boolean): void {
+  const current = confirmation.value;
+  confirmation.value = null;
+  current?.resolve(confirmed);
+}
+
+function confirmConfirmation(): void {
+  settleConfirmation(true);
+}
+
+function cancelConfirmation(): void {
+  settleConfirmation(false);
+}
+
 async function removePermit(id: string): Promise<void> {
-  if (!window.confirm("确认删除这条许可吗？")) return;
+  const confirmed = await requestConfirmation({
+    title: "删除许可",
+    message: "确认删除这条许可吗？",
+    confirmLabel: "删除"
+  });
+  if (!confirmed) return;
   await withStatus(async () => {
     await deletePermitArrangement(id);
     await loadActiveList();
@@ -1295,7 +1244,12 @@ async function removePermit(id: string): Promise<void> {
 }
 
 async function removePatrol(id: string): Promise<void> {
-  if (!window.confirm("确认删除这条巡视吗？")) return;
+  const confirmed = await requestConfirmation({
+    title: "删除巡视",
+    message: "确认删除这条巡视吗？",
+    confirmLabel: "删除"
+  });
+  if (!confirmed) return;
   await withStatus(async () => {
     await deletePatrolArrangement(id);
     await loadActiveList();
@@ -1303,7 +1257,12 @@ async function removePatrol(id: string): Promise<void> {
 }
 
 async function removeOther(id: string): Promise<void> {
-  if (!window.confirm("确认删除这条其他事项吗？")) return;
+  const confirmed = await requestConfirmation({
+    title: "删除其他事项",
+    message: "确认删除这条其他事项吗？",
+    confirmLabel: "删除"
+  });
+  if (!confirmed) return;
   await withStatus(async () => {
     await deleteOtherArrangement(id);
     await loadActiveList();
@@ -1311,7 +1270,12 @@ async function removeOther(id: string): Promise<void> {
 }
 
 async function removeLeave(id: string): Promise<void> {
-  if (!window.confirm("确认删除这条休假吗？")) return;
+  const confirmed = await requestConfirmation({
+    title: "删除休假",
+    message: "确认删除这条休假吗？",
+    confirmLabel: "删除"
+  });
+  if (!confirmed) return;
   await withStatus(async () => {
     await deleteLeavePerson(id);
     await loadActiveList();
@@ -1319,7 +1283,12 @@ async function removeLeave(id: string): Promise<void> {
 }
 
 async function removeOperation(id: string): Promise<void> {
-  if (!window.confirm("确认删除这个操作计划吗？")) return;
+  const confirmed = await requestConfirmation({
+    title: "删除操作计划",
+    message: "确认删除这个操作计划吗？",
+    confirmLabel: "删除"
+  });
+  if (!confirmed) return;
   await withStatus(async () => {
     await deleteOperationPlan(id);
     await loadActiveList();
@@ -1386,7 +1355,12 @@ async function saveOperationItem(): Promise<void> {
 
 async function removeOperationItem(): Promise<void> {
   if (operationReadOnly.value || operationItemModalMode.value !== "edit" || !operationRecordId.value || !operationItemForm.id) return;
-  if (!window.confirm("确认删除这个子任务吗？")) return;
+  const confirmed = await requestConfirmation({
+    title: "删除子任务",
+    message: "确认删除这个子任务吗？",
+    confirmLabel: "删除"
+  });
+  if (!confirmed) return;
 
   const recordId = operationRecordId.value;
   const itemId = operationItemForm.id;
@@ -1402,8 +1376,13 @@ async function removeOperationItem(): Promise<void> {
 }
 
 async function submitHolidayImport(): Promise<void> {
-  if (!window.confirm("导入会清空并覆盖全部历史节假日数据，确认继续吗？")) return;
-  if (!window.confirm("请再次确认：当前系统内所有节假日数据都会被删除并替换为 chinese-days 数据。")) return;
+  const confirmed = await requestConfirmation({
+    title: "覆盖节假日数据",
+    message: "导入会清空并覆盖全部历史节假日数据。",
+    detail: "当前系统内所有节假日数据都会被删除并替换为 chinese-days 数据。",
+    confirmLabel: "确认导入"
+  });
+  if (!confirmed) return;
 
   statusText.value = "同步中";
   try {
@@ -1484,7 +1463,6 @@ function readHolidayImportFile(file: File): Promise<string> {
 .primary-action,
 .secondary-action,
 .danger-action,
-.icon-action,
 .row-actions button {
   border: 1px solid #1e293b;
   border-radius: 6px;
@@ -1495,8 +1473,7 @@ function readHolidayImportFile(file: File): Promise<string> {
 }
 
 .board-link,
-.primary-action,
-.icon-action {
+.primary-action {
   background: #1e293b;
   color: #fff;
 }
@@ -1588,12 +1565,6 @@ function readHolidayImportFile(file: File): Promise<string> {
   padding: 22px;
 }
 
-.list-heading {
-  display: flex;
-  align-items: center;
-}
-
-.list-heading h2,
 .form-heading h2,
 .modal-heading h2 {
   margin: 0 0 6px;
@@ -1601,95 +1572,10 @@ function readHolidayImportFile(file: File): Promise<string> {
   font-size: 22px;
 }
 
-.list-heading p,
 .form-heading p {
   margin: 0;
   color: #64748b;
   font-size: 14px;
-}
-
-.icon-action {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  font-size: 25px;
-  line-height: 1;
-}
-
-.date-toolbar {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid #d8dee8;
-  background: #f8fafc;
-}
-
-.date-toolbar :deep(.date-shortcuts) {
-  display: flex;
-  align-items: end;
-  gap: 12px;
-}
-
-.date-toolbar :deep(.date-field) {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 32px;
-}
-
-.date-toolbar :deep(.show-all-field) {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  color: #334155;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.date-toolbar :deep(.show-all-field input) {
-  width: 15px;
-  height: 15px;
-  min-height: 15px;
-}
-
-.date-toolbar :deep(.date-field input) {
-  width: 170px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 8px;
-  box-sizing: border-box;
-}
-
-.date-toolbar :deep(button) {
-  height: 32px;
-  min-height: 32px;
-  padding: 0 12px;
-  box-sizing: border-box;
-}
-
-.date-toolbar :deep(input:disabled),
-.date-toolbar :deep(button:disabled) {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.date-toolbar :deep(.toolbar-add-action) {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0;
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #fff;
-  font-size: 20px;
-  line-height: 1;
-  box-shadow: 0 8px 18px rgb(37 99 235 / 24%);
 }
 
 .holiday-toolbar {
@@ -2091,9 +1977,5 @@ tr.disabled td:not(.row-actions) {
     grid-template-columns: 1fr;
   }
 
-  .date-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 </style>

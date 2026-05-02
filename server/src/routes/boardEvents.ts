@@ -1,6 +1,10 @@
+type BoardEventStreamEvent = "close" | "error";
+
 export interface BoardEventStream {
   writeHead(statusCode: number, headers: Record<string, string>): void;
   write(chunk: string): void;
+  on?(event: BoardEventStreamEvent, handler: () => void): void;
+  off?(event: BoardEventStreamEvent, handler: () => void): void;
 }
 
 export interface BoardEventBroadcaster {
@@ -9,12 +13,27 @@ export interface BoardEventBroadcaster {
   register(stream: BoardEventStream, headers?: Record<string, string>): () => void;
 }
 
-export function createBoardEventBroadcaster(initialVersion = 1): BoardEventBroadcaster {
+export interface BoardEventBroadcasterOptions {
+  heartbeatIntervalMs?: number;
+}
+
+export function createBoardEventBroadcaster(initialVersion = 1, options: BoardEventBroadcasterOptions = {}): BoardEventBroadcaster {
   let version = initialVersion;
   const streams = new Set<BoardEventStream>();
+  const cleanups = new Map<BoardEventStream, () => void>();
+  const heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30_000;
 
-  function writeUpdate(stream: BoardEventStream): void {
-    stream.write(`event: board:update\ndata: {"version":${version}}\n\n`);
+  function writeUpdate(stream: BoardEventStream): boolean {
+    return safeWrite(stream, `event: board:update\ndata: {"version":${version}}\n\n`);
+  }
+
+  function safeWrite(stream: BoardEventStream, chunk: string): boolean {
+    try {
+      stream.write(chunk);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   return {
@@ -22,15 +41,23 @@ export function createBoardEventBroadcaster(initialVersion = 1): BoardEventBroad
     publish: () => {
       version += 1;
       for (const stream of streams) {
-        try {
-          writeUpdate(stream);
-        } catch {
-          streams.delete(stream);
-        }
+        if (!writeUpdate(stream)) cleanups.get(stream)?.();
       }
       return version;
     },
     register: (stream, headers = {}) => {
+      let closed = false;
+      let heartbeat: ReturnType<typeof setInterval> | undefined;
+      const cleanup = () => {
+        if (closed) return;
+        closed = true;
+        if (heartbeat) clearInterval(heartbeat);
+        streams.delete(stream);
+        cleanups.delete(stream);
+        stream.off?.("close", cleanup);
+        stream.off?.("error", cleanup);
+      };
+
       stream.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -38,11 +65,18 @@ export function createBoardEventBroadcaster(initialVersion = 1): BoardEventBroad
         ...headers
       });
       streams.add(stream);
-      writeUpdate(stream);
+      cleanups.set(stream, cleanup);
+      stream.on?.("close", cleanup);
+      stream.on?.("error", cleanup);
+      if (!writeUpdate(stream)) {
+        cleanup();
+        return cleanup;
+      }
+      heartbeat = setInterval(() => {
+        if (!safeWrite(stream, ": heartbeat\n\n")) cleanup();
+      }, heartbeatIntervalMs);
 
-      return () => {
-        streams.delete(stream);
-      };
+      return cleanup;
     }
   };
 }

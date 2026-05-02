@@ -216,6 +216,7 @@ function parseMetadata(raw: string): Record<string, unknown> {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
   } catch {
+    console.warn("Failed to parse task metadata JSON", { raw });
     return {};
   }
   return {};

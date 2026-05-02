@@ -12,6 +12,7 @@ import {
   createTaskItem,
   fetchHolidays,
   deleteTaskItem,
+  deletePermitArrangement,
   fetchLeavePeople,
   fetchOperationPlan,
   fetchOperationPlans,
@@ -194,8 +195,7 @@ describe("AdminView", () => {
     );
   });
 
-  it("imports chinese-days holidays from the remote URL after two confirmations", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("imports chinese-days holidays from the remote URL after in-app confirmation", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ holidays: { "2026-05-01": "Labour Day,劳动节,2" }, workdays: {}, inLieuDays: {} })
@@ -207,9 +207,14 @@ describe("AdminView", () => {
     await wrapper.find('[aria-label="导入 chinese-days"]').trigger("click");
     await wrapper.find('input[name="holidayImportUrl"]').setValue("https://example.test/chinese-days.json");
     await wrapper.find(".holiday-import-modal").trigger("submit.prevent");
+
+    expect(wrapper.find(".confirmation-modal").exists()).toBe(true);
+    expect(wrapper.find(".confirmation-modal").text()).toContain("覆盖节假日数据");
+    expect(importChineseDaysHolidays).not.toHaveBeenCalled();
+
+    await wrapper.find(".confirmation-confirm").trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
 
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
     expect(fetchSpy).toHaveBeenCalledWith("https://example.test/chinese-days.json");
     expect(importChineseDaysHolidays).toHaveBeenCalledWith({
       holidays: { "2026-05-01": "Labour Day,劳动节,2" },
@@ -219,12 +224,10 @@ describe("AdminView", () => {
     expect(fetchHolidays).toHaveBeenLastCalledWith(Number(new Date().getFullYear()));
     expect(wrapper.find(".holiday-import-modal").exists()).toBe(false);
 
-    confirmSpy.mockRestore();
     fetchSpy.mockRestore();
   });
 
   it("imports chinese-days holidays from a local JSON file", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const wrapper = mountAdmin();
     await wrapper.findAll(".section-nav button")[5].trigger("click");
     await new Promise((resolve) => setTimeout(resolve));
@@ -238,6 +241,8 @@ describe("AdminView", () => {
     Object.defineProperty(input.element, "files", { value: [file] });
     await input.trigger("change");
     await wrapper.find(".holiday-import-modal").trigger("submit.prevent");
+    await wrapper.find(".confirmation-confirm").trigger("click");
+
     await waitForAssertion(() => {
       expect(importChineseDaysHolidays).toHaveBeenCalledWith({
         holidays: {},
@@ -245,12 +250,9 @@ describe("AdminView", () => {
         inLieuDays: {}
       });
     });
-
-    confirmSpy.mockRestore();
   });
 
   it("does not import chinese-days holidays when confirmation is cancelled", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const wrapper = mountAdmin();
     await wrapper.findAll(".section-nav button")[5].trigger("click");
@@ -258,13 +260,38 @@ describe("AdminView", () => {
 
     await wrapper.find('[aria-label="导入 chinese-days"]').trigger("click");
     await wrapper.find(".holiday-import-modal").trigger("submit.prevent");
+    expect(wrapper.find(".confirmation-modal").exists()).toBe(true);
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    await wrapper.find(".confirmation-cancel").trigger("click");
+
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(importChineseDaysHolidays).not.toHaveBeenCalled();
 
-    confirmSpy.mockRestore();
     fetchSpy.mockRestore();
+  });
+
+  it("deletes permit rows after in-app confirmation", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm");
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[1].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve));
+
+    await wrapper.find("tbody .row-actions .danger").trigger("click");
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(wrapper.find(".confirmation-modal").exists()).toBe(true);
+    expect(wrapper.find(".confirmation-modal").text()).toContain("删除许可");
+    expect(deletePermitArrangement).not.toHaveBeenCalled();
+
+    await wrapper.find(".confirmation-cancel").trigger("click");
+    expect(deletePermitArrangement).not.toHaveBeenCalled();
+
+    await wrapper.find("tbody .row-actions .danger").trigger("click");
+    await wrapper.find(".confirmation-confirm").trigger("click");
+
+    expect(deletePermitArrangement).toHaveBeenCalledWith("permit-1");
+
+    confirmSpy.mockRestore();
   });
 
   it("submits a permit arrangement", async () => {
@@ -684,7 +711,7 @@ describe("AdminView", () => {
   });
 
   it("deletes operation child tasks with confirmation while editing", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+    const confirmSpy = vi.spyOn(window, "confirm");
     const wrapper = mountAdmin();
     await new Promise((resolve) => setTimeout(resolve));
 
@@ -704,8 +731,16 @@ describe("AdminView", () => {
 
     await wrapper.find(".operation-item-delete").trigger("click");
 
-    expect(confirmSpy).toHaveBeenCalledWith("确认删除这个子任务吗？");
-    expect(deleteTaskItem).toHaveBeenCalledWith("item-2");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(wrapper.find(".confirmation-modal").exists()).toBe(true);
+    expect(wrapper.find(".confirmation-modal").text()).toContain("删除子任务");
+    expect(deleteTaskItem).not.toHaveBeenCalled();
+
+    await wrapper.find(".confirmation-confirm").trigger("click");
+
+    await waitForAssertion(() => {
+      expect(deleteTaskItem).toHaveBeenCalledWith("item-2");
+    });
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-1",
       expect.objectContaining({
@@ -713,7 +748,9 @@ describe("AdminView", () => {
       })
     );
     expect(updateOperationPlan).toHaveBeenCalledWith("operation-1", expect.not.objectContaining({ item: expect.anything() }));
-    expect(wrapper.find(".operation-item-modal").exists()).toBe(false);
+    await waitForAssertion(() => {
+      expect(wrapper.find(".operation-item-modal").exists()).toBe(false);
+    });
     expect(wrapper.find(".operation-task-timeline").text()).not.toContain("复核记录");
 
     confirmSpy.mockRestore();
@@ -849,13 +886,14 @@ describe("AdminView", () => {
 
   it("keeps enabled table text dark and weakens disabled rows", () => {
     const source = readFileSync(resolve(__dirname, "../src/views/AdminView.vue"), "utf8");
+    const dateToolbarSource = readFileSync(resolve(__dirname, "../src/components/admin/DateToolbar.vue"), "utf8");
 
     expect(source).toContain("td {\n  color: #0f172a;");
     expect(source).toContain("tr.disabled td:not(.row-actions) {\n  color: #94a3b8;");
     expect(source).toContain("justify-content: space-between;");
-    expect(source).toMatch(/\.date-toolbar :deep\(button\) \{[^}]*height: 32px;/);
-    expect(source).toMatch(/\.date-toolbar :deep\(\.date-field input\) \{[^}]*height: 32px;/);
-    expect(source).toMatch(/\.date-toolbar :deep\(\.toolbar-add-action\) \{[^}]*height: 32px;/);
+    expect(dateToolbarSource).toMatch(/button \{[^}]*height: 32px;/);
+    expect(dateToolbarSource).toMatch(/\.date-field input \{[^}]*height: 32px;/);
+    expect(dateToolbarSource).toMatch(/\.toolbar-add-action \{[^}]*height: 32px;/);
     expect(source).toMatch(/\.leave-table-shell \{[^}]*width: 100%;/);
     expect(source).toMatch(/\.leave-table \{[^}]*width: 100%;[^}]*table-layout: fixed;/);
     expect(source).toMatch(/\.leave-name-column \{[^}]*width: 120px;/);

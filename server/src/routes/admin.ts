@@ -11,6 +11,7 @@ const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const dateTimeSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: "Invalid datetime"
 });
+const resourceIdSchema = z.string().min(1).max(64);
 
 const permitInputSchema = z.object({
   date: dateSchema,
@@ -70,37 +71,10 @@ const taskContainerInputSchema = z
     skipWeekends: z.boolean().default(false),
     skipHolidays: z.boolean().default(false)
   })
-  .superRefine((input, ctx) => {
-    if (new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endAt"],
-        message: "endAt must be after startAt"
-      });
-    }
-
-    if (
-      (input.recurrenceType === "finite" || input.recurrenceType === "infinite") &&
-      (input.recurrenceIntervalMinutes ?? 0) <= 0
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["recurrenceIntervalMinutes"],
-        message: "recurrenceIntervalMinutes must be positive"
-      });
-    }
-
-    if (input.recurrenceType === "finite" && (input.recurrenceCount ?? 0) <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["recurrenceCount"],
-        message: "recurrenceCount must be positive"
-      });
-    }
-  });
+  .superRefine(validateRecurrenceFields);
 
 const taskItemInputSchema = z.object({
-  containerId: z.string().min(1),
+  containerId: resourceIdSchema,
   offsetMinutes: z.number().int(),
   durationMinutes: z.number().int(),
   content: z.string().default(""),
@@ -113,7 +87,7 @@ const taskItemInputSchema = z.object({
   sortOrder: z.number().int().default(0)
 });
 
-const idParamSchema = z.object({ id: z.string().min(1) });
+const idParamSchema = z.object({ id: resourceIdSchema });
 const dateQuerySchema = z.object({ date: dateSchema });
 const enabledInputSchema = z.object({ enabled: z.boolean() });
 const operationPlanListQuerySchema = z.object({
@@ -127,7 +101,7 @@ const operationItemInputSchema = taskItemInputSchema.omit({
   personnel: true,
   vehicle: true,
   other: true
-}).extend({ id: z.string().min(1).optional() });
+}).extend({ id: resourceIdSchema.optional() });
 const operationPlanInputSchema = z
   .object({
     name: z.string().min(1),
@@ -141,34 +115,44 @@ const operationPlanInputSchema = z
     skipHolidays: z.boolean().default(false),
     item: operationItemInputSchema.optional()
   })
-  .superRefine((input, ctx) => {
-    if (new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["endAt"],
-        message: "endAt must be after startAt"
-      });
-    }
+  .superRefine(validateRecurrenceFields);
 
-    if (
-      (input.recurrenceType === "finite" || input.recurrenceType === "infinite") &&
-      (input.recurrenceIntervalMinutes ?? 0) <= 0
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["recurrenceIntervalMinutes"],
-        message: "recurrenceIntervalMinutes must be positive"
-      });
-    }
+interface RecurrenceFieldsInput {
+  startAt: string;
+  endAt: string;
+  recurrenceType: "once" | "finite" | "infinite";
+  recurrenceIntervalMinutes?: number | null;
+  recurrenceCount?: number | null;
+}
 
-    if (input.recurrenceType === "finite" && (input.recurrenceCount ?? 0) <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["recurrenceCount"],
-        message: "recurrenceCount must be positive"
-      });
-    }
-  });
+function validateRecurrenceFields(input: RecurrenceFieldsInput, ctx: z.RefinementCtx): void {
+  if (new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endAt"],
+      message: "endAt must be after startAt"
+    });
+  }
+
+  if (
+    (input.recurrenceType === "finite" || input.recurrenceType === "infinite") &&
+    (input.recurrenceIntervalMinutes ?? 0) <= 0
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recurrenceIntervalMinutes"],
+      message: "recurrenceIntervalMinutes must be positive"
+    });
+  }
+
+  if (input.recurrenceType === "finite" && (input.recurrenceCount ?? 0) <= 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recurrenceCount"],
+      message: "recurrenceCount must be positive"
+    });
+  }
+}
 interface TaskContainerDurationRow {
   start_at: string;
   end_at: string;
@@ -243,6 +227,10 @@ interface LeavePersonAdminRow {
   date: string;
   name: string;
   enabled: number;
+}
+
+interface IdRow {
+  id: string;
 }
 
 interface HolidayAdminRow {
@@ -328,6 +316,15 @@ function insertOperationItem(db: AppDatabase, containerId: string, input: z.infe
 function chineseDaysName(value: string): string {
   const [, chineseName] = value.split(",");
   return chineseName?.trim() || value.trim();
+}
+
+function hasDuplicateLeavePerson(db: AppDatabase, date: string, name: string, excludeId?: string): boolean {
+  const row = excludeId
+    ? db
+        .prepare<[string, string, string], IdRow>("select id from leave_people where date = ? and name = ? and id <> ?")
+        .get(date, name, excludeId)
+    : db.prepare<[string, string], IdRow>("select id from leave_people where date = ? and name = ?").get(date, name);
+  return row !== undefined;
 }
 
 export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, boardEvents: BoardEventBroadcaster): void {
@@ -561,18 +558,20 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
     const durationMinutes = durationMinutesForRange(startAt, endAt);
 
-    db.prepare(
-      `insert into task_containers
-       (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
-        recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
-       values (?, 'patrol', '巡视', '巡视安排', ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
-    ).run(id, startAt, endAt, now, now);
-    db.prepare(
-      `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
-        metadata_json, sort_order)
-       values (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, '{}', 0)`
-    ).run(itemId, id, durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other);
+    db.transaction(() => {
+      db.prepare(
+        `insert into task_containers
+         (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
+          recurrence_count, skip_weekends, skip_holidays, enabled, created_at, updated_at)
+         values (?, 'patrol', '巡视', '巡视安排', ?, ?, 'once', null, null, 0, 0, 1, ?, ?)`
+      ).run(id, startAt, endAt, now, now);
+      db.prepare(
+        `insert into task_items
+         (id, container_id, offset_minutes, duration_minutes, content, time_tag, target, personnel, vehicle, other,
+          metadata_json, sort_order)
+         values (?, ?, 0, ?, ?, ?, ?, ?, ?, ?, '{}', 0)`
+      ).run(itemId, id, durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other);
+    })();
     boardEvents.publish();
 
     return reply.code(201).send({ id, itemId });
@@ -588,16 +587,20 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     const now = new Date().toISOString();
     const { startAt, endAt } = timeRangeForDateTag(input.date, input.timeTag);
     const durationMinutes = durationMinutesForRange(startAt, endAt);
-    const containerResult = db
-      .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = 'patrol'")
-      .run(startAt, endAt, now, params.data.id);
-    if (containerResult.changes === 0) return reply.code(404).send({ error: "Not found" });
+    const containerResult = db.transaction(() => {
+      const result = db
+        .prepare("update task_containers set start_at = ?, end_at = ?, updated_at = ? where id = ? and type = 'patrol'")
+        .run(startAt, endAt, now, params.data.id);
+      if (result.changes === 0) return result;
 
-    db.prepare(
-      `update task_items
-       set offset_minutes = 0, duration_minutes = ?, content = ?, time_tag = ?, target = ?, personnel = ?, vehicle = ?, other = ?
-       where container_id = ?`
-    ).run(durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other, params.data.id);
+      db.prepare(
+        `update task_items
+         set offset_minutes = 0, duration_minutes = ?, content = ?, time_tag = ?, target = ?, personnel = ?, vehicle = ?, other = ?
+         where container_id = ?`
+      ).run(durationMinutes, input.target, input.timeTag, input.target, input.personnel, input.vehicle, input.other, params.data.id);
+      return result;
+    })();
+    if (containerResult.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
 
     return { id: params.data.id };
@@ -658,6 +661,9 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const input = validation.data;
     const id = nanoid();
+    if (hasDuplicateLeavePerson(db, input.date, input.name)) {
+      return reply.code(409).send({ error: "Duplicate leave person" });
+    }
 
     db.prepare("insert into leave_people (id, date, name) values (?, ?, ?)").run(id, input.date, input.name);
     boardEvents.publish();
@@ -672,6 +678,10 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!validation.success) return reply.code(400).send(validation.error);
 
     const input = validation.data;
+    if (hasDuplicateLeavePerson(db, input.date, input.name, params.data.id)) {
+      return reply.code(409).send({ error: "Duplicate leave person" });
+    }
+
     const result = db.prepare("update leave_people set date = ?, name = ? where id = ?").run(input.date, input.name, params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();

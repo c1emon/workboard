@@ -22,6 +22,16 @@ describe("database schema", () => {
     ]);
   });
 
+  it("enforces one leave person per date and name", () => {
+    const db = createTestDatabase();
+
+    db.prepare("insert into leave_people (id, date, name) values (?, ?, ?)").run("leave-1", "2026-05-01", "王五");
+
+    expect(() =>
+      db.prepare("insert into leave_people (id, date, name) values (?, ?, ?)").run("leave-2", "2026-05-01", "王五")
+    ).toThrow();
+  });
+
   it("creates the parent directory before opening a database file", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "workboard-db-"));
     const databasePath = join(tempRoot, "missing-parent", "workboard.sqlite");

@@ -14,6 +14,7 @@ export function migrate(db: AppDatabase): void {
   }
   ensureArrangementTimeColumns(db, "permit_arrangements");
   ensureArrangementTimeColumns(db, "other_arrangements");
+  ensureLeavePeopleUniqueIndex(db);
 }
 
 function ensureArrangementTimeColumns(db: AppDatabase, tableName: "permit_arrangements" | "other_arrangements"): void {
@@ -39,6 +40,18 @@ function ensureArrangementTimeColumns(db: AppDatabase, tableName: "permit_arrang
       end
     where start_at = '' or end_at = ''
   `);
+}
+
+function ensureLeavePeopleUniqueIndex(db: AppDatabase): void {
+  db.exec(`
+    delete from leave_people
+    where rowid not in (
+      select min(rowid)
+      from leave_people
+      group by date, name
+    )
+  `);
+  db.exec("create unique index if not exists leave_people_date_name_unique on leave_people (date, name)");
 }
 
 export function openDatabase(filename = "server/db/workboard.sqlite"): AppDatabase {

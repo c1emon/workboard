@@ -4,6 +4,37 @@ import { createTestDatabase } from "../src/db/database.js";
 import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
 describe("admin routes", () => {
+  it("disables request logging during tests", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    expect(app.log.level).toBeUndefined();
+
+    await app.close();
+  });
+
+  it("rejects overlong admin route ids", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const overlongId = "x".repeat(65);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/admin/leave-people/${overlongId}`
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error: "Invalid admin payload",
+      issues: [
+        {
+          path: ["id"]
+        }
+      ]
+    });
+  });
+
   it("creates arrangements and exposes today's board records", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
@@ -706,6 +737,77 @@ describe("admin routes", () => {
     expect(finalListResponse.json()).toEqual([]);
   });
 
+  it("rolls back patrol arrangement creation when child item persistence fails", async () => {
+    const db = createTestDatabase();
+    db.exec(`
+      create trigger fail_patrol_item_insert
+      before insert on task_items
+      begin
+        select raise(abort, 'child item insert failed');
+      end;
+    `);
+    const app = createApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-arrangements",
+      payload: {
+        date: "2026-05-01",
+        timeTag: "上午",
+        target: "1号线"
+      }
+    });
+    const orphanCount = db.prepare("select count(*) as count from task_containers where type = 'patrol'").get() as { count: number };
+    await app.close();
+
+    expect(response.statusCode).toBe(500);
+    expect(orphanCount.count).toBe(0);
+  });
+
+  it("rolls back patrol arrangement updates when child item persistence fails", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-arrangements",
+      payload: {
+        date: "2026-05-01",
+        timeTag: "上午",
+        target: "1号线"
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+    db.exec(`
+      create trigger fail_patrol_item_update
+      before update on task_items
+      begin
+        select raise(abort, 'child item update failed');
+      end;
+    `);
+
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/admin/patrol-arrangements/${id}`,
+      payload: {
+        date: "2026-05-02",
+        timeTag: "下午",
+        target: "2号线"
+      }
+    });
+    const container = db.prepare("select start_at, end_at from task_containers where id = ?").get(id) as {
+      start_at: string;
+      end_at: string;
+    };
+    await app.close();
+
+    expect(response.statusCode).toBe(500);
+    expect(container).toEqual({
+      start_at: "2026-05-01T08:00:00+08:00",
+      end_at: "2026-05-01T12:00:00+08:00"
+    });
+  });
+
   it("lists and manages leave people by date", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
@@ -753,6 +855,80 @@ describe("admin routes", () => {
     expect(disableResponse.statusCode).toBe(200);
     expect(deleteResponse.statusCode).toBe(204);
     expect(finalListResponse.json()).toEqual([]);
+  });
+
+  it("rejects duplicate leave people on the same date", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const date = "2026-05-01";
+
+    const firstResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/leave-people",
+      payload: { date, name: "王五" }
+    });
+    const duplicateResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/leave-people",
+      payload: { date, name: "王五" }
+    });
+    const listResponse = await app.inject({ method: "GET", url: `/api/admin/leave-people?date=${date}` });
+    await app.close();
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(duplicateResponse.statusCode).toBe(409);
+    expect(duplicateResponse.json()).toEqual({ error: "Duplicate leave person" });
+    expect(listResponse.json()).toEqual([
+      {
+        id: expect.any(String),
+        date,
+        name: "王五",
+        enabled: true
+      }
+    ]);
+  });
+
+  it("rejects updating leave people to duplicate date and name", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const date = "2026-05-01";
+
+    const firstResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/leave-people",
+      payload: { date, name: "王五" }
+    });
+    const secondResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/leave-people",
+      payload: { date, name: "赵六" }
+    });
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/leave-people/${secondResponse.json().id}`,
+      payload: { date, name: "王五" }
+    });
+    const listResponse = await app.inject({ method: "GET", url: `/api/admin/leave-people?date=${date}` });
+    await app.close();
+
+    expect(firstResponse.statusCode).toBe(201);
+    expect(secondResponse.statusCode).toBe(201);
+    expect(updateResponse.statusCode).toBe(409);
+    expect(updateResponse.json()).toEqual({ error: "Duplicate leave person" });
+    expect(listResponse.json()).toEqual([
+      {
+        id: firstResponse.json().id,
+        date,
+        name: "王五",
+        enabled: true
+      },
+      {
+        id: secondResponse.json().id,
+        date,
+        name: "赵六",
+        enabled: true
+      }
+    ]);
   });
 
   it("returns 400 for invalid timeTag payloads", async () => {

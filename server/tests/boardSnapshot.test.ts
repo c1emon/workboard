@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { createTestDatabase } from "../src/db/database.js";
 import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
 import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
 describe("board snapshot", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it("sorts permits by time tag", () => {
     const db = createTestDatabase();
     db.prepare(
@@ -106,6 +111,75 @@ describe("board snapshot", () => {
       'write:event: board:update\ndata: {"version":1}\n\n',
       'write:event: board:update\ndata: {"version":2}\n\n'
     ]);
+  });
+
+  it("sends heartbeat comments and unregisters streams on close or error", () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const handlers = new Map<string, () => void>();
+    const raw = {
+      writeHead: (statusCode: number, headers: Record<string, string>) => {
+        calls.push(`writeHead:${statusCode}:${headers["Content-Type"]}`);
+      },
+      write: (chunk: string) => {
+        calls.push(`write:${chunk}`);
+      },
+      on: (event: string, handler: () => void) => {
+        handlers.set(event, handler);
+      },
+      off: (event: string) => {
+        handlers.delete(event);
+      }
+    };
+    const boardEvents = createBoardEventBroadcaster(1, { heartbeatIntervalMs: 1000 });
+
+    boardEvents.register(raw);
+    vi.advanceTimersByTime(1000);
+    handlers.get("error")?.();
+    boardEvents.publish();
+
+    expect(calls).toEqual([
+      "writeHead:200:text/event-stream",
+      'write:event: board:update\ndata: {"version":1}\n\n',
+      "write:: heartbeat\n\n"
+    ]);
+    expect(handlers.has("close")).toBe(false);
+    expect(handlers.has("error")).toBe(false);
+  });
+
+  it("warns and falls back when task metadata JSON is invalid", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const db = createTestDatabase();
+    db.prepare(
+      `insert into task_containers
+       (id, type, name, start_at, end_at, recurrence_type, recurrence_interval_minutes, recurrence_count,
+        skip_weekends, skip_holidays, enabled, created_at, updated_at)
+       values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      "operation-1",
+      "operation",
+      "运行",
+      "2026-05-01T08:00:00+08:00",
+      "2026-05-01T09:00:00+08:00",
+      "once",
+      null,
+      null,
+      0,
+      0,
+      1,
+      "2026-05-01T08:00:00+08:00",
+      "2026-05-01T08:00:00+08:00"
+    );
+    db.prepare(
+      `insert into task_items
+       (id, container_id, offset_minutes, duration_minutes, content, metadata_json, sort_order)
+       values (?, ?, ?, ?, ?, ?, ?)`
+    ).run("item-1", "operation-1", 0, 60, "检查设备", "{not-json", 0);
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T08:30:00+08:00"));
+
+    expect(snapshot.operation.items[0].metadata).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith("Failed to parse task metadata JSON", { raw: "{not-json" });
   });
 });
 
