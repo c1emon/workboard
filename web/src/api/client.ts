@@ -45,6 +45,55 @@ export interface LeavePersonRecord {
   enabled: boolean;
 }
 
+export interface OperationPlanItemRecord {
+  id: string;
+  offsetMinutes: number;
+  durationMinutes: number;
+  content: string;
+  metadata: Record<string, unknown>;
+  sortOrder: number;
+}
+
+export interface OperationPlanRecord {
+  id: string;
+  name: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  recurrenceType: "once" | "finite" | "infinite";
+  recurrenceIntervalMinutes: number | null;
+  recurrenceCount: number | null;
+  skipWeekends: boolean;
+  skipHolidays: boolean;
+  enabled: boolean;
+  childTaskCount: number;
+  firstItemContent: string;
+}
+
+export interface OperationPlanDetailRecord extends OperationPlanRecord {
+  items: OperationPlanItemRecord[];
+}
+
+export interface OperationPlanInput {
+  name: string;
+  description: string;
+  startAt: string;
+  endAt: string;
+  recurrenceType: "once" | "finite" | "infinite";
+  recurrenceIntervalMinutes?: number | null;
+  recurrenceCount?: number | null;
+  skipWeekends: boolean;
+  skipHolidays: boolean;
+  item?: {
+    id?: string;
+    offsetMinutes: number;
+    durationMinutes: number;
+    content: string;
+    metadata: Record<string, unknown>;
+    sortOrder: number;
+  };
+}
+
 export interface BoardUpdateConnectionHandlers {
   onOpen: () => void;
   onError: () => void;
@@ -203,6 +252,32 @@ export async function createHoliday(input: { date: string; name: string }): Prom
   return postAdmin("holidays", input);
 }
 
+export async function fetchOperationPlans(date: string, scope: "date" | "all"): Promise<OperationPlanRecord[]> {
+  const params = new URLSearchParams({ scope });
+  if (scope === "date") params.set("date", date);
+  return fetchAdmin(`operation-plans?${params.toString()}`);
+}
+
+export async function fetchOperationPlan(id: string): Promise<OperationPlanDetailRecord> {
+  return fetchAdmin(`operation-plans/${encodeURIComponent(id)}`);
+}
+
+export async function createOperationPlan(input: OperationPlanInput): Promise<{ id: string }> {
+  return postAdmin("operation-plans", input);
+}
+
+export async function updateOperationPlan(id: string, input: OperationPlanInput): Promise<void> {
+  return putAdmin(`operation-plans/${encodeURIComponent(id)}`, input);
+}
+
+export async function updateOperationPlanEnabled(id: string, enabled: boolean): Promise<void> {
+  return patchAdmin(`operation-plans/${encodeURIComponent(id)}/enabled`, { enabled });
+}
+
+export async function deleteOperationPlan(id: string): Promise<void> {
+  return deleteAdmin(`operation-plans/${encodeURIComponent(id)}`);
+}
+
 export async function createTaskContainer(input: {
   type: "operation" | "patrol";
   name: string;
@@ -232,6 +307,10 @@ export async function createTaskItem(input: {
   sortOrder: number;
 }): Promise<{ id: string }> {
   return postAdmin("task-items", input);
+}
+
+export async function deleteTaskItem(id: string): Promise<void> {
+  return deleteAdmin(`task-items/${encodeURIComponent(id)}`);
 }
 
 export function subscribeBoardUpdates(onUpdate: () => void, handlers?: BoardUpdateConnectionHandlers): EventSource {

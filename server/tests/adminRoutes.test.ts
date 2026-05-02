@@ -118,6 +118,262 @@ describe("admin routes", () => {
     });
   });
 
+  it("lists operation plans by date or all scope and returns editable details", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "倒闸操作",
+        description: "主线切换",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T20:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: {
+          offsetMinutes: 0,
+          durationMinutes: 120,
+          content: "A、B 操作",
+          metadata: { crew: "A" },
+          sortOrder: 0
+        }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const dateListResponse = await app.inject({ method: "GET", url: "/api/admin/operation-plans?date=2026-05-01&scope=date" });
+    const emptyDateListResponse = await app.inject({
+      method: "GET",
+      url: "/api/admin/operation-plans?date=2026-05-02&scope=date"
+    });
+    const allListResponse = await app.inject({ method: "GET", url: "/api/admin/operation-plans?scope=all" });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(dateListResponse.statusCode).toBe(200);
+    expect(dateListResponse.json()).toEqual([
+      expect.objectContaining({
+        id,
+        name: "倒闸操作",
+        childTaskCount: 1,
+        firstItemContent: "A、B 操作",
+        enabled: true
+      })
+    ]);
+    expect(emptyDateListResponse.json()).toEqual([]);
+    expect(allListResponse.json()).toEqual([expect.objectContaining({ id, name: "倒闸操作" })]);
+    expect(detailResponse.json()).toMatchObject({
+      id,
+      name: "倒闸操作",
+      items: [{ content: "A、B 操作", offsetMinutes: 0, durationMinutes: 120, metadata: { crew: "A" } }]
+    });
+  });
+
+  it("updates, disables, and deletes operation plans through operation endpoints", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "操作计划",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T10:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 30, durationMinutes: 60, content: "检查闭锁", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}`,
+      payload: {
+        name: "更新计划",
+        description: "已调整",
+        startAt: "2026-05-01T09:00:00+08:00",
+        endAt: "2026-05-01T11:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: true,
+        skipHolidays: false,
+        item: { offsetMinutes: 15, durationMinutes: 45, content: "更新检查", metadata: { done: true }, sortOrder: 1 }
+      }
+    });
+    const disableResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/admin/operation-plans/${id}/enabled`,
+      payload: { enabled: false }
+    });
+    const listResponse = await app.inject({ method: "GET", url: "/api/admin/operation-plans?scope=all" });
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/operation-plans/${id}` });
+    const finalListResponse = await app.inject({ method: "GET", url: "/api/admin/operation-plans?scope=all" });
+    await app.close();
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(disableResponse.statusCode).toBe(200);
+    expect(listResponse.json()).toEqual([
+      expect.objectContaining({ id, name: "更新计划", firstItemContent: "更新检查", enabled: false, skipWeekends: true })
+    ]);
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(finalListResponse.json()).toEqual([]);
+  });
+
+  it("updates the selected operation child task when item id is provided", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "操作计划",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+    const secondItemResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/task-items",
+      payload: {
+        containerId: id,
+        offsetMinutes: 120,
+        durationMinutes: 60,
+        content: "第二项",
+        metadata: {},
+        sortOrder: 1
+      }
+    });
+    const { id: secondItemId } = secondItemResponse.json() as { id: string };
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}`,
+      payload: {
+        name: "操作计划",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { id: secondItemId, offsetMinutes: 150, durationMinutes: 45, content: "第二项更新", metadata: {}, sortOrder: 1 }
+      }
+    });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      items: [
+        { content: "第一项", offsetMinutes: 0 },
+        { id: secondItemId, content: "第二项更新", offsetMinutes: 150, durationMinutes: 45 }
+      ]
+    });
+  });
+
+  it("deletes task items through the task item endpoint", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "操作计划",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+    const secondItemResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/task-items",
+      payload: {
+        containerId: id,
+        offsetMinutes: 120,
+        durationMinutes: 60,
+        content: "第二项",
+        metadata: {},
+        sortOrder: 1
+      }
+    });
+    const { id: secondItemId } = secondItemResponse.json() as { id: string };
+
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/task-items/${secondItemId}` });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    const missingDeleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/task-items/${secondItemId}` });
+    await app.close();
+
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(detailResponse.json()).toMatchObject({
+      items: [{ content: "第一项" }]
+    });
+    expect(missingDeleteResponse.statusCode).toBe(404);
+  });
+
+  it("updates operation plan fields without touching child tasks when item is omitted", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "操作计划",
+        description: "原说明",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}`,
+      payload: {
+        name: "计划本身更新",
+        description: "新说明",
+        startAt: "2026-05-01T09:00:00+08:00",
+        endAt: "2026-05-01T13:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false
+      }
+    });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      name: "计划本身更新",
+      description: "新说明",
+      items: [{ content: "第一项", offsetMinutes: 0, durationMinutes: 60 }]
+    });
+  });
+
   it("creates patrol task plans and exposes today's patrol rows", async () => {
     const db = createTestDatabase();
     const app = createApp(db);

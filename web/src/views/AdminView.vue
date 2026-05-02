@@ -168,59 +168,51 @@
           </div>
         </section>
 
-        <form v-else-if="activeKey === 'operation'" class="admin-form" @submit.prevent="saveOperation">
-          <div class="form-heading">
-            <h2>操作计划</h2>
-            <p>主任务固定为“操作”，子任务代表具体时间段。</p>
+        <section v-else-if="activeKey === 'operation'" class="list-panel operation-panel">
+          <ListHeader title="操作计划" />
+          <DateToolbar
+            v-model="selectedDate"
+            v-model:show-all="operationShowAll"
+            :allow-show-all="true"
+            :disabled="operationShowAll"
+            :today="today"
+            :yesterday="yesterday"
+            add-label="新增计划"
+            @add="openOperationModal()"
+            @today="jumpToToday"
+            @yesterday="jumpToYesterday"
+          />
+          <div class="table-shell">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>说明</th>
+                  <th>类型</th>
+                  <th>子任务数</th>
+                  <th class="actions-column">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="record in operationRows" :key="record.id" :class="{ disabled: !record.enabled }">
+                  <td>{{ record.name }}</td>
+                  <td>{{ record.description }}</td>
+                  <td>{{ recurrenceText(record) }}</td>
+                  <td>{{ record.childTaskCount }}</td>
+                  <td class="row-actions">
+                    <button type="button" @click="openOperationModal(record, 'detail')">详情</button>
+                    <button type="button" @click="toggleOperation(record)">{{ record.enabled ? "禁用" : "启用" }}</button>
+                    <button type="button" @click="openOperationModal(record, 'edit')">修改</button>
+                    <button type="button" class="danger" @click="removeOperation(record.id)">删除</button>
+                  </td>
+                </tr>
+                <tr v-if="operationRows.length === 0">
+                  <td class="empty-cell" colspan="5">{{ operationShowAll ? "暂无操作计划" : "当前日期暂无操作计划" }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <div class="form-grid">
-            <label>
-              开始时间
-              <input v-model="operationForm.startAt" required type="datetime-local" />
-            </label>
-            <label>
-              结束时间
-              <input v-model="operationForm.endAt" required type="datetime-local" />
-            </label>
-            <label>
-              循环类型
-              <select v-model="operationForm.recurrenceType">
-                <option value="once">一次性</option>
-                <option value="finite">有限循环</option>
-                <option value="infinite">无限循环</option>
-              </select>
-            </label>
-            <label>
-              循环间隔（分钟）
-              <input v-model.number="operationForm.recurrenceIntervalMinutes" min="1" type="number" />
-            </label>
-            <label>
-              循环次数
-              <input v-model.number="operationForm.recurrenceCount" min="1" type="number" />
-            </label>
-            <label>
-              子任务 offset（分钟）
-              <input v-model.number="operationForm.offsetMinutes" min="0" required type="number" />
-            </label>
-            <label>
-              子任务时长（分钟）
-              <input v-model.number="operationForm.durationMinutes" min="1" required type="number" />
-            </label>
-            <label>
-              展示内容
-              <input v-model="operationForm.content" placeholder="A、B 操作" required />
-            </label>
-          </div>
-          <div class="checkbox-row">
-            <label><input v-model="operationForm.skipWeekends" type="checkbox" /> 跳过周末</label>
-            <label><input v-model="operationForm.skipHolidays" type="checkbox" /> 跳过节假日</label>
-          </div>
-          <label>
-            子任务 JSON
-            <textarea v-model="operationForm.metadataJson" rows="5"></textarea>
-          </label>
-          <button class="primary-action" type="submit">保存操作</button>
-        </form>
+        </section>
 
         <section v-else-if="activeKey === 'leave'" class="list-panel">
           <ListHeader title="休假列表" />
@@ -307,29 +299,154 @@
         </div>
       </form>
     </div>
+
+    <div v-if="operationModalOpen" class="modal-backdrop" role="presentation" @click.self="closeOperationModal">
+      <form class="modal-form operation-modal" @submit.prevent="saveOperation">
+        <div class="modal-heading">
+          <h2>{{ operationModalTitle }}</h2>
+          <button type="button" aria-label="关闭弹窗" @click="closeOperationModal">×</button>
+        </div>
+        <div class="form-grid">
+          <label>计划名称<input v-model="operationForm.name" name="operationName" required :disabled="operationReadOnly" /></label>
+          <label>说明<input v-model="operationForm.description" :disabled="operationReadOnly" /></label>
+          <div class="operation-schedule-row">
+            <label>
+              循环类型
+              <select v-model="operationForm.recurrenceType" :disabled="operationReadOnly">
+                <option value="once">一次性</option>
+                <option value="finite">有限循环</option>
+                <option value="infinite">无限循环</option>
+              </select>
+            </label>
+            <label>开始时间<input v-model="operationForm.startAt" required type="datetime-local" :disabled="operationReadOnly" /></label>
+          </div>
+          <label v-if="operationHasEndAt">结束时间<input :value="operationComputedEndAt" name="operationEndAt" type="datetime-local" disabled /></label>
+          <label v-if="operationReadOnly && operationForm.recurrenceType !== 'once'">
+            循环间隔（分钟）
+            <input :value="operationDerivedRecurrenceIntervalMinutes" name="operationRecurrenceInterval" type="number" disabled />
+          </label>
+          <label v-if="operationReadOnly && operationForm.recurrenceType === 'finite'">
+            循环次数
+            <input :value="operationDerivedRecurrenceCount" name="operationRecurrenceCount" type="number" disabled />
+          </label>
+        </div>
+        <div class="checkbox-row">
+          <label><input v-model="operationForm.skipWeekends" type="checkbox" :disabled="operationReadOnly" /> 跳过周末</label>
+          <label><input v-model="operationForm.skipHolidays" type="checkbox" :disabled="operationReadOnly" /> 跳过节假日</label>
+        </div>
+        <OperationTaskTimeline
+          v-if="operationModalMode !== 'create'"
+          :allow-add="!operationReadOnly && !!operationRecordId"
+          :duration-minutes="operationDurationMinutes"
+          :items="operationDetailItems"
+          :readonly="operationReadOnly"
+          :selected-item-id="operationSelectedItemId"
+          :start-at="operationForm.startAt"
+          @add="openOperationItemCreate"
+          @select="selectOperationItem"
+        />
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" @click="closeOperationModal">{{ operationReadOnly ? "关闭" : "取消" }}</button>
+          <button v-if="!operationReadOnly" type="submit" class="primary-action">保存</button>
+        </div>
+      </form>
+    </div>
+
+    <div v-if="operationDetailLoading" class="modal-backdrop operation-modal-loading" role="status" aria-live="polite">
+      <div class="loading-card">
+        <span class="loading-spinner" aria-hidden="true"></span>
+        <strong>计划加载中</strong>
+      </div>
+    </div>
+
+    <div v-if="operationItemModalOpen" class="modal-backdrop item-modal-backdrop" role="presentation" @click.self="closeOperationItemModal">
+      <form class="modal-form operation-item-modal" @submit.prevent="saveOperationItem">
+        <div class="modal-heading">
+          <h2>{{ operationItemModalTitle }}</h2>
+          <button type="button" aria-label="关闭子任务弹窗" @click="closeOperationItemModal">×</button>
+        </div>
+        <div class="form-grid">
+          <label>
+            开始时间点 (分)
+            <input
+              v-model.number="operationItemForm.offsetMinutes"
+              name="operationItemOffset"
+              min="0"
+              required
+              type="number"
+              :disabled="operationReadOnly"
+            />
+          </label>
+          <label>
+            任务时长 (分)
+            <input
+              v-model.number="operationItemForm.durationMinutes"
+              name="operationItemDuration"
+              min="1"
+              required
+              type="number"
+              :disabled="operationReadOnly"
+            />
+          </label>
+          <label class="wide-field">
+            任务内容
+            <input
+              v-model="operationItemForm.content"
+              name="operationItemContent"
+              placeholder="A、B 操作"
+              required
+              :disabled="operationReadOnly"
+            />
+          </label>
+        </div>
+        <label>
+          JSON
+          <textarea v-model="operationItemForm.metadataJson" name="operationItemMetadata" rows="5" :disabled="operationReadOnly"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button
+            v-if="!operationReadOnly && operationItemModalMode === 'edit'"
+            type="button"
+            class="danger-action operation-item-delete"
+            @click="removeOperationItem"
+          >
+            删除
+          </button>
+          <button type="button" class="secondary-action" @click="closeOperationItemModal">{{ operationReadOnly ? "关闭" : "取消" }}</button>
+          <button v-if="!operationReadOnly" type="submit" class="primary-action">保存</button>
+        </div>
+      </form>
+    </div>
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, defineComponent, h, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
+import OperationTaskTimeline from "../components/OperationTaskTimeline.vue";
 import {
   createHoliday,
   createLeavePerson,
+  createOperationPlan,
   createOtherArrangement,
   createPatrolArrangement,
   createPermit,
-  createTaskContainer,
   createTaskItem,
   deleteLeavePerson,
+  deleteOperationPlan,
   deleteOtherArrangement,
   deletePatrolArrangement,
   deletePermitArrangement,
+  deleteTaskItem,
   fetchLeavePeople,
+  fetchOperationPlan,
+  fetchOperationPlans,
   fetchOtherArrangements,
   fetchPatrolArrangements,
   fetchPermitArrangements,
   updateLeavePerson,
+  updateOperationPlan,
+  updateOperationPlanEnabled,
   updateOtherArrangement,
   updateOtherArrangementEnabled,
   updatePatrolArrangement,
@@ -337,6 +454,9 @@ import {
   updatePermitArrangement,
   updatePermitArrangementEnabled,
   type LeavePersonRecord,
+  type OperationPlanItemRecord,
+  type OperationPlanInput,
+  type OperationPlanRecord,
   type OtherArrangementRecord,
   type PatrolArrangementRecord,
   type PermitArrangementRecord
@@ -346,6 +466,8 @@ import type { TimeTag } from "../api/types";
 type SectionKey = "operation" | "permit" | "patrol" | "other" | "leave" | "holiday";
 type RecurrenceType = "once" | "finite" | "infinite";
 type ModalKind = "permit" | "patrol" | "other" | "leave";
+type OperationModalMode = "create" | "edit" | "detail";
+type OperationItemModalMode = "create" | "edit";
 
 const TimeTagSelect = defineComponent({
   props: {
@@ -382,9 +504,12 @@ const DateToolbar = defineComponent({
     modelValue: { type: String, required: true },
     today: { type: String, required: true },
     yesterday: { type: String, required: true },
-    addLabel: { type: String, required: true }
+    addLabel: { type: String, required: true },
+    disabled: { type: Boolean, default: false },
+    allowShowAll: { type: Boolean, default: false },
+    showAll: { type: Boolean, default: false }
   },
-  emits: ["update:modelValue", "today", "yesterday", "add"],
+  emits: ["update:modelValue", "update:showAll", "today", "yesterday", "add"],
   setup(props, { emit }) {
     return () =>
       h("div", { class: "date-toolbar" }, [
@@ -394,6 +519,7 @@ const DateToolbar = defineComponent({
             h("input", {
               type: "date",
               value: props.modelValue,
+              disabled: props.disabled,
               onInput: (event: Event) => emit("update:modelValue", (event.target as HTMLInputElement).value)
             })
           ]),
@@ -402,6 +528,7 @@ const DateToolbar = defineComponent({
             {
               class: "yesterday-button secondary-action",
               type: "button",
+              disabled: props.disabled,
               onClick: () => emit("yesterday")
             },
             "昨日"
@@ -411,10 +538,22 @@ const DateToolbar = defineComponent({
             {
               class: "today-button secondary-action",
               type: "button",
+              disabled: props.disabled,
               onClick: () => emit("today")
             },
             "今天"
-          )
+          ),
+          props.allowShowAll
+            ? h("label", { class: "show-all-field" }, [
+                h("input", {
+                  name: "operationShowAll",
+                  type: "checkbox",
+                  checked: props.showAll,
+                  onChange: (event: Event) => emit("update:showAll", (event.target as HTMLInputElement).checked)
+                }),
+                h("span", "显示全部")
+              ])
+            : null
         ]),
         h(
           "button",
@@ -442,6 +581,7 @@ const sections: Array<{ key: SectionKey; label: string; description: string }> =
 
 const today = toChinaDate();
 const yesterday = toChinaDate(new Date(Date.now() - 24 * 60 * 60_000));
+const OPERATION_DETAIL_LOADING_MIN_MS = 300;
 const activeKey = ref<SectionKey>("operation");
 const selectedDate = ref(today);
 const statusText = ref("待保存");
@@ -449,23 +589,63 @@ const permitRows = ref<PermitArrangementRecord[]>([]);
 const patrolRows = ref<PatrolArrangementRecord[]>([]);
 const otherRows = ref<OtherArrangementRecord[]>([]);
 const leaveRows = ref<LeavePersonRecord[]>([]);
+const operationRows = ref<OperationPlanRecord[]>([]);
+const operationDetailItems = ref<OperationPlanItemRecord[]>([]);
+const operationSelectedItemId = ref<string | null>(null);
+const operationShowAll = ref(false);
 const modalKind = ref<ModalKind | null>(null);
 const modalRecordId = ref<string | null>(null);
+const operationModalOpen = ref(false);
+const operationModalMode = ref<OperationModalMode>("create");
+const operationRecordId = ref<string | null>(null);
+const operationItemModalOpen = ref(false);
+const operationItemModalMode = ref<OperationItemModalMode>("edit");
+const operationDetailLoading = ref(false);
 const activeSection = computed(() => sections.find((section) => section.key === activeKey.value) ?? sections[0]);
 const modalTitle = computed(() => `${modalRecordId.value ? "修改" : "新增"}${activeSection.value.label}`);
+const operationReadOnly = computed(() => operationModalMode.value === "detail");
+const operationModalTitle = computed(() => {
+  if (operationModalMode.value === "detail") return "详情计划";
+  return `${operationModalMode.value === "edit" ? "修改" : "新增"}计划`;
+});
+const operationItemModalTitle = computed(() => {
+  if (operationReadOnly.value) return "子任务详情";
+  return operationItemModalMode.value === "create" ? "新增子任务" : "编辑子任务";
+});
+const operationStoredDurationMinutes = computed(() => {
+  const start = new Date(normalizeDateTime(operationForm.startAt)).getTime();
+  const end = new Date(normalizeDateTime(operationForm.endAt)).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return 1;
+  return Math.max(1, Math.floor((end - start) / 60_000));
+});
+const operationCycleDurationMinutes = computed(() => {
+  return cycleDurationForItems(operationDetailItems.value);
+});
+const operationDurationMinutes = computed(() => operationCycleDurationMinutes.value);
+const operationHasEndAt = computed(() => operationForm.recurrenceType !== "infinite");
+const operationDerivedRecurrenceIntervalMinutes = computed(() => operationCycleDurationMinutes.value);
+const operationDerivedRecurrenceCount = computed(() => recurrenceCountForItems(operationDetailItems.value));
+const operationComputedEndAt = computed(() => computedEndAtForItems(operationDetailItems.value));
 
 const operationForm = reactive({
+  name: "操作",
+  description: "操作安排",
   startAt: `${today}T08:00`,
   endAt: `${today}T20:00`,
   recurrenceType: "once" as RecurrenceType,
   recurrenceIntervalMinutes: 1440,
   recurrenceCount: 7,
   skipWeekends: false,
-  skipHolidays: false,
+  skipHolidays: false
+});
+
+const operationItemForm = reactive({
+  id: "",
   offsetMinutes: 0,
-  durationMinutes: 480,
-  content: "A、B 操作",
-  metadataJson: "{}"
+  durationMinutes: 60,
+  content: "",
+  metadataJson: "{}",
+  sortOrder: 0
 });
 
 const holidayForm = reactive({ date: today, name: "" });
@@ -479,7 +659,7 @@ const modalForm = reactive({
 });
 
 onMounted(loadActiveList);
-watch([activeKey, selectedDate], loadActiveList);
+watch([activeKey, selectedDate, operationShowAll], loadActiveList);
 
 function toChinaDate(date = new Date()): string {
   const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
@@ -490,15 +670,57 @@ function normalizeDateTime(value: string): string {
   return value.length === 16 ? `${value}:00+08:00` : value;
 }
 
-function recurrencePayload(form: {
-  recurrenceType: RecurrenceType;
-  recurrenceIntervalMinutes: number;
-  recurrenceCount: number;
-}) {
+function toDateTimeLocal(value: string): string {
+  return value.slice(0, 16);
+}
+
+function addMinutesToDateTimeLocal(value: string, minutes: number): string {
+  const start = new Date(normalizeDateTime(value)).getTime();
+  if (Number.isNaN(start)) return value;
+  const shifted = new Date(start + Math.max(1, Math.round(minutes)) * 60_000 + 8 * 60 * 60_000);
+  return shifted.toISOString().slice(0, 16);
+}
+
+function waitForOperationDetailLoadingMinimum(startedAt: number): Promise<void> {
+  const elapsed = Date.now() - startedAt;
+  const remaining = OPERATION_DETAIL_LOADING_MIN_MS - elapsed;
+  if (remaining <= 0) return Promise.resolve();
+  return new Promise((resolve) => globalThis.setTimeout(resolve, remaining));
+}
+
+function cycleDurationForItems(items: OperationPlanItemRecord[]): number {
+  const latestItemEnd = items.reduce((latest, item) => Math.max(latest, item.offsetMinutes + item.durationMinutes), 0);
+  return Math.max(1, latestItemEnd || operationStoredDurationMinutes.value);
+}
+
+function recurrenceCountForItems(items: OperationPlanItemRecord[]): number {
+  return Math.max(1, Math.ceil(operationStoredDurationMinutes.value / cycleDurationForItems(items)));
+}
+
+function computedEndAtForItems(items: OperationPlanItemRecord[]): string {
+  const cycleDuration = cycleDurationForItems(items);
+  const totalDuration = operationForm.recurrenceType === "finite" ? cycleDuration * recurrenceCountForItems(items) : cycleDuration;
+  return addMinutesToDateTimeLocal(operationForm.startAt, totalDuration);
+}
+
+function recurrencePayloadForItems(form: { recurrenceType: RecurrenceType }, items: OperationPlanItemRecord[]) {
   return {
     recurrenceType: form.recurrenceType,
-    recurrenceIntervalMinutes: form.recurrenceType === "once" ? null : Number(form.recurrenceIntervalMinutes),
-    recurrenceCount: form.recurrenceType === "finite" ? Number(form.recurrenceCount) : null
+    recurrenceIntervalMinutes: form.recurrenceType === "once" ? null : cycleDurationForItems(items),
+    recurrenceCount: form.recurrenceType === "finite" ? recurrenceCountForItems(items) : null
+  };
+}
+
+function operationPayloadForItems(items: OperationPlanItemRecord[], item?: OperationPlanInput["item"]): OperationPlanInput {
+  return {
+    name: operationForm.name,
+    description: operationForm.description,
+    startAt: normalizeDateTime(operationForm.startAt),
+    endAt: normalizeDateTime(computedEndAtForItems(items)),
+    ...recurrencePayloadForItems(operationForm, items),
+    skipWeekends: operationForm.skipWeekends,
+    skipHolidays: operationForm.skipHolidays,
+    ...(item ? { item } : {})
   };
 }
 
@@ -521,7 +743,11 @@ async function withStatus(action: () => Promise<void>): Promise<void> {
 }
 
 async function loadActiveList(): Promise<void> {
-  if (activeKey.value === "permit") {
+  if (activeKey.value === "operation") {
+    await withStatus(async () => {
+      operationRows.value = await fetchOperationPlans(selectedDate.value, operationShowAll.value ? "all" : "date");
+    });
+  } else if (activeKey.value === "permit") {
     await withStatus(async () => {
       permitRows.value = await fetchPermitArrangements(selectedDate.value);
     });
@@ -553,6 +779,16 @@ function shiftDate(value: string, days: number): string {
   const date = new Date(Date.UTC(year, month - 1, day));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function formatDateTimeRange(startAt: string, endAt: string): string {
+  return `${startAt.slice(0, 16).replace("T", " ")} - ${endAt.slice(0, 16).replace("T", " ")}`;
+}
+
+function recurrenceText(record: OperationPlanRecord): string {
+  if (record.recurrenceType === "once") return "一次性";
+  if (record.recurrenceType === "finite") return "有限循环";
+  return "无限循环";
 }
 
 function resetModal(kind: ModalKind, recordId: string | null): void {
@@ -610,9 +846,110 @@ function openLeaveModal(record?: LeavePersonRecord): void {
   }
 }
 
+function resetOperationForm(): void {
+  operationForm.name = "操作";
+  operationForm.description = "操作安排";
+  operationForm.startAt = `${selectedDate.value || today}T08:00`;
+  operationForm.endAt = `${selectedDate.value || today}T20:00`;
+  operationForm.recurrenceType = "once";
+  operationForm.recurrenceIntervalMinutes = 1440;
+  operationForm.recurrenceCount = 7;
+  operationForm.skipWeekends = false;
+  operationForm.skipHolidays = false;
+  operationDetailItems.value = [];
+  operationSelectedItemId.value = null;
+  resetOperationItemForm();
+}
+
+function resetOperationItemForm(): void {
+  operationItemModalOpen.value = false;
+  operationItemModalMode.value = "edit";
+  operationItemForm.id = "";
+  operationItemForm.offsetMinutes = 0;
+  operationItemForm.durationMinutes = 60;
+  operationItemForm.content = "";
+  operationItemForm.metadataJson = "{}";
+  operationItemForm.sortOrder = 0;
+}
+
+async function openOperationModal(record?: OperationPlanRecord, mode?: OperationModalMode): Promise<void> {
+  resetOperationForm();
+  operationRecordId.value = record?.id ?? null;
+  operationModalMode.value = mode ?? (record ? "edit" : "create");
+  if (!record) {
+    operationModalOpen.value = true;
+    return;
+  }
+
+  operationDetailLoading.value = true;
+  const loadingStartedAt = Date.now();
+  await withStatus(async () => {
+    let shouldOpenModal = false;
+    try {
+      const detail = await fetchOperationPlan(record.id);
+      const firstItem = detail.items[0];
+      operationDetailItems.value = detail.items;
+      operationSelectedItemId.value = firstItem?.id ?? null;
+      operationForm.name = detail.name;
+      operationForm.description = detail.description;
+      operationForm.startAt = toDateTimeLocal(detail.startAt);
+      operationForm.endAt = toDateTimeLocal(detail.endAt);
+      operationForm.recurrenceType = detail.recurrenceType;
+      operationForm.recurrenceIntervalMinutes = detail.recurrenceIntervalMinutes ?? 1440;
+      operationForm.recurrenceCount = detail.recurrenceCount ?? 7;
+      operationForm.skipWeekends = detail.skipWeekends;
+      operationForm.skipHolidays = detail.skipHolidays;
+      shouldOpenModal = true;
+    } finally {
+      await waitForOperationDetailLoadingMinimum(loadingStartedAt);
+      operationDetailLoading.value = false;
+      if (shouldOpenModal) operationModalOpen.value = true;
+    }
+  });
+}
+
+function selectOperationItem(item: OperationPlanItemRecord): void {
+  operationSelectedItemId.value = item.id;
+  operationItemModalMode.value = "edit";
+  operationItemForm.id = item.id;
+  operationItemForm.offsetMinutes = item.offsetMinutes;
+  operationItemForm.durationMinutes = item.durationMinutes;
+  operationItemForm.content = item.content;
+  operationItemForm.metadataJson = JSON.stringify(item.metadata, null, 2);
+  operationItemForm.sortOrder = item.sortOrder;
+  operationItemModalOpen.value = true;
+}
+
+function openOperationItemCreate(): void {
+  if (operationReadOnly.value || !operationRecordId.value) return;
+  operationSelectedItemId.value = null;
+  operationItemModalMode.value = "create";
+  operationItemForm.id = "";
+  operationItemForm.offsetMinutes = 0;
+  operationItemForm.durationMinutes = 60;
+  operationItemForm.content = "";
+  operationItemForm.metadataJson = "{}";
+  operationItemForm.sortOrder = operationDetailItems.value.length;
+  operationItemModalOpen.value = true;
+}
+
 function closeModal(): void {
   modalKind.value = null;
   modalRecordId.value = null;
+}
+
+function closeOperationModal(): void {
+  operationModalOpen.value = false;
+  operationModalMode.value = "create";
+  operationRecordId.value = null;
+  operationDetailLoading.value = false;
+  operationDetailItems.value = [];
+  operationSelectedItemId.value = null;
+  resetOperationItemForm();
+}
+
+function closeOperationItemModal(): void {
+  operationItemModalOpen.value = false;
 }
 
 async function saveModal(): Promise<void> {
@@ -686,6 +1023,13 @@ async function toggleOther(record: OtherArrangementRecord): Promise<void> {
   });
 }
 
+async function toggleOperation(record: OperationPlanRecord): Promise<void> {
+  await withStatus(async () => {
+    await updateOperationPlanEnabled(record.id, !record.enabled);
+    await loadActiveList();
+  });
+}
+
 async function removePermit(id: string): Promise<void> {
   if (!window.confirm("确认删除这条许可吗？")) return;
   await withStatus(async () => {
@@ -718,30 +1062,83 @@ async function removeLeave(id: string): Promise<void> {
   });
 }
 
-async function saveOperation(): Promise<void> {
+async function removeOperation(id: string): Promise<void> {
+  if (!window.confirm("确认删除这个操作计划吗？")) return;
   await withStatus(async () => {
-    const container = await createTaskContainer({
-      type: "operation",
-      name: "操作",
-      description: "操作安排",
-      startAt: normalizeDateTime(operationForm.startAt),
-      endAt: normalizeDateTime(operationForm.endAt),
-      ...recurrencePayload(operationForm),
-      skipWeekends: operationForm.skipWeekends,
-      skipHolidays: operationForm.skipHolidays
-    });
-    await createTaskItem({
-      containerId: container.id,
-      offsetMinutes: Number(operationForm.offsetMinutes),
-      durationMinutes: Number(operationForm.durationMinutes),
-      content: operationForm.content,
-      target: "",
-      personnel: "",
-      vehicle: "",
-      other: "",
-      metadata: parseMetadata(operationForm.metadataJson),
-      sortOrder: 0
-    });
+    await deleteOperationPlan(id);
+    await loadActiveList();
+  });
+}
+
+async function saveOperation(): Promise<void> {
+  if (operationReadOnly.value) return;
+  await withStatus(async () => {
+    const payload = operationPayloadForItems(operationDetailItems.value);
+    if (operationRecordId.value) await updateOperationPlan(operationRecordId.value, payload);
+    else await createOperationPlan(payload);
+    closeOperationModal();
+    await loadActiveList();
+  });
+}
+
+async function saveOperationItem(): Promise<void> {
+  if (operationReadOnly.value || !operationRecordId.value) return;
+  const recordId = operationRecordId.value;
+  await withStatus(async () => {
+    const itemMetadata = parseMetadata(operationItemForm.metadataJson);
+    const itemPayload = {
+      offsetMinutes: Number(operationItemForm.offsetMinutes),
+      durationMinutes: Number(operationItemForm.durationMinutes),
+      content: operationItemForm.content,
+      metadata: itemMetadata,
+      sortOrder: operationItemForm.sortOrder
+    };
+    if (operationItemModalMode.value === "create") {
+      const created = await createTaskItem({
+        containerId: recordId,
+        ...itemPayload,
+        target: "",
+        personnel: "",
+        vehicle: "",
+        other: ""
+      });
+      const newItem = { id: created.id, ...itemPayload };
+      const nextItems = [...operationDetailItems.value, newItem].sort((a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes);
+      await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
+      operationDetailItems.value = nextItems;
+      closeOperationItemModal();
+      await loadActiveList();
+      return;
+    }
+
+    if (!operationItemForm.id) return;
+    const updatedItem = {
+      id: operationItemForm.id,
+      ...itemPayload
+    };
+    const nextItems = operationDetailItems.value.map((item) => (item.id === operationItemForm.id ? { ...item, ...updatedItem } : item));
+    const payload = operationPayloadForItems(nextItems, updatedItem);
+    await updateOperationPlan(recordId, payload);
+    operationDetailItems.value = nextItems;
+    closeOperationItemModal();
+    await loadActiveList();
+  });
+}
+
+async function removeOperationItem(): Promise<void> {
+  if (operationReadOnly.value || operationItemModalMode.value !== "edit" || !operationRecordId.value || !operationItemForm.id) return;
+  if (!window.confirm("确认删除这个子任务吗？")) return;
+
+  const recordId = operationRecordId.value;
+  const itemId = operationItemForm.id;
+  await withStatus(async () => {
+    await deleteTaskItem(itemId);
+    const nextItems = operationDetailItems.value.filter((item) => item.id !== itemId);
+    await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
+    operationDetailItems.value = nextItems;
+    operationSelectedItemId.value = null;
+    closeOperationItemModal();
+    await loadActiveList();
   });
 }
 
@@ -784,6 +1181,7 @@ async function saveHoliday(): Promise<void> {
 .board-link,
 .primary-action,
 .secondary-action,
+.danger-action,
 .icon-action,
 .row-actions button {
   border: 1px solid #1e293b;
@@ -940,6 +1338,22 @@ async function saveHoliday(): Promise<void> {
   min-height: 32px;
 }
 
+.date-toolbar :deep(.show-all-field) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: #334155;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.date-toolbar :deep(.show-all-field input) {
+  width: 15px;
+  height: 15px;
+  min-height: 15px;
+}
+
 .date-toolbar :deep(.date-field input) {
   width: 170px;
   height: 32px;
@@ -953,6 +1367,12 @@ async function saveHoliday(): Promise<void> {
   min-height: 32px;
   padding: 0 12px;
   box-sizing: border-box;
+}
+
+.date-toolbar :deep(input:disabled),
+.date-toolbar :deep(button:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .date-toolbar :deep(.toolbar-add-action) {
@@ -974,6 +1394,50 @@ async function saveHoliday(): Promise<void> {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+.operation-schedule-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.loading-card {
+  display: grid;
+  gap: 12px;
+  place-items: center;
+  min-width: 180px;
+  padding: 24px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 24%);
+}
+
+.loading-card strong {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.loading-spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid #dbe4f0;
+  border-top-color: #2563eb;
+  border-radius: 999px;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 label {
@@ -1037,6 +1501,14 @@ td {
   vertical-align: middle;
 }
 
+.muted-cell {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 th {
   background: #f1f5f9;
   color: #334155;
@@ -1090,13 +1562,20 @@ tr.disabled td:not(.row-actions) {
 }
 
 .primary-action,
-.secondary-action {
+.secondary-action,
+.danger-action {
   min-height: 40px;
   padding: 0 18px;
 }
 
 .primary-action {
   justify-self: start;
+}
+
+.danger-action {
+  border-color: #b91c1c;
+  background: #fff;
+  color: #b91c1c;
 }
 
 .modal-backdrop {
@@ -1106,6 +1585,10 @@ tr.disabled td:not(.row-actions) {
   place-items: center;
   padding: 18px;
   background: rgb(15 23 42 / 48%);
+}
+
+.item-modal-backdrop {
+  z-index: 2;
 }
 
 .modal-form {
