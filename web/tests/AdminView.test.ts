@@ -515,16 +515,26 @@ describe("AdminView", () => {
 
     expect(wrapper.find(".operation-modal").text()).not.toContain("子任务 offset");
     expect(wrapper.find(".operation-item-modal h2").text()).toBe("编辑子任务");
-    expect(wrapper.find(".operation-item-modal").text()).toContain("开始时间点 (分)");
-    expect(wrapper.find(".operation-item-modal").text()).toContain("任务时长 (分)");
+    expect(wrapper.find(".operation-item-modal").text()).toContain("开始基准");
+    expect(wrapper.find(".operation-item-offset-title").text()).toBe("相对基准偏移时间");
+    expect(wrapper.find(".operation-item-offset-controls").exists()).toBe(true);
+    const editOffsetFields = wrapper.findAll(".operation-item-offset-field");
+    expect(editOffsetFields).toHaveLength(2);
+    expect(editOffsetFields[0].find('input[name="operationItemOffsetHours"]').exists()).toBe(true);
+    expect(editOffsetFields[0].find(".duration-unit").text()).toBe("时");
+    expect(editOffsetFields[1].find('input[name="operationItemOffsetMinutes"]').exists()).toBe(true);
+    expect(editOffsetFields[1].find(".duration-unit").text()).toBe("分");
+    expect(wrapper.find(".operation-item-modal").text()).toContain("任务时长");
     expect(wrapper.find(".operation-item-modal").text()).toContain("任务内容");
     expect(wrapper.find(".operation-item-modal").text()).not.toContain("offset（分钟）");
     expect(wrapper.find(".operation-item-modal").text()).not.toContain("时长（分钟）");
     expect(wrapper.find(".operation-item-modal").text()).not.toContain("展示内容");
     expect((wrapper.find('input[name="operationItemContent"]').element as HTMLInputElement).value).toBe("复核记录");
-    expect((wrapper.find('input[name="operationItemOffset"]').element as HTMLInputElement).value).toBe("150");
+    expect((wrapper.find('input[name="operationItemOffsetHours"]').element as HTMLInputElement).value).toBe("2");
+    expect((wrapper.find('input[name="operationItemOffsetMinutes"]').element as HTMLInputElement).value).toBe("30");
 
-    await wrapper.find('input[name="operationItemOffset"]').setValue("200");
+    await wrapper.find('input[name="operationItemOffsetHours"]').setValue("3");
+    await wrapper.find('input[name="operationItemOffsetMinutes"]').setValue("20");
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
 
     expect(updateOperationPlan).toHaveBeenCalledWith(
@@ -547,16 +557,59 @@ describe("AdminView", () => {
 
     expect(wrapper.find(".operation-item-modal h2").text()).toBe("新增子任务");
 
-    await wrapper.find('input[name="operationItemOffset"]').setValue("30");
-    await wrapper.find('input[name="operationItemDuration"]').setValue("45");
+    const baseSelect = wrapper.find('select[name="operationItemBaseItem"]');
+    expect(baseSelect.exists()).toBe(true);
+    expect(baseSelect.text()).toContain("A、B 操作 · 结束 2时0分");
+    expect(baseSelect.text()).toContain("复核记录 · 结束 3时30分");
+    expect(baseSelect.text()).not.toContain("结束 120 分");
+    expect(wrapper.find(".operation-item-offset-title").text()).toBe("相对基准偏移时间");
+    expect(wrapper.find(".operation-item-offset-controls").exists()).toBe(true);
+    expect(wrapper.find('input[name="operationItemOffset"]').exists()).toBe(false);
+    const offsetFields = wrapper.findAll(".operation-item-offset-field");
+    expect(offsetFields).toHaveLength(2);
+    expect(offsetFields[0].find('input[name="operationItemOffsetHours"]').exists()).toBe(true);
+    expect(offsetFields[0].find(".duration-unit").text()).toBe("时");
+    expect(offsetFields[1].find('input[name="operationItemOffsetMinutes"]').exists()).toBe(true);
+    expect(offsetFields[1].find(".duration-unit").text()).toBe("分");
+    expect(wrapper.find('input[name="operationItemDuration"]').exists()).toBe(false);
+    expect(wrapper.find(".operation-item-modal").text()).toContain("时");
+    expect(wrapper.find(".operation-item-modal").text()).toContain("分");
+    expect(wrapper.find(".operation-item-duration-controls").exists()).toBe(true);
+    const durationFields = wrapper.findAll(".operation-item-duration-field");
+    expect(durationFields).toHaveLength(2);
+    expect(durationFields[0].find('input[name="operationItemDurationHours"]').exists()).toBe(true);
+    expect(durationFields[0].find(".duration-unit").text()).toBe("时");
+    expect(durationFields[1].find('input[name="operationItemDurationMinutes"]').exists()).toBe(true);
+    expect(durationFields[1].find(".duration-unit").text()).toBe("分");
+    expect((wrapper.find(".operation-item-json").element as HTMLDetailsElement).open).toBe(false);
+
+    await wrapper.find('select[name="operationItemBaseItem"]').setValue("item-1");
+    await wrapper.find('input[name="operationItemOffsetHours"]').setValue("0");
+    const offsetMinutesInput = wrapper.find('input[name="operationItemOffsetMinutes"]');
+    (offsetMinutesInput.element as HTMLInputElement).value = "75";
+    await offsetMinutesInput.trigger("input");
+    expect((wrapper.find('input[name="operationItemOffsetHours"]').element as HTMLInputElement).value).toBe("0");
+    expect((wrapper.find('input[name="operationItemOffsetMinutes"]').element as HTMLInputElement).value).toBe("75");
+    await offsetMinutesInput.trigger("blur");
+    expect((wrapper.find('input[name="operationItemOffsetHours"]').element as HTMLInputElement).value).toBe("1");
+    expect((wrapper.find('input[name="operationItemOffsetMinutes"]').element as HTMLInputElement).value).toBe("15");
+    await wrapper.find('input[name="operationItemDurationHours"]').setValue("0");
+    const durationMinutesInput = wrapper.find('input[name="operationItemDurationMinutes"]');
+    (durationMinutesInput.element as HTMLInputElement).value = "75";
+    await durationMinutesInput.trigger("input");
+    expect((wrapper.find('input[name="operationItemDurationHours"]').element as HTMLInputElement).value).toBe("0");
+    expect((wrapper.find('input[name="operationItemDurationMinutes"]').element as HTMLInputElement).value).toBe("75");
+    await durationMinutesInput.trigger("keydown.enter");
+    expect((wrapper.find('input[name="operationItemDurationHours"]').element as HTMLInputElement).value).toBe("1");
+    expect((wrapper.find('input[name="operationItemDurationMinutes"]').element as HTMLInputElement).value).toBe("15");
     await wrapper.find('input[name="operationItemContent"]').setValue("新增班次");
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
 
     expect(createTaskItem).toHaveBeenCalledWith(
       expect.objectContaining({
         containerId: "operation-1",
-        offsetMinutes: 30,
-        durationMinutes: 45,
+        offsetMinutes: 195,
+        durationMinutes: 75,
         content: "新增班次",
         target: "",
         personnel: "",
@@ -610,8 +663,10 @@ describe("AdminView", () => {
     await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
     await wrapper.find('[aria-label="新增子任务"]').trigger("click");
-    await wrapper.find('input[name="operationItemOffset"]').setValue("510");
-    await wrapper.find('input[name="operationItemDuration"]').setValue("510");
+    await wrapper.find('input[name="operationItemOffsetHours"]').setValue("8");
+    await wrapper.find('input[name="operationItemOffsetMinutes"]').setValue("30");
+    await wrapper.find('input[name="operationItemDurationHours"]').setValue("8");
+    await wrapper.find('input[name="operationItemDurationMinutes"]').setValue("30");
     await wrapper.find('input[name="operationItemContent"]').setValue("晚班1");
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
 
@@ -804,5 +859,8 @@ describe("AdminView", () => {
     expect(source).toMatch(/\.leave-table-shell \{[^}]*width: 100%;/);
     expect(source).toMatch(/\.leave-table \{[^}]*width: 100%;[^}]*table-layout: fixed;/);
     expect(source).toMatch(/\.leave-name-column \{[^}]*width: 120px;/);
+    expect(source).toMatch(/\.operation-item-start-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(240px, 280px\);/);
+    expect(source).toMatch(/\.operation-item-duration-row \{[^}]*grid-template-columns: minmax\(0, 1fr\) minmax\(240px, 280px\);/);
+    expect(source).toMatch(/\.operation-item-offset-field input,[\s\S]*\.operation-item-duration-field input \{[^}]*text-align: center;/);
   });
 });

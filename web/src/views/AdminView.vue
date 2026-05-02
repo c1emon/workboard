@@ -445,28 +445,85 @@
           <button type="button" aria-label="关闭子任务弹窗" @click="closeOperationItemModal">×</button>
         </div>
         <div class="form-grid">
-          <label>
-            开始时间点 (分)
-            <input
-              v-model.number="operationItemForm.offsetMinutes"
-              name="operationItemOffset"
-              min="0"
-              required
-              type="number"
-              :disabled="operationReadOnly"
-            />
-          </label>
-          <label>
-            任务时长 (分)
-            <input
-              v-model.number="operationItemForm.durationMinutes"
-              name="operationItemDuration"
-              min="1"
-              required
-              type="number"
-              :disabled="operationReadOnly"
-            />
-          </label>
+          <div class="operation-item-start-row wide-field">
+            <label>
+              开始基准
+              <select v-model="operationItemForm.baseItemId" name="operationItemBaseItem" :disabled="operationReadOnly">
+                <option value="">计划开始时间点</option>
+                <option v-for="item in operationItemBaseOptions" :key="item.id" :value="item.id">
+                  {{ formatOperationItemBaseOption(item) }}
+                </option>
+              </select>
+            </label>
+            <div class="operation-item-offset-group">
+              <span class="operation-item-offset-title">相对基准偏移时间</span>
+              <div class="operation-item-offset-controls">
+                <label class="operation-item-offset-field" aria-label="Offset 小时">
+                  <input
+                    v-model.number="operationItemForm.offsetHours"
+                    name="operationItemOffsetHours"
+                    required
+                    step="1"
+                    type="number"
+                    :disabled="operationReadOnly"
+                    @blur="normalizeOperationItemOffset"
+                    @change="normalizeOperationItemOffset"
+                    @keydown.enter="normalizeOperationItemOffset"
+                  />
+                  <span class="duration-unit">时</span>
+                </label>
+                <label class="operation-item-offset-field" aria-label="Offset 分钟">
+                  <input
+                    v-model.number="operationItemForm.offsetMinutes"
+                    name="operationItemOffsetMinutes"
+                    required
+                    step="1"
+                    type="number"
+                    :disabled="operationReadOnly"
+                    @blur="normalizeOperationItemOffset"
+                    @change="normalizeOperationItemOffset"
+                    @keydown.enter="normalizeOperationItemOffset"
+                  />
+                  <span class="duration-unit">分</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="operation-item-duration-row wide-field">
+            <span>任务时长</span>
+            <div class="operation-item-duration-controls">
+              <label class="operation-item-duration-field" aria-label="任务时长小时">
+                <input
+                  v-model.number="operationItemForm.durationHours"
+                  name="operationItemDurationHours"
+                  min="0"
+                  required
+                  step="1"
+                  type="number"
+                  :disabled="operationReadOnly"
+                  @blur="normalizeOperationItemDuration"
+                  @change="normalizeOperationItemDuration"
+                  @keydown.enter="normalizeOperationItemDuration"
+                />
+                <span class="duration-unit">时</span>
+              </label>
+              <label class="operation-item-duration-field" aria-label="任务时长分钟">
+                <input
+                  v-model.number="operationItemForm.durationMinutes"
+                  name="operationItemDurationMinutes"
+                  min="0"
+                  required
+                  step="1"
+                  type="number"
+                  :disabled="operationReadOnly"
+                  @blur="normalizeOperationItemDuration"
+                  @change="normalizeOperationItemDuration"
+                  @keydown.enter="normalizeOperationItemDuration"
+                />
+                <span class="duration-unit">分</span>
+              </label>
+            </div>
+          </div>
           <label class="wide-field">
             任务内容
             <input
@@ -478,10 +535,13 @@
             />
           </label>
         </div>
-        <label>
-          JSON
-          <textarea v-model="operationItemForm.metadataJson" name="operationItemMetadata" rows="5" :disabled="operationReadOnly"></textarea>
-        </label>
+        <details class="operation-item-json" :open="operationItemForm.metadataExpanded" @toggle="syncOperationItemMetadataOpen">
+          <summary>JSON</summary>
+          <label>
+            Metadata JSON
+            <textarea v-model="operationItemForm.metadataJson" name="operationItemMetadata" rows="5" :disabled="operationReadOnly"></textarea>
+          </label>
+        </details>
         <div class="modal-actions">
           <button
             v-if="!operationReadOnly && operationItemModalMode === 'edit'"
@@ -731,12 +791,23 @@ const operationForm = reactive({
 
 const operationItemForm = reactive({
   id: "",
+  baseItemId: "",
+  offsetHours: 0,
   offsetMinutes: 0,
+  durationHours: 1,
   durationMinutes: 60,
   content: "",
   metadataJson: "{}",
+  metadataExpanded: false,
   sortOrder: 0
 });
+
+const operationItemBaseOptions = computed(() =>
+  operationDetailItems.value
+    .filter((item) => item.id !== operationItemForm.id)
+    .slice()
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes)
+);
 
 const holidayImportForm = reactive({
   source: "remote" as HolidayImportSource,
@@ -769,6 +840,67 @@ function normalizeDateTime(value: string): string {
 
 function toDateTimeLocal(value: string): string {
   return value.slice(0, 16);
+}
+
+function nonNegativeInteger(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function integerValue(value: number): number {
+  return Number.isFinite(value) ? Math.trunc(value) : 0;
+}
+
+function setOperationItemOffset(totalMinutes: number): void {
+  const safeTotal = integerValue(totalMinutes);
+  operationItemForm.offsetHours = Math.trunc(safeTotal / 60);
+  operationItemForm.offsetMinutes = safeTotal - operationItemForm.offsetHours * 60;
+}
+
+function normalizeOperationItemOffset(): void {
+  const totalMinutes = integerValue(Number(operationItemForm.offsetHours)) * 60 + integerValue(Number(operationItemForm.offsetMinutes));
+  setOperationItemOffset(totalMinutes);
+}
+
+function operationItemOffsetTotalMinutes(): number {
+  return integerValue(Number(operationItemForm.offsetHours)) * 60 + integerValue(Number(operationItemForm.offsetMinutes));
+}
+
+function setOperationItemDuration(totalMinutes: number): void {
+  const safeTotal = nonNegativeInteger(totalMinutes);
+  operationItemForm.durationHours = Math.floor(safeTotal / 60);
+  operationItemForm.durationMinutes = safeTotal % 60;
+}
+
+function normalizeOperationItemDuration(): void {
+  const totalMinutes = nonNegativeInteger(Number(operationItemForm.durationHours)) * 60 + nonNegativeInteger(Number(operationItemForm.durationMinutes));
+  setOperationItemDuration(totalMinutes);
+}
+
+function operationItemDurationTotalMinutes(): number {
+  return nonNegativeInteger(Number(operationItemForm.durationHours)) * 60 + nonNegativeInteger(Number(operationItemForm.durationMinutes));
+}
+
+function operationItemBaseEndMinutes(): number {
+  const baseItem = operationDetailItems.value.find((item) => item.id === operationItemForm.baseItemId);
+  return baseItem ? baseItem.offsetMinutes + baseItem.durationMinutes : 0;
+}
+
+function operationItemAbsoluteOffsetMinutes(): number {
+  return operationItemBaseEndMinutes() + operationItemOffsetTotalMinutes();
+}
+
+function formatMinutesAsHoursMinutes(totalMinutes: number): string {
+  const safeTotal = Math.max(0, Math.trunc(totalMinutes));
+  return `${Math.floor(safeTotal / 60)}时${safeTotal % 60}分`;
+}
+
+function formatOperationItemBaseOption(item: OperationPlanItemRecord): string {
+  const content = item.content || "未命名子任务";
+  return `${content} · 结束 ${formatMinutesAsHoursMinutes(item.offsetMinutes + item.durationMinutes)}`;
+}
+
+function syncOperationItemMetadataOpen(event: Event): void {
+  operationItemForm.metadataExpanded = (event.target as HTMLDetailsElement).open;
 }
 
 function addMinutesToDateTimeLocal(value: string, minutes: number): string {
@@ -966,10 +1098,12 @@ function resetOperationItemForm(): void {
   operationItemModalOpen.value = false;
   operationItemModalMode.value = "edit";
   operationItemForm.id = "";
-  operationItemForm.offsetMinutes = 0;
-  operationItemForm.durationMinutes = 60;
+  operationItemForm.baseItemId = "";
+  setOperationItemOffset(0);
+  setOperationItemDuration(60);
   operationItemForm.content = "";
   operationItemForm.metadataJson = "{}";
+  operationItemForm.metadataExpanded = false;
   operationItemForm.sortOrder = 0;
 }
 
@@ -1013,10 +1147,12 @@ function selectOperationItem(item: OperationPlanItemRecord): void {
   operationSelectedItemId.value = item.id;
   operationItemModalMode.value = "edit";
   operationItemForm.id = item.id;
-  operationItemForm.offsetMinutes = item.offsetMinutes;
-  operationItemForm.durationMinutes = item.durationMinutes;
+  operationItemForm.baseItemId = "";
+  setOperationItemOffset(item.offsetMinutes);
+  setOperationItemDuration(item.durationMinutes);
   operationItemForm.content = item.content;
   operationItemForm.metadataJson = JSON.stringify(item.metadata, null, 2);
+  operationItemForm.metadataExpanded = false;
   operationItemForm.sortOrder = item.sortOrder;
   operationItemModalOpen.value = true;
 }
@@ -1026,10 +1162,12 @@ function openOperationItemCreate(): void {
   operationSelectedItemId.value = null;
   operationItemModalMode.value = "create";
   operationItemForm.id = "";
-  operationItemForm.offsetMinutes = 0;
-  operationItemForm.durationMinutes = 60;
+  operationItemForm.baseItemId = "";
+  setOperationItemOffset(0);
+  setOperationItemDuration(60);
   operationItemForm.content = "";
   operationItemForm.metadataJson = "{}";
+  operationItemForm.metadataExpanded = false;
   operationItemForm.sortOrder = operationDetailItems.value.length;
   operationItemModalOpen.value = true;
 }
@@ -1205,8 +1343,8 @@ async function saveOperationItem(): Promise<void> {
   await withStatus(async () => {
     const itemMetadata = parseMetadata(operationItemForm.metadataJson);
     const itemPayload = {
-      offsetMinutes: Number(operationItemForm.offsetMinutes),
-      durationMinutes: Number(operationItemForm.durationMinutes),
+      offsetMinutes: operationItemAbsoluteOffsetMinutes(),
+      durationMinutes: operationItemDurationTotalMinutes(),
       content: operationItemForm.content,
       metadata: itemMetadata,
       sortOrder: operationItemForm.sortOrder
@@ -1630,6 +1768,83 @@ function readHolidayImportFile(file: File): Promise<string> {
   gap: 14px;
 }
 
+.operation-item-start-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  gap: 14px;
+  align-items: end;
+}
+
+.operation-item-duration-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  gap: 14px;
+  align-items: end;
+}
+
+.operation-item-duration-row > span {
+  align-self: center;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.operation-item-offset-group {
+  display: grid;
+  gap: 7px;
+}
+
+.operation-item-offset-title {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.operation-item-offset-controls,
+.operation-item-duration-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.operation-item-offset-field,
+.operation-item-duration-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.operation-item-offset-field input,
+.operation-item-duration-field input {
+  min-width: 0;
+  text-align: center;
+}
+
+.duration-unit {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.operation-item-json {
+  display: grid;
+  gap: 10px;
+}
+
+.operation-item-json summary {
+  width: fit-content;
+  color: #334155;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.operation-item-json[open] summary {
+  margin-bottom: 10px;
+}
+
 .loading-card {
   display: grid;
   gap: 12px;
@@ -1864,6 +2079,15 @@ tr.disabled td:not(.row-actions) {
 
   .admin-layout,
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .operation-item-start-row,
+  .operation-item-duration-row {
+    grid-template-columns: 1fr;
+  }
+
+  .operation-item-offset-group {
     grid-template-columns: 1fr;
   }
 
