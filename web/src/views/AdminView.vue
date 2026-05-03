@@ -46,14 +46,22 @@
         />
 
         <div v-else-if="activeKey === 'patrol'" class="patrol-admin-stack">
+          <div class="patrol-tabs" role="tablist" aria-label="巡视管理类型">
+            <button type="button" role="tab" :aria-selected="patrolActiveTab === 'instances'" :class="{ active: patrolActiveTab === 'instances' }" @click="patrolActiveTab = 'instances'">任务实例</button>
+            <button type="button" role="tab" :aria-selected="patrolActiveTab === 'templates'" :class="{ active: patrolActiveTab === 'templates' }" @click="patrolActiveTab = 'templates'">巡视模板</button>
+          </div>
           <TaskInstanceManager
+            v-if="patrolActiveTab === 'instances'"
             v-model:selected-date="selectedDate"
-            v-model:generation-end-date="taskInstanceGenerationEndDate"
+            v-model:show-all="taskInstanceShowAll"
             :today="today"
             :yesterday="yesterday"
             :rows="taskInstanceRows"
+            :patrol-plans="patrolPlanRows"
             :form="taskInstanceForm"
             :form-open="taskInstanceFormOpen"
+            :refresh-form="taskInstanceRefreshForm"
+            :refresh-open="taskInstanceRefreshOpen"
             :editing-id="taskInstanceEditingId"
             :generation-summary="taskInstanceGenerationSummary"
             @add="openTaskInstanceCreate"
@@ -62,29 +70,29 @@
             @edit="openTaskInstanceEdit"
             @cancel="cancelTaskInstance"
             @delete="removeTaskInstance"
-            @regenerate="regenerateTaskInstances"
+            @open-refresh="openTaskInstanceRefresh"
+            @close-refresh="closeTaskInstanceRefresh" @refresh="refreshTaskInstances(patrolPlanRows)"
             @save="saveTaskInstance"
             @close="closeTaskInstanceForm"
           />
           <PatrolPlanManager
+            v-else
             :rows="patrolPlanRows"
             :detail="patrolPlanDetail"
+            :detail-open="patrolPlanDetailOpen" :item-manager-open="patrolCycleItemManagerOpen"
             :plan-form="patrolPlanForm"
             :plan-form-open="patrolPlanFormOpen"
             :plan-editing-id="patrolPlanEditingId"
-            :item-form="patrolCycleItemForm"
-            :item-editing-id="patrolCycleItemEditingId"
+            :item-form="patrolCycleItemForm" :item-form-open="patrolCycleItemFormOpen" :item-editing-id="patrolCycleItemEditingId"
             @add-plan="openPatrolPlanCreate"
             @edit-plan="openPatrolPlanEdit"
-            @select-plan="selectPatrolPlan"
+            @select-plan="selectPatrolPlan" @close-detail="closePatrolPlanDetail"
+            @manage-items="openPatrolCycleItemManager" @close-item-manager="closePatrolCycleItemManager"
             @toggle-plan="togglePatrolPlan"
             @delete-plan="removePatrolPlan"
             @close-plan="closePatrolPlanForm"
             @save-plan="savePatrolPlan"
-            @add-item="openPatrolCycleItemCreate"
-            @edit-item="openPatrolCycleItemEdit"
-            @delete-item="removePatrolCycleItem"
-            @save-item="savePatrolCycleItem"
+            @add-item="openPatrolCycleItemCreate" @edit-item="openPatrolCycleItemEdit" @delete-item="removePatrolCycleItem" @close-item-form="closePatrolCycleItemForm" @save-item="savePatrolCycleItem"
           />
         </div>
 
@@ -208,6 +216,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import { RouterLink } from "vue-router";
 import ArrangementModal from "../components/admin/ArrangementModal.vue";
 import ConfirmationDialog from "../components/admin/ConfirmationDialog.vue";
@@ -223,12 +232,11 @@ import PatrolPlanManager from "../components/admin/PatrolPlanManager.vue";
 import PermitManager from "../components/admin/PermitManager.vue";
 import TaskInstanceManager from "../components/admin/TaskInstanceManager.vue";
 import { useAdminViewModel } from "../composables/admin/useAdminViewModel";
-
 const {
   sections, today, yesterday, activeKey, selectedDate, statusText, activeSection,
   permitRows, otherRows, leaveRows, permitShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
-  taskInstanceRows, taskInstanceForm, taskInstanceFormOpen, taskInstanceEditingId, taskInstanceGenerationEndDate, taskInstanceGenerationSummary,
-  patrolPlanRows, patrolPlanDetail, patrolPlanForm, patrolPlanFormOpen, patrolPlanEditingId, patrolCycleItemForm, patrolCycleItemEditingId,
+  taskInstanceRows, taskInstanceShowAll, taskInstanceForm, taskInstanceFormOpen, taskInstanceRefreshForm, taskInstanceRefreshOpen, taskInstanceEditingId, taskInstanceGenerationSummary,
+  patrolPlanRows, patrolPlanDetail, patrolPlanDetailOpen, patrolCycleItemManagerOpen, patrolPlanForm, patrolPlanFormOpen, patrolPlanEditingId, patrolCycleItemForm, patrolCycleItemFormOpen, patrolCycleItemEditingId,
   holidayYear, holidayRows, adjustedWorkdayRows, holidayImportModalOpen, holidayImportForm,
   modalKind, modalTitle, modalForm, operationModalOpen, operationModalMode, operationRecordId,
   operationForm, operationReadOnly, operationModalTitle, operationDurationMinutes, operationHasEndAt,
@@ -242,11 +250,12 @@ const {
   confirmConfirmation, cancelConfirmation, removePermit, removeOther, removeLeave,
   removeOperation, saveOperation, saveOperationItem, removeOperationItem, submitHolidayImport,
   normalizeOperationItemOffset, normalizeOperationItemDuration, openTaskInstanceCreate, openTaskInstanceEdit,
-  closeTaskInstanceForm, saveTaskInstance, cancelTaskInstance, removeTaskInstance, regenerateTaskInstances,
-  selectPatrolPlan, openPatrolPlanCreate, openPatrolPlanEdit, closePatrolPlanForm, savePatrolPlan,
-  togglePatrolPlan, removePatrolPlan, openPatrolCycleItemCreate, openPatrolCycleItemEdit,
-  savePatrolCycleItem, removePatrolCycleItem
+  closeTaskInstanceForm, saveTaskInstance, cancelTaskInstance, removeTaskInstance, openTaskInstanceRefresh, closeTaskInstanceRefresh, refreshTaskInstances,
+  selectPatrolPlan, openPatrolCycleItemManager, closePatrolPlanDetail, closePatrolCycleItemManager, openPatrolPlanCreate, openPatrolPlanEdit, closePatrolPlanForm, savePatrolPlan, togglePatrolPlan, removePatrolPlan,
+  openPatrolCycleItemCreate, openPatrolCycleItemEdit, closePatrolCycleItemForm, savePatrolCycleItem, removePatrolCycleItem
 } = useAdminViewModel();
+
+const patrolActiveTab = ref<"instances" | "templates">("instances");
 </script>
 
 <style scoped>
@@ -364,6 +373,33 @@ const {
 
 .patrol-admin-stack {
   display: grid;
+}
+
+.patrol-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 16px 22px 0;
+  border-bottom: 1px solid #d8dee8;
+}
+
+.patrol-tabs button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  background: transparent;
+  color: #475569;
+}
+
+.patrol-tabs button.active {
+  border-color: #d8dee8;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: inset 0 3px 0 #2563eb;
 }
 
 @media (max-width: 900px) {

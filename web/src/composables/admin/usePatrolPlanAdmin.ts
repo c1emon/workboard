@@ -23,7 +23,6 @@ export interface PatrolPlanForm {
   description: string;
   startAt: string;
   endAt: string;
-  cycleLength: number;
   skipWeekends: boolean;
   skipHolidays: boolean;
 }
@@ -42,6 +41,9 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
   const { withStatus, refresh, requestConfirmation } = context;
   const patrolPlanRows = ref<PatrolPlanRecord[]>([]);
   const patrolPlanDetail = ref<PatrolPlanDetail | null>(null);
+  const patrolPlanDetailOpen = ref(false);
+  const patrolCycleItemManagerOpen = ref(false);
+  const patrolCycleItemFormOpen = ref(false);
   const patrolPlanEditingId = ref<string | null>(null);
   const patrolPlanFormOpen = ref(false);
   const patrolCycleItemEditingId = ref<string | null>(null);
@@ -50,7 +52,6 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     description: "",
     startAt: "",
     endAt: "",
-    cycleLength: 90,
     skipWeekends: false,
     skipHolidays: true
   });
@@ -68,15 +69,33 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     patrolPlanRows.value = await fetchPatrolPlans();
     if (patrolPlanDetail.value && patrolPlanRows.value.some((row) => row.id === patrolPlanDetail.value?.id)) {
       patrolPlanDetail.value = await fetchPatrolPlan(patrolPlanDetail.value.id);
-    } else if (!patrolPlanDetail.value && patrolPlanRows.value[0]) {
-      patrolPlanDetail.value = await fetchPatrolPlan(patrolPlanRows.value[0].id);
+    } else if (patrolPlanDetail.value) {
+      patrolPlanDetail.value = null;
+      patrolPlanDetailOpen.value = false;
     }
   }
 
   async function selectPatrolPlan(record: PatrolPlanRecord): Promise<void> {
     await withStatus(async () => {
       patrolPlanDetail.value = await fetchPatrolPlan(record.id);
+      patrolPlanDetailOpen.value = true;
     });
+  }
+
+  async function openPatrolCycleItemManager(record: PatrolPlanRecord): Promise<void> {
+    await withStatus(async () => {
+      patrolPlanDetail.value = await fetchPatrolPlan(record.id);
+      patrolCycleItemManagerOpen.value = true;
+    });
+  }
+
+  function closePatrolPlanDetail(): void {
+    patrolPlanDetailOpen.value = false;
+  }
+
+  function closePatrolCycleItemManager(): void {
+    patrolCycleItemManagerOpen.value = false;
+    closePatrolCycleItemForm();
   }
 
   function openPatrolPlanCreate(): void {
@@ -87,7 +106,6 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
       description: "",
       startAt: "",
       endAt: "",
-      cycleLength: 90,
       skipWeekends: false,
       skipHolidays: true
     });
@@ -99,9 +117,8 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     Object.assign(patrolPlanForm, {
       name: record.name,
       description: record.description,
-      startAt: record.startAt,
-      endAt: record.endAt,
-      cycleLength: record.cycleLength,
+      startAt: toDateInput(record.startAt),
+      endAt: toDateInput(record.endAt),
       skipWeekends: record.skipWeekends,
       skipHolidays: record.skipHolidays
     });
@@ -148,6 +165,7 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
 
   function openPatrolCycleItemCreate(): void {
     patrolCycleItemEditingId.value = null;
+    patrolCycleItemFormOpen.value = true;
     Object.assign(patrolCycleItemForm, {
       cycleDay: 1,
       timeTag: "上午",
@@ -155,12 +173,13 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
       personnel: "",
       vehicle: "",
       other: "",
-      sortOrder: 0
+      sortOrder: nextCycleItemSortOrder(1, "上午")
     });
   }
 
   function openPatrolCycleItemEdit(item: PatrolCycleItemRecord): void {
     patrolCycleItemEditingId.value = item.id;
+    patrolCycleItemFormOpen.value = true;
     Object.assign(patrolCycleItemForm, {
       cycleDay: item.cycleDay,
       timeTag: item.timeTag,
@@ -172,6 +191,11 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     });
   }
 
+  function closePatrolCycleItemForm(): void {
+    patrolCycleItemFormOpen.value = false;
+    patrolCycleItemEditingId.value = null;
+  }
+
   async function savePatrolCycleItem(): Promise<void> {
     if (!patrolPlanDetail.value) return;
     const planId = patrolPlanDetail.value.id;
@@ -179,7 +203,7 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     await withStatus(async () => {
       if (patrolCycleItemEditingId.value) await updatePatrolPlanItem(planId, patrolCycleItemEditingId.value, payload);
       else await createPatrolPlanItem(planId, payload);
-      patrolCycleItemEditingId.value = null;
+      closePatrolCycleItemForm();
       patrolPlanDetail.value = await fetchPatrolPlan(planId);
       await refresh();
     });
@@ -205,9 +229,8 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     return {
       name: patrolPlanForm.name,
       description: patrolPlanForm.description,
-      startAt: patrolPlanForm.startAt,
-      endAt: patrolPlanForm.endAt,
-      cycleLength: Number(patrolPlanForm.cycleLength) || 90,
+      startAt: `${patrolPlanForm.startAt}T00:00:00+08:00`,
+      endAt: `${patrolPlanForm.endAt}T23:59:59+08:00`,
       skipWeekends: patrolPlanForm.skipWeekends,
       skipHolidays: patrolPlanForm.skipHolidays
     };
@@ -221,20 +244,35 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
       personnel: patrolCycleItemForm.personnel,
       vehicle: patrolCycleItemForm.vehicle,
       other: patrolCycleItemForm.other,
-      sortOrder: Number(patrolCycleItemForm.sortOrder) || 0
+      sortOrder: patrolCycleItemEditingId.value
+        ? Number(patrolCycleItemForm.sortOrder) || 0
+        : nextCycleItemSortOrder(Number(patrolCycleItemForm.cycleDay) || 1, patrolCycleItemForm.timeTag)
     };
+  }
+
+  function nextCycleItemSortOrder(cycleDay: number, timeTag: TimeTag): number {
+    const orders = patrolPlanDetail.value?.items
+      .filter((item) => item.cycleDay === cycleDay && item.timeTag === timeTag)
+      .map((item) => item.sortOrder) ?? [];
+    return orders.length > 0 ? Math.max(...orders) + 1 : 0;
   }
 
   return {
     patrolPlanRows,
     patrolPlanDetail,
+    patrolPlanDetailOpen,
+    patrolCycleItemManagerOpen,
     patrolPlanForm,
     patrolPlanFormOpen,
     patrolPlanEditingId,
     patrolCycleItemForm,
+    patrolCycleItemFormOpen,
     patrolCycleItemEditingId,
     loadPatrolPlans,
     selectPatrolPlan,
+    openPatrolCycleItemManager,
+    closePatrolPlanDetail,
+    closePatrolCycleItemManager,
     openPatrolPlanCreate,
     openPatrolPlanEdit,
     closePatrolPlanForm,
@@ -243,7 +281,12 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     removePatrolPlan,
     openPatrolCycleItemCreate,
     openPatrolCycleItemEdit,
+    closePatrolCycleItemForm,
     savePatrolCycleItem,
     removePatrolCycleItem
   };
+}
+
+function toDateInput(value: string): string {
+  return value.slice(0, 10);
 }

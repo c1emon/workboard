@@ -95,7 +95,7 @@ describe("api client", () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining("/api/admin/task-instances?date=2026-05-01&type=patrol")
+      expect.stringContaining("/api/admin/task-instances?scope=date&date=2026-05-01&type=patrol")
     );
     expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining("/api/admin/task-instances"), {
       method: "POST",
@@ -127,16 +127,15 @@ describe("api client", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-	    const planInput = {
-	      name: "巡视计划",
-	      description: "90 天循环",
-	      startAt: "2026-05-01T00:00:00+08:00",
-	      endAt: "2026-05-01T23:59:59+08:00",
-	      skipWeekends: true,
-	      skipHolidays: true,
-	      cycleLength: 90,
-	      enabled: true
-	    };
+    const planInput = {
+      name: "巡视计划",
+      description: "90 天循环",
+      startAt: "2026-05-01T00:00:00+08:00",
+      endAt: "2026-05-01T23:59:59+08:00",
+      skipWeekends: true,
+      skipHolidays: true,
+      enabled: true
+    };
     const itemInput = {
       cycleDay: 1,
       timeTag: "上午" as const,

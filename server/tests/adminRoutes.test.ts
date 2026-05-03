@@ -70,6 +70,7 @@ describe("admin routes", () => {
 
     const patrolResponse = await app.inject({ method: "GET", url: "/api/admin/task-instances?date=2026-05-01&type=patrol" });
     const allResponse = await app.inject({ method: "GET", url: "/api/admin/task-instances?date=2026-05-01" });
+    const allScopeResponse = await app.inject({ method: "GET", url: "/api/admin/task-instances?scope=all&type=patrol" });
     await app.close();
 
     expect(patrolResponse.statusCode).toBe(200);
@@ -90,6 +91,7 @@ describe("admin routes", () => {
       })
     ]);
     expect(allResponse.json().map((row: { id: string }) => row.id)).toEqual(["generated-patrol", "manual-patrol", "manual-operation"]);
+    expect(allScopeResponse.json().map((row: { id: string }) => row.id)).toEqual(["manual-patrol", "generated-patrol"]);
   });
 
   it("lists task instances with non-China-offset datetimes by actual overlap", async () => {
@@ -276,6 +278,41 @@ describe("admin routes", () => {
     expect(firstResponse.json()).toEqual({ inserted: 1, updated: 0, skipped: 0 });
     expect(secondResponse.json()).toEqual({ inserted: 0, updated: 0, skipped: 1 });
     expect(db.prepare("select count(*) as count from task_instances").get()).toEqual({ count: 1 });
+  });
+
+  it("generates task instances for selected templates through the admin endpoint", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    insertTaskTemplate(db, {
+      id: "operation-template-1",
+      type: "operation",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T09:00:00+08:00"
+    });
+    insertTaskTemplate(db, {
+      id: "operation-template-2",
+      type: "operation",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T09:00:00+08:00"
+    });
+    insertTaskTemplateItem(db, { id: "operation-item-1", templateId: "operation-template-1", content: "一号模板任务" });
+    insertTaskTemplateItem(db, { id: "operation-item-2", templateId: "operation-template-2", content: "二号模板任务" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/task-instances/generate",
+      payload: {
+        windowStartDate: "2026-05-01",
+        windowEndDate: "2026-05-01",
+        types: ["operation"],
+        templateIds: ["operation-template-2"]
+      }
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ inserted: 1, updated: 0, skipped: 0 });
+    expect(db.prepare("select content from task_instances").all()).toEqual([{ content: "二号模板任务" }]);
   });
 
   it("creates arrangements and exposes today's board records", async () => {
@@ -882,7 +919,7 @@ describe("admin routes", () => {
       skip_holidays: 1,
       enabled: 1
     });
-    expect(JSON.parse(template?.ext_data_json ?? "{}")).toEqual({ cycleLength: 90 });
+    expect(JSON.parse(template?.ext_data_json ?? "{}")).toEqual({});
     expect(JSON.parse(firstItem?.ext_data_json ?? "{}")).toEqual({
       cycleDay: 1,
       timeTag: "上午",
@@ -893,12 +930,12 @@ describe("admin routes", () => {
     });
     expect(firstItem).toMatchObject({ template_id: id, content: "1号线", sort_order: 0 });
     expect(listResponse.json()).toEqual([
-      expect.objectContaining({ id, name: "日常巡检", cycleLength: 90, skipWeekends: false, skipHolidays: true, enabled: true })
+      expect.objectContaining({ id, name: "日常巡检", cycleLength: 2, skipWeekends: false, skipHolidays: true, enabled: true })
     ]);
     expect(detailResponse.json()).toMatchObject({
       id,
       name: "日常巡检",
-      cycleLength: 90,
+      cycleLength: 2,
       items: [
         { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "", other: "", sortOrder: 0 },
         { cycleDay: 2, timeTag: "下午", target: "2号线", personnel: "李四", vehicle: "巡检车", other: "带工具", sortOrder: 1 }
@@ -906,7 +943,7 @@ describe("admin routes", () => {
     });
   });
 
-  it("validates patrol cycle items and rejects duplicate cycle day and sort order", async () => {
+  it("derives patrol cycle length from items and rejects duplicate cycle day and sort order", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
     const createResponse = await app.inject({
@@ -915,13 +952,12 @@ describe("admin routes", () => {
       payload: {
         name: "短周期巡检",
         startAt: "2026-05-01T00:00:00+08:00",
-        endAt: "2026-05-10T23:59:59+08:00",
-        cycleLength: 3
+        endAt: "2026-05-10T23:59:59+08:00"
       }
     });
     const { id } = createResponse.json() as { id: string };
 
-    const invalidResponse = await app.inject({
+    const extendingResponse = await app.inject({
       method: "POST",
       url: `/api/admin/patrol-plans/${id}/items`,
       payload: { cycleDay: 4, timeTag: "上午", target: "越界" }
@@ -934,15 +970,22 @@ describe("admin routes", () => {
     const duplicateResponse = await app.inject({
       method: "POST",
       url: `/api/admin/patrol-plans/${id}/items`,
-      payload: { cycleDay: 2, timeTag: "下午", target: "B线", sortOrder: 0 }
+      payload: { cycleDay: 2, timeTag: "上午", target: "B线", sortOrder: 0 }
     });
+    const otherTimeResponse = await app.inject({
+      method: "POST",
+      url: `/api/admin/patrol-plans/${id}/items`,
+      payload: { cycleDay: 2, timeTag: "下午", target: "C线", sortOrder: 0 }
+    });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/patrol-plans/${id}` });
     await app.close();
 
-    expect(invalidResponse.statusCode).toBe(400);
-    expect(invalidResponse.json()).toMatchObject({ error: "Invalid admin payload" });
+    expect(extendingResponse.statusCode).toBe(201);
     expect(firstResponse.statusCode).toBe(201);
     expect(duplicateResponse.statusCode).toBe(409);
     expect(duplicateResponse.json()).toEqual({ error: "Duplicate patrol cycle item" });
+    expect(otherTimeResponse.statusCode).toBe(201);
+    expect(detailResponse.json()).toMatchObject({ cycleLength: 4 });
   });
 
   it("does not delete operation items through patrol plan item routes", async () => {
@@ -1015,7 +1058,6 @@ describe("admin routes", () => {
         description: "调整周期",
         startAt: "2026-05-02T00:00:00+08:00",
         endAt: "2026-06-01T23:59:59+08:00",
-        cycleLength: 30,
         skipWeekends: true,
         skipHolidays: false
       }

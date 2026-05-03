@@ -443,11 +443,14 @@ describe("AdminView", () => {
 
     await wrapper.findAll(".section-nav button")[3].trigger("click");
     await waitForAssertion(() => {
-	      expect(fetchTaskInstances).toHaveBeenCalledWith(expect.any(String), "patrol");
+	      expect(fetchTaskInstances).toHaveBeenCalledWith(expect.any(String), "patrol", "date");
       expect(fetchPatrolPlans).toHaveBeenCalled();
     });
     expect(wrapper.text()).toContain("任务实例");
-    expect(wrapper.text()).toContain("巡视模板");
+    expect(wrapper.find(".patrol-plan-panel").exists()).toBe(false);
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
+    expect(fetchTaskInstances).toHaveBeenLastCalledWith(expect.any(String), "patrol", "all");
+    expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
 
     await wrapper.findAll(".section-nav button")[1].trigger("click");
     await wrapper.find('input[name="operationShowAll"]').setValue(true);
@@ -464,22 +467,36 @@ describe("AdminView", () => {
     await wrapper.findAll(".section-nav button")[3].trigger("click");
 
     await waitForAssertion(() => {
-      expect(fetchTaskInstances).toHaveBeenCalledWith(expect.any(String), "patrol");
+      expect(fetchTaskInstances).toHaveBeenCalledWith(expect.any(String), "patrol", "date");
       expect(fetchPatrolPlans).toHaveBeenCalled();
-      expect(fetchPatrolPlan).toHaveBeenCalledWith("patrol-plan-1");
     });
     expect(wrapper.text()).toContain("任务实例");
     expect(wrapper.text()).toContain("1号线");
+    expect(wrapper.find(".patrol-plan-panel").exists()).toBe(false);
+
+    await wrapper.find(".task-instance-panel .manager-actions .secondary-action").trigger("click");
+    await wrapper.find('select[name="taskInstanceRefreshTemplate"]').setValue("patrol-plan-1");
+    await wrapper.find('input[name="taskInstanceRefreshEndDate"]').setValue("2026-05-31");
+    await wrapper.find(".task-instance-modal").trigger("submit.prevent");
+    await wrapper.find(".confirmation-confirm").trigger("click");
+
+    await wrapper.findAll(".patrol-tabs button")[1].trigger("click");
+
+    expect(wrapper.find(".task-instance-panel").exists()).toBe(false);
     expect(wrapper.text()).toContain("巡视模板");
     expect(wrapper.text()).toContain("日常巡检");
 
-    await wrapper.find(".task-instance-panel .manager-actions .secondary-action").trigger("click");
-    await wrapper.find(".confirmation-confirm").trigger("click");
+    await wrapper.find(".patrol-plan-panel tbody .row-actions button").trigger("click");
+    await waitForAssertion(() => {
+      expect(fetchPatrolPlan).toHaveBeenCalledWith("patrol-plan-1");
+    });
+    expect(wrapper.find(".patrol-detail-modal").exists()).toBe(true);
 
     expect(generateTaskInstances).toHaveBeenCalledWith({
       windowStartDate: expect.any(String),
-      windowEndDate: expect.any(String),
+      windowEndDate: "2026-05-31",
       types: ["patrol"],
+      templateIds: ["patrol-plan-1"],
       refreshPending: true
     });
   });

@@ -18,7 +18,6 @@ const planCreateSchema = z
     description: z.string().default(""),
     startAt: dateTimeSchema,
     endAt: dateTimeSchema,
-    cycleLength: z.number().int().min(1).default(90),
     skipWeekends: z.boolean().default(false),
     skipHolidays: z.boolean().default(true),
     enabled: z.boolean().default(true)
@@ -31,7 +30,6 @@ const planUpdateSchema = z
     description: z.string().default(""),
     startAt: dateTimeSchema,
     endAt: dateTimeSchema,
-    cycleLength: z.number().int().min(1),
     skipWeekends: z.boolean().default(false),
     skipHolidays: z.boolean().default(true),
     enabled: z.boolean().optional()
@@ -120,7 +118,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       )
       .all();
 
-    return rows.map(mapPlanRow);
+    return rows.map((row) => mapPlanRow(db, row));
   });
 
   app.get("/api/admin/patrol-plans/:id", async (request, reply) => {
@@ -131,7 +129,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
     if (!row) return reply.code(404).send({ error: "Not found" });
 
     return {
-      ...mapPlanRow(row),
+      ...mapPlanRow(db, row),
       items: listPlanItems(db, row.id).map(mapItemRow).sort(compareCycleItems)
     };
   });
@@ -156,14 +154,14 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       validation.data.skipWeekends ? 1 : 0,
       validation.data.skipHolidays ? 1 : 0,
       validation.data.enabled ? 1 : 0,
-      JSON.stringify({ cycleLength: validation.data.cycleLength }),
+      "{}",
       now,
       now
     );
     boardEvents.publish();
 
     const row = getPlan(db, id);
-    return reply.code(201).send(row ? mapPlanRow(row) : { id });
+    return reply.code(201).send(row ? mapPlanRow(db, row) : { id });
   });
 
   app.put("/api/admin/patrol-plans/:id", async (request, reply) => {
@@ -174,14 +172,6 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
 
     const current = getPlan(db, params.data.id);
     if (!current) return reply.code(404).send({ error: "Not found" });
-
-    const maxCycleDay = maxItemCycleDay(db, params.data.id);
-    if (maxCycleDay > validation.data.cycleLength) {
-      return reply.code(400).send({
-        error: "Invalid admin payload",
-        issues: [{ code: z.ZodIssueCode.custom, path: ["cycleLength"], message: "cycleLength is less than existing cycle items" }]
-      });
-    }
 
     const now = new Date().toISOString();
     db.prepare(
@@ -197,14 +187,14 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       validation.data.skipWeekends ? 1 : 0,
       validation.data.skipHolidays ? 1 : 0,
       validation.data.enabled ?? current.enabled === 1 ? 1 : 0,
-      JSON.stringify({ cycleLength: validation.data.cycleLength }),
+      "{}",
       now,
       params.data.id
     );
     boardEvents.publish();
 
     const row = getPlan(db, params.data.id);
-    return row ? mapPlanRow(row) : reply.code(404).send({ error: "Not found" });
+    return row ? mapPlanRow(db, row) : reply.code(404).send({ error: "Not found" });
   });
 
   app.patch("/api/admin/patrol-plans/:id/enabled", async (request, reply) => {
@@ -241,10 +231,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
 
     const plan = getPlan(db, params.data.id);
     if (!plan) return reply.code(404).send({ error: "Not found" });
-    const cycleLength = cycleLengthFromPlan(plan);
-    const cycleValidation = validateCycleDay(validation.data.cycleDay, cycleLength);
-    if (!cycleValidation.success) return reply.code(400).send(cycleValidation.error);
-    if (hasDuplicateCycleItem(db, params.data.id, validation.data.cycleDay, validation.data.sortOrder)) {
+    if (hasDuplicateCycleItem(db, params.data.id, validation.data.cycleDay, validation.data.timeTag, validation.data.sortOrder)) {
       return reply.code(409).send({ error: "Duplicate patrol cycle item" });
     }
 
@@ -271,9 +258,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
     const existing = getItem(db, params.data.id, params.data.itemId);
     if (!existing) return reply.code(404).send({ error: "Not found" });
 
-    const cycleValidation = validateCycleDay(validation.data.cycleDay, cycleLengthFromPlan(plan));
-    if (!cycleValidation.success) return reply.code(400).send(cycleValidation.error);
-    if (hasDuplicateCycleItem(db, params.data.id, validation.data.cycleDay, validation.data.sortOrder, params.data.itemId)) {
+    if (hasDuplicateCycleItem(db, params.data.id, validation.data.cycleDay, validation.data.timeTag, validation.data.sortOrder, params.data.itemId)) {
       return reply.code(409).send({ error: "Duplicate patrol cycle item" });
     }
 
@@ -339,14 +324,14 @@ function getItem(db: AppDatabase, planId: string, itemId: string): PatrolItemRow
     .get(planId, itemId);
 }
 
-function mapPlanRow(row: PatrolPlanRow) {
+function mapPlanRow(db: AppDatabase, row: PatrolPlanRow) {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
     startAt: row.start_at,
     endAt: row.end_at,
-    cycleLength: cycleLengthFromPlan(row),
+    cycleLength: maxItemCycleDay(db, row.id),
     skipWeekends: row.skip_weekends === 1,
     skipHolidays: row.skip_holidays === 1,
     enabled: row.enabled === 1
@@ -370,13 +355,7 @@ function mapItemRow(row: PatrolItemRow) {
 }
 
 function compareCycleItems(left: ReturnType<typeof mapItemRow>, right: ReturnType<typeof mapItemRow>): number {
-  return left.cycleDay - right.cycleDay || left.sortOrder - right.sortOrder || left.id.localeCompare(right.id);
-}
-
-function cycleLengthFromPlan(row: Pick<PatrolPlanRow, "ext_data_json">): number {
-  const metadata = parseObject(row.ext_data_json);
-  const value = metadata.cycleLength;
-  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : 90;
+  return left.cycleDay - right.cycleDay || timeTagOrder(left.timeTag) - timeTagOrder(right.timeTag) || left.sortOrder - right.sortOrder || left.id.localeCompare(right.id);
 }
 
 function parseItemMetadata(raw: string): PatrolItemMetadata {
@@ -420,26 +399,16 @@ function itemMetadata(input: z.infer<typeof itemInputSchema>): PatrolItemMetadat
   };
 }
 
-function validateCycleDay(
-  cycleDay: number,
-  cycleLength: number
-): { success: true } | { success: false; error: { error: string; issues: z.ZodIssue[] } } {
-  if (cycleDay <= cycleLength) return { success: true };
-  return {
-    success: false,
-    error: {
-      error: "Invalid admin payload",
-      issues: [{ code: z.ZodIssueCode.custom, path: ["cycleDay"], message: "cycleDay must be within plan cycleLength" }]
-    }
-  };
-}
-
-function hasDuplicateCycleItem(db: AppDatabase, planId: string, cycleDay: number, sortOrder: number, excludeItemId?: string): boolean {
+function hasDuplicateCycleItem(db: AppDatabase, planId: string, cycleDay: number, timeTag: TimeTag, sortOrder: number, excludeItemId?: string): boolean {
   return listPlanItems(db, planId).some((row) => {
     if (excludeItemId && row.id === excludeItemId) return false;
     const metadata = parseItemMetadata(row.ext_data_json);
-    return metadata.cycleDay === cycleDay && row.sort_order === sortOrder;
+    return metadata.cycleDay === cycleDay && metadata.timeTag === timeTag && row.sort_order === sortOrder;
   });
+}
+
+function timeTagOrder(timeTag: TimeTag): number {
+  return { 全天: 0, 上午: 1, 下午: 2 }[timeTag];
 }
 
 function maxItemCycleDay(db: AppDatabase, planId: string): number {

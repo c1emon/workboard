@@ -1,17 +1,30 @@
 <template>
   <section class="list-panel patrol-plan-panel">
-    <ListHeader title="巡视模板" />
-    <div class="manager-actions">
-      <button type="button" class="primary-action" aria-label="新增巡视模板" @click="emit('add-plan')">新增模板</button>
+    <div class="plan-heading-row">
+      <ListHeader title="巡视模板" />
+      <button
+        type="button"
+        class="icon-action toolbar-add-action"
+        aria-label="新增巡视模板"
+        title="新增巡视模板"
+        @click="emit('add-plan')"
+      >
+        +
+      </button>
     </div>
     <div class="table-shell">
-      <table>
+      <table class="patrol-plan-table">
+        <colgroup>
+          <col />
+          <col class="cycle-column" />
+          <col class="skip-column" />
+          <col class="plan-actions-column" />
+        </colgroup>
         <thead>
           <tr>
             <th>名称</th>
             <th>周期</th>
             <th>跳过</th>
-            <th>状态</th>
             <th class="actions-column">操作</th>
           </tr>
         </thead>
@@ -20,101 +33,160 @@
             <td>{{ record.name }}</td>
             <td>{{ record.cycleLength }} 天</td>
             <td>{{ skipText(record) }}</td>
-            <td>{{ record.enabled ? "启用" : "禁用" }}</td>
             <td class="row-actions">
               <button type="button" @click="emit('select-plan', record)">详情</button>
+              <button type="button" @click="emit('manage-items', record)">子项管理</button>
               <button type="button" @click="emit('toggle-plan', record)">{{ record.enabled ? "禁用" : "启用" }}</button>
               <button type="button" @click="emit('edit-plan', record)">修改</button>
               <button type="button" class="danger" @click="emit('delete-plan', record)">删除</button>
             </td>
           </tr>
           <tr v-if="rows.length === 0">
-            <td class="empty-cell" colspan="5">暂无巡视模板</td>
+            <td class="empty-cell" colspan="4">暂无巡视模板</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <form v-if="planFormOpen" class="modal-form inline-admin-form" @submit.prevent="emit('save-plan')">
-      <div class="modal-heading">
-        <div>
-          <h2>{{ planEditingId ? "编辑巡视模板" : "新增巡视模板" }}</h2>
+    <div v-if="planFormOpen" class="modal-backdrop" role="presentation" @click.self="emit('close-plan')">
+      <form class="modal-form patrol-plan-modal" @submit.prevent="emit('save-plan')">
+        <div class="modal-heading">
+          <div>
+            <h2>{{ planEditingId ? "编辑巡视模板" : "新增巡视模板" }}</h2>
+          </div>
+          <button type="button" aria-label="关闭巡视模板表单" @click="emit('close-plan')">×</button>
         </div>
-        <button type="button" aria-label="关闭巡视模板表单" @click="emit('close-plan')">×</button>
-      </div>
-      <div class="form-grid">
-        <label>
-          名称
-          <input v-model="planForm.name" name="patrolPlanName" required />
-        </label>
-        <label>
-          周期天数
-          <input v-model.number="planForm.cycleLength" name="patrolPlanCycleLength" type="number" min="1" required />
-        </label>
-        <label>
-          开始时间
-          <input v-model="planForm.startAt" name="patrolPlanStartAt" required />
-        </label>
-        <label>
-          结束时间
-          <input v-model="planForm.endAt" name="patrolPlanEndAt" required />
-        </label>
-        <label class="wide-field">
-          说明
-          <input v-model="planForm.description" name="patrolPlanDescription" />
-        </label>
-      </div>
-      <div class="checkbox-row">
-        <label><input v-model="planForm.skipWeekends" name="patrolPlanSkipWeekends" type="checkbox" /> 跳过周末</label>
-        <label><input v-model="planForm.skipHolidays" name="patrolPlanSkipHolidays" type="checkbox" /> 跳过节假日</label>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary-action" @click="emit('close-plan')">取消</button>
-        <button type="submit" class="primary-action">保存模板</button>
-      </div>
-    </form>
+        <div class="form-grid">
+          <label>
+            名称
+            <input v-model="planForm.name" name="patrolPlanName" required />
+          </label>
+          <label>
+            开始时间
+            <input v-model="planForm.startAt" name="patrolPlanStartAt" type="date" required />
+          </label>
+          <label>
+            结束时间
+            <input v-model="planForm.endAt" name="patrolPlanEndAt" type="date" :min="planForm.startAt" required />
+          </label>
+          <label class="wide-field">
+            说明
+            <input v-model="planForm.description" name="patrolPlanDescription" />
+          </label>
+        </div>
+        <div class="checkbox-row">
+          <label><input v-model="planForm.skipWeekends" name="patrolPlanSkipWeekends" type="checkbox" /> 跳过周末</label>
+          <label><input v-model="planForm.skipHolidays" name="patrolPlanSkipHolidays" type="checkbox" /> 跳过节假日</label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" @click="emit('close-plan')">取消</button>
+          <button type="submit" class="primary-action">保存模板</button>
+        </div>
+      </form>
+    </div>
 
-    <section v-if="detail" class="cycle-detail">
-      <div class="detail-heading">
-        <div>
-          <h3>{{ detail.name }} 周期项</h3>
-          <p>{{ detail.items.length }} 项</p>
+    <div v-if="detail && detailOpen" class="modal-backdrop patrol-detail-backdrop" role="presentation" @click.self="emit('close-detail')">
+      <section class="modal-form patrol-detail-modal cycle-detail">
+        <div class="modal-heading">
+          <div>
+            <h2>{{ detail.name }} 周期项</h2>
+            <p>{{ detail.items.length }} 项</p>
+          </div>
+          <button type="button" aria-label="关闭巡视模板详情" @click="emit('close-detail')">×</button>
         </div>
-        <button type="button" class="secondary-action" @click="emit('add-item')">新增周期项</button>
-      </div>
-      <div class="table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>天</th>
-              <th>时间</th>
-              <th>目标</th>
-              <th>人员</th>
-              <th>车辆</th>
-              <th>其他</th>
-              <th class="actions-column">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in detail.items" :key="item.id">
-              <td>{{ item.cycleDay }}</td>
-              <td>{{ item.timeTag }}</td>
-              <td>{{ item.target }}</td>
-              <td>{{ item.personnel || "-" }}</td>
-              <td>{{ item.vehicle || "-" }}</td>
-              <td>{{ item.other || "-" }}</td>
-              <td class="row-actions">
-                <button type="button" @click="emit('edit-item', item)">修改</button>
-                <button type="button" class="danger" @click="emit('delete-item', item)">删除</button>
-              </td>
-            </tr>
-            <tr v-if="detail.items.length === 0">
-              <td class="empty-cell" colspan="7">暂无周期项</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <form class="modal-form inline-admin-form" @submit.prevent="emit('save-item')">
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>天</th>
+                <th>时间</th>
+                <th>目标</th>
+                <th>人员</th>
+                <th>车辆</th>
+                <th>其他</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in detail.items" :key="item.id">
+                <td>{{ item.cycleDay }}</td>
+                <td>{{ item.timeTag }}</td>
+                <td>{{ item.target }}</td>
+                <td>{{ item.personnel || "-" }}</td>
+                <td>{{ item.vehicle || "-" }}</td>
+                <td>{{ item.other || "-" }}</td>
+              </tr>
+              <tr v-if="detail.items.length === 0">
+                <td class="empty-cell" colspan="6">暂无周期项</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="detail && itemManagerOpen" class="modal-backdrop patrol-detail-backdrop" role="presentation" @click.self="emit('close-item-manager')">
+      <section class="modal-form patrol-detail-modal patrol-item-manager-modal cycle-detail">
+        <div class="modal-heading">
+          <div>
+            <h2>{{ detail.name }} 子项管理</h2>
+            <p>{{ detail.items.length }} 项</p>
+          </div>
+          <button type="button" aria-label="关闭子项管理" @click="emit('close-item-manager')">×</button>
+        </div>
+        <div class="detail-toolbar">
+          <button
+            type="button"
+            class="icon-action toolbar-add-action"
+            aria-label="新增周期项"
+            title="新增周期项"
+            @click="emit('add-item')"
+          >
+            +
+          </button>
+        </div>
+        <div class="table-shell">
+          <table>
+            <thead>
+              <tr>
+                <th>天</th>
+                <th>时间</th>
+                <th>目标</th>
+                <th>人员</th>
+                <th>车辆</th>
+                <th>其他</th>
+                <th class="actions-column">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in detail.items" :key="item.id">
+                <td>{{ item.cycleDay }}</td>
+                <td>{{ item.timeTag }}</td>
+                <td>{{ item.target }}</td>
+                <td>{{ item.personnel || "-" }}</td>
+                <td>{{ item.vehicle || "-" }}</td>
+                <td>{{ item.other || "-" }}</td>
+                <td class="row-actions">
+                  <button type="button" @click="emit('edit-item', item)">修改</button>
+                  <button type="button" class="danger" @click="emit('delete-item', item)">删除</button>
+                </td>
+              </tr>
+              <tr v-if="detail.items.length === 0">
+                <td class="empty-cell" colspan="7">暂无周期项</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div v-if="itemFormOpen" class="modal-backdrop patrol-cycle-item-backdrop" role="presentation" @click.self="emit('close-item-form')">
+      <form class="modal-form patrol-cycle-item-modal" @submit.prevent="emit('save-item')">
+        <div class="modal-heading">
+          <div>
+            <h2>{{ itemEditingId ? "修改周期项" : "新增周期项" }}</h2>
+          </div>
+          <button type="button" aria-label="关闭周期项表单" @click="emit('close-item-form')">×</button>
+        </div>
         <div class="form-grid">
           <label>
             周期第几天
@@ -133,10 +205,6 @@
             <input v-model="itemForm.target" name="patrolCycleTarget" required />
           </label>
           <label>
-            排序
-            <input v-model.number="itemForm.sortOrder" name="patrolCycleSortOrder" type="number" />
-          </label>
-          <label>
             人员
             <input v-model="itemForm.personnel" name="patrolCyclePersonnel" />
           </label>
@@ -150,10 +218,11 @@
           </label>
         </div>
         <div class="modal-actions">
-          <button type="submit" class="primary-action">{{ itemEditingId ? "保存周期项" : "新增周期项" }}</button>
+          <button type="button" class="secondary-action" @click="emit('close-item-form')">取消</button>
+          <button type="submit" class="primary-action">保存周期项</button>
         </div>
       </form>
-    </section>
+    </div>
   </section>
 </template>
 
@@ -165,10 +234,13 @@ import ListHeader from "./ListHeader.vue";
 defineProps<{
   rows: PatrolPlanRecord[];
   detail: PatrolPlanDetail | null;
+  detailOpen: boolean;
+  itemManagerOpen: boolean;
   planForm: PatrolPlanForm;
   planFormOpen: boolean;
   planEditingId: string | null;
   itemForm: PatrolCycleItemForm;
+  itemFormOpen: boolean;
   itemEditingId: string | null;
 }>();
 
@@ -176,6 +248,9 @@ const emit = defineEmits<{
   "add-plan": [];
   "edit-plan": [record: PatrolPlanRecord];
   "select-plan": [record: PatrolPlanRecord];
+  "manage-items": [record: PatrolPlanRecord];
+  "close-detail": [];
+  "close-item-manager": [];
   "toggle-plan": [record: PatrolPlanRecord];
   "delete-plan": [record: PatrolPlanRecord];
   "close-plan": [];
@@ -183,6 +258,7 @@ const emit = defineEmits<{
   "add-item": [];
   "edit-item": [item: PatrolCycleItemRecord];
   "delete-item": [item: PatrolCycleItemRecord];
+  "close-item-form": [];
   "save-item": [];
 }>();
 
@@ -198,10 +274,10 @@ function skipText(record: PatrolPlanRecord): string {
 <style scoped src="./modalStyles.css"></style>
 <style scoped>
 .patrol-plan-panel {
-  padding-top: 18px;
+  padding-top: 22px;
 }
 
-.manager-actions,
+.plan-heading-row,
 .detail-heading {
   display: flex;
   align-items: center;
@@ -219,13 +295,71 @@ function skipText(record: PatrolPlanRecord): string {
   font-size: 13px;
 }
 
+.toolbar-add-action {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid #2563eb;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 8px 18px rgb(37 99 235 / 24%);
+}
+
+.plan-heading-row :deep(.list-heading) {
+  min-width: 0;
+}
+
+.patrol-plan-table {
+  table-layout: fixed;
+  min-width: 740px;
+}
+
+.cycle-column {
+  width: 96px;
+}
+
+.skip-column {
+  width: 132px;
+}
+
+.plan-actions-column {
+  width: 300px;
+}
+
+.patrol-plan-modal {
+  width: min(640px, 100%);
+}
+
 .cycle-detail {
   display: grid;
   gap: 14px;
 }
 
-.inline-admin-form {
-  width: 100%;
-  box-shadow: none;
+.detail-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.patrol-detail-modal {
+  width: min(960px, 100%);
+}
+
+.patrol-cycle-item-modal {
+  width: min(640px, 100%);
+}
+
+@media (max-width: 900px) {
+  .plan-heading-row {
+    align-items: flex-start;
+  }
 }
 </style>

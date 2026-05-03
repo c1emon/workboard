@@ -145,6 +145,7 @@ export interface TaskInstanceGenerationInput {
   windowStartDate: string;
   windowEndDate: string;
   types?: TaskTemplateType[];
+  templateIds?: string[];
   refreshPending?: boolean;
 }
 
@@ -190,7 +191,6 @@ export interface PatrolPlanInput {
   endAt: string;
   skipWeekends: boolean;
   skipHolidays: boolean;
-  cycleLength: number;
   enabled?: boolean;
 }
 
@@ -444,8 +444,9 @@ export async function deleteOperationPlanItem(planId: string, itemId: string): P
   return deleteAdmin(`operation-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`);
 }
 
-export async function fetchTaskInstances(date: string, type?: TaskTemplateType): Promise<TaskInstanceRecord[]> {
-  const params = new URLSearchParams({ date });
+export async function fetchTaskInstances(date: string, type?: TaskTemplateType, scope: ListScope = "date"): Promise<TaskInstanceRecord[]> {
+  const params = new URLSearchParams({ scope });
+  if (scope === "date") params.set("date", date);
   if (type) params.set("type", type);
   return fetchAdmin(`task-instances?${params.toString()}`);
 }

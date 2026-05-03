@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
-import { defineComponent, onMounted, ref } from "vue";
+import { defineComponent, onMounted, ref, watch } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import TaskInstanceManager from "../src/components/admin/TaskInstanceManager.vue";
 import { useTaskInstanceAdmin } from "../src/composables/admin/useTaskInstanceAdmin";
@@ -48,17 +48,21 @@ function mountHarness() {
         requestConfirmation
       });
       onMounted(admin.loadTaskInstanceRows);
+      watch(admin.taskInstanceShowAll, admin.loadTaskInstanceRows);
       return { selectedDate, admin };
     },
     template: `
       <TaskInstanceManager
         v-model:selected-date="selectedDate"
-        v-model:generation-end-date="admin.taskInstanceGenerationEndDate.value"
         today="2026-05-01"
         yesterday="2026-04-30"
+        v-model:show-all="admin.taskInstanceShowAll.value"
         :rows="admin.taskInstanceRows.value"
+        :patrol-plans="[{ id: 'plan-1', name: '日常巡检', description: '', startAt: '2026-05-01T00:00:00+08:00', endAt: '2026-05-31T23:59:59+08:00', skipWeekends: false, skipHolidays: false, enabled: true, cycleLength: 90 }]"
         :form="admin.taskInstanceForm"
         :form-open="admin.taskInstanceFormOpen.value"
+        :refresh-form="admin.taskInstanceRefreshForm"
+        :refresh-open="admin.taskInstanceRefreshOpen.value"
         :editing-id="admin.taskInstanceEditingId.value"
         :generation-summary="admin.taskInstanceGenerationSummary.value"
         @add="admin.openTaskInstanceCreate"
@@ -67,7 +71,9 @@ function mountHarness() {
         @edit="admin.openTaskInstanceEdit"
         @cancel="admin.cancelTaskInstance"
         @delete="admin.removeTaskInstance"
-        @regenerate="admin.regenerateTaskInstances"
+        @open-refresh="admin.openTaskInstanceRefresh"
+        @close-refresh="admin.closeTaskInstanceRefresh"
+        @refresh="admin.refreshTaskInstances([{ id: 'plan-1', name: '日常巡检', description: '', startAt: '2026-05-01T00:00:00+08:00', endAt: '2026-05-31T23:59:59+08:00', skipWeekends: false, skipHolidays: false, enabled: true, cycleLength: 90 }])"
         @save="admin.saveTaskInstance"
         @close="admin.closeTaskInstanceForm"
       />`
@@ -85,9 +91,20 @@ describe("TaskInstanceManager", () => {
     const { wrapper } = mountHarness();
     await flush();
 
-    expect(fetchTaskInstances).toHaveBeenCalledWith("2026-05-01", "patrol");
+    expect(fetchTaskInstances).toHaveBeenCalledWith("2026-05-01", "patrol", "date");
     expect(wrapper.text()).toContain("人工巡视");
     expect(wrapper.text()).toContain("手动");
+  });
+
+  it("loads all instances when show all is enabled", async () => {
+    const { wrapper } = mountHarness();
+    await flush();
+
+    await wrapper.find('input[name="operationShowAll"]').setValue(true);
+    await flush();
+
+    expect(fetchTaskInstances).toHaveBeenLastCalledWith("2026-05-01", "patrol", "all");
+    expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
   });
 
   it("saves manual instances through the create API", async () => {
@@ -95,9 +112,13 @@ describe("TaskInstanceManager", () => {
     await flush();
 
     await wrapper.find('[aria-label="新增实例"]').trigger("click");
+
+    expect(wrapper.find(".modal-backdrop").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("元数据 JSON");
+
     await wrapper.find('input[name="taskInstanceContent"]').setValue("临时巡视");
     await wrapper.find('select[name="taskInstanceType"]').setValue("patrol");
-    await wrapper.find(".inline-admin-form").trigger("submit.prevent");
+    await wrapper.find(".task-instance-modal").trigger("submit.prevent");
 
     expect(createTaskInstance).toHaveBeenCalledWith(expect.objectContaining({
       type: "patrol",
@@ -109,14 +130,24 @@ describe("TaskInstanceManager", () => {
     const { wrapper, requestConfirmation } = mountHarness();
     await flush();
 
-    await wrapper.find('input[name="taskInstanceGenerationEndDate"]').setValue("2026-05-31");
+    expect(wrapper.text()).not.toContain("生成至");
+    expect(wrapper.find('input[name="taskInstanceGenerationEndDate"]').exists()).toBe(false);
+
     await wrapper.find(".manager-actions .secondary-action").trigger("click");
 
-    expect(requestConfirmation).toHaveBeenCalledWith(expect.objectContaining({ title: "重新生成实例" }));
+    expect(wrapper.find(".modal-backdrop").exists()).toBe(true);
+    expect(wrapper.find('select[name="taskInstanceRefreshTemplate"]').element.value).toBe("");
+
+    await wrapper.find('select[name="taskInstanceRefreshTemplate"]').setValue("plan-1");
+    await wrapper.find('input[name="taskInstanceRefreshEndDate"]').setValue("2026-05-31");
+    await wrapper.find(".task-instance-modal").trigger("submit.prevent");
+
+    expect(requestConfirmation).toHaveBeenCalledWith(expect.objectContaining({ title: "刷新实例" }));
     expect(generateTaskInstances).toHaveBeenCalledWith({
       windowStartDate: "2026-05-01",
       windowEndDate: "2026-05-31",
       types: ["patrol"],
+      templateIds: ["plan-1"],
       refreshPending: true
     });
     expect(wrapper.text()).toContain("新增 1，更新 2，跳过 3");

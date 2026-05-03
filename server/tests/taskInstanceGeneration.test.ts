@@ -80,8 +80,7 @@ describe("task instance generation", () => {
       id: "patrol-1",
       type: "patrol",
       startAt: "2026-01-01T00:00:00+08:00",
-      endAt: "2026-01-01T23:59:59+08:00",
-      metadata: { cycleLength: 90 }
+      endAt: "2026-01-01T23:59:59+08:00"
     });
     insertItem(db, { id: "day-1", templateId: "patrol-1", content: "一号点", metadata: { cycleDay: 1, timeTag: "上午" } });
     insertItem(db, { id: "day-2", templateId: "patrol-1", content: "二号点", metadata: { cycleDay: 2, timeTag: "上午" } });
@@ -124,6 +123,24 @@ describe("task instance generation", () => {
       other: "带钥匙",
       cycleDay: 1
     });
+  });
+
+  it("filters generation to selected template ids", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, { id: "patrol-1", type: "patrol", startAt: "2026-05-01T00:00:00+08:00", endAt: "2026-05-01T23:59:59+08:00" });
+    insertTemplate(db, { id: "patrol-2", type: "patrol", startAt: "2026-05-01T00:00:00+08:00", endAt: "2026-05-01T23:59:59+08:00" });
+    insertItem(db, { id: "item-1", templateId: "patrol-1", content: "一号模板", metadata: { cycleDay: 1 } });
+    insertItem(db, { id: "item-2", templateId: "patrol-2", content: "二号模板", metadata: { cycleDay: 1 } });
+
+    const result = generateTaskInstances(db, {
+      windowStartDate: "2026-05-01",
+      windowEndDate: "2026-05-01",
+      types: ["patrol"],
+      templateIds: ["patrol-2"]
+    });
+
+    expect(result).toEqual({ inserted: 1, updated: 0, skipped: 0 });
+    expect(readInstances(db).map((row) => row.content)).toEqual(["二号模板"]);
   });
 
   it("skips patrol holidays without consuming the cycle day", () => {
@@ -351,7 +368,7 @@ describe("task instance generation", () => {
     expect(readInstances(db)).toEqual([]);
   });
 
-  it("falls back to the default patrol cycle length when string cycleLength is not positive", () => {
+  it("derives patrol cycle length from the largest cycle item day", () => {
     const db = createTestDatabase();
     insertTemplate(db, {
       id: "patrol-1",
@@ -360,11 +377,11 @@ describe("task instance generation", () => {
       endAt: "2026-05-01T23:59:59+08:00",
       metadata: { cycleLength: "0" }
     });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "默认周期第一天", metadata: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "第二天", metadata: { cycleDay: 2 } });
 
-    generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-01", types: ["patrol"] });
+    generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-03", types: ["patrol"] });
 
-    expect(readInstances(db)).toEqual([expect.objectContaining({ content: "默认周期第一天" })]);
+    expect(readInstances(db).map((row) => `${row.occurrence_date}:${row.content}`)).toEqual(["2026-05-02:第二天"]);
   });
 
   it("does not generate when template start_at is after windowEndDate", () => {

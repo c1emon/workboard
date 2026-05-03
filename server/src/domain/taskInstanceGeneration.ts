@@ -10,6 +10,7 @@ export interface GenerateTaskInstancesInput {
   windowStartDate: string;
   windowEndDate: string;
   types?: TaskTemplateType[];
+  templateIds?: string[];
   refreshPending?: boolean;
 }
 
@@ -73,7 +74,10 @@ export function generateTaskInstances(db: AppDatabase, input: GenerateTaskInstan
   const windowEnd = `${input.windowEndDate}T23:59:59.999+08:00`;
   const holidaySets = loadHolidaySets(db);
   const selectedTypes = new Set(input.types ?? ["operation", "permit", "patrol", "other"]);
-  const templates = loadTaskTemplates(db).filter((template) => selectedTypes.has(template.type));
+  const selectedTemplateIds = input.templateIds ? new Set(input.templateIds) : null;
+  const templates = loadTaskTemplates(db).filter(
+    (template) => selectedTypes.has(template.type) && (!selectedTemplateIds || selectedTemplateIds.has(template.id))
+  );
   const itemsByTemplate = loadTaskTemplateItems(db);
   const stats: GenerateTaskInstancesOutput = { inserted: 0, updated: 0, skipped: 0 };
 
@@ -135,7 +139,8 @@ function patrolSnapshots(
   holidaySets: { holidays: Set<string>; adjustedWorkdays: Set<string> }
 ): InstanceSnapshot[] {
   const snapshots: InstanceSnapshot[] = [];
-  const cycleLength = positiveInteger(template.metadata.cycleLength, 90);
+  const cycleLength = maxPatrolCycleDay(items);
+  if (cycleLength === 0) return snapshots;
   const startDate = chinaDate(template.startAt);
   let eligibleDateCount = 0;
 
@@ -337,6 +342,10 @@ function positiveInteger(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) return value;
   if (typeof value === "string" && /^\d+$/.test(value) && Number(value) > 0) return Number(value);
   return fallback;
+}
+
+function maxPatrolCycleDay(items: TaskTemplateItemInput[]): number {
+  return items.reduce((max, item) => Math.max(max, positiveInteger(item.metadata.cycleDay, 0)), 0);
 }
 
 function formatWithChinaOffset(epochMs: number): string {

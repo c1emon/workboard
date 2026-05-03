@@ -81,6 +81,7 @@ export function useAdminViewModel() {
       activeKey,
       selectedDate,
       operationAdmin.operationShowAll,
+      taskInstanceAdmin.taskInstanceShowAll,
       arrangementAdmin.permitShowAll,
       arrangementAdmin.otherShowAll,
       arrangementAdmin.leaveShowAll

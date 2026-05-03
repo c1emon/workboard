@@ -18,8 +18,9 @@ const statusSchema = z.enum(taskInstanceStatuses);
 const metadataSchema = z.record(z.unknown());
 
 const listQuerySchema = z.object({
-  date: dateSchema,
-  type: typeSchema.optional()
+  date: dateSchema.optional(),
+  type: typeSchema.optional(),
+  scope: z.enum(["date", "all"]).default("date")
 });
 
 const instanceInputSchema = z
@@ -41,6 +42,7 @@ const generateInputSchema = z
     windowStartDate: dateSchema,
     windowEndDate: dateSchema,
     types: z.array(typeSchema).optional(),
+    templateIds: z.array(resourceIdSchema).optional(),
     refreshPending: z.boolean().optional()
   })
   .superRefine((input, ctx) => {
@@ -103,11 +105,27 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
   app.get("/api/admin/task-instances", async (request, reply) => {
     const validation = validateAdminPayload(listQuerySchema, request.query);
     if (!validation.success) return reply.code(400).send(validation.error);
+    if (validation.data.scope === "date" && !validation.data.date) {
+      return reply.code(400).send({
+        error: "Invalid admin payload",
+        issues: [{ code: z.ZodIssueCode.custom, path: ["date"], message: "Required when scope is date" }]
+      });
+    }
 
     const dayStart = `${validation.data.date}T00:00:00+08:00`;
     const dayEnd = `${validation.data.date}T23:59:59.999+08:00`;
     const rows = validation.data.type
-      ? db
+      ? validation.data.scope === "all"
+        ? db
+          .prepare<[string], TaskInstanceRow>(
+                 `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
+                         start_at, end_at, content, ext_data_json, status, generated_at, updated_at
+                    from task_instances
+                   where type = ?
+                   order by start_at desc, content, id`
+          )
+          .all(validation.data.type)
+        : db
           .prepare<[string, string, string], TaskInstanceRow>(
 	             `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
 	                     start_at, end_at, content, ext_data_json, status, generated_at, updated_at
@@ -116,7 +134,16 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
 	             order by start_at, content, id`
           )
           .all(validation.data.type, dayEnd, dayStart)
-      : db
+      : validation.data.scope === "all"
+        ? db
+          .prepare<[], TaskInstanceRow>(
+                 `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
+                         start_at, end_at, content, ext_data_json, status, generated_at, updated_at
+                    from task_instances
+                   order by start_at desc, content, id`
+          )
+          .all()
+        : db
           .prepare<[string, string], TaskInstanceRow>(
 	             `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
 	                     start_at, end_at, content, ext_data_json, status, generated_at, updated_at

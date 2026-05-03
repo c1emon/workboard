@@ -3,8 +3,9 @@
     <ListHeader title="任务实例" />
     <DateToolbar
       :model-value="selectedDate"
-      :show-all="false"
-      :allow-show-all="false"
+      :show-all="showAll"
+      :allow-show-all="true"
+      :disabled="showAll"
       :today="today"
       :yesterday="yesterday"
       add-label="新增实例"
@@ -12,19 +13,10 @@
       @today="emit('today')"
       @yesterday="emit('yesterday')"
       @update:model-value="emit('update:selectedDate', $event)"
+      @update:show-all="emit('update:showAll', $event)"
     />
     <div class="manager-actions">
-      <label>
-        生成至
-        <input
-          :value="generationEndDate"
-          type="date"
-          name="taskInstanceGenerationEndDate"
-          :min="selectedDate"
-          @input="emit('update:generationEndDate', ($event.target as HTMLInputElement).value)"
-        />
-      </label>
-      <button type="button" class="secondary-action" @click="emit('regenerate')">重新生成</button>
+      <button type="button" class="secondary-action refresh-action" @click="emit('open-refresh')">刷新实例</button>
       <span v-if="generationSummary">{{ generationSummary }}</span>
     </div>
     <div class="table-shell">
@@ -35,7 +27,6 @@
             <th>来源</th>
             <th>时间</th>
             <th>内容</th>
-            <th>状态</th>
             <th class="actions-column">操作</th>
           </tr>
         </thead>
@@ -45,7 +36,6 @@
             <td>{{ sourceText(record.sourceType) }}</td>
             <td>{{ formatTime(record.startAt) }} - {{ formatTime(record.endAt) }}</td>
             <td>{{ record.content || "-" }}</td>
-            <td>{{ statusText(record.status) }}</td>
             <td class="row-actions">
               <button v-if="canEdit(record)" type="button" @click="emit('edit', record)">修改</button>
               <button v-if="record.status !== 'cancelled'" type="button" @click="emit('cancel', record)">取消</button>
@@ -53,58 +43,93 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0">
-            <td class="empty-cell" colspan="6">当前日期暂无实例</td>
+            <td class="empty-cell" colspan="5">{{ showAll ? "暂无实例" : "当前日期暂无实例" }}</td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <form v-if="formOpen" class="modal-form inline-admin-form" @submit.prevent="emit('save')">
-      <div class="modal-heading">
-        <div>
-          <h2>{{ editingId ? "编辑实例" : "新增实例" }}</h2>
+    <div v-if="formOpen" class="modal-backdrop" role="presentation" @click.self="emit('close')">
+      <form class="modal-form task-instance-modal" @submit.prevent="emit('save')">
+        <div class="modal-heading">
+          <div>
+            <h2>{{ editingId ? "编辑实例" : "新增实例" }}</h2>
+          </div>
+          <button type="button" aria-label="关闭实例表单" @click="emit('close')">×</button>
         </div>
-        <button type="button" aria-label="关闭实例表单" @click="emit('close')">×</button>
-      </div>
-      <div class="form-grid">
-        <label>
-          类型
-          <select v-model="form.type" name="taskInstanceType">
-            <option value="operation">操作</option>
-            <option value="permit">许可</option>
-            <option value="patrol">巡视</option>
-            <option value="other">其他</option>
-          </select>
-        </label>
-        <label>
-          内容
-          <input v-model="form.content" name="taskInstanceContent" required />
-        </label>
-        <label>
-          开始时间
-          <input v-model="form.startAt" name="taskInstanceStartAt" required />
-        </label>
-        <label>
-          结束时间
-          <input v-model="form.endAt" name="taskInstanceEndAt" required />
-        </label>
-        <label class="wide-field">
-          元数据 JSON
-          <textarea v-model="form.metadataJson" name="taskInstanceMetadata" />
-        </label>
-      </div>
-      <div class="modal-actions">
-        <button type="button" class="secondary-action" @click="emit('close')">取消</button>
-        <button type="submit" class="primary-action">保存</button>
-      </div>
-    </form>
+        <div class="form-grid">
+          <label>
+            类型
+            <select v-model="form.type" name="taskInstanceType">
+              <option value="operation">操作</option>
+              <option value="permit">许可</option>
+              <option value="patrol">巡视</option>
+              <option value="other">其他</option>
+            </select>
+          </label>
+          <label>
+            内容
+            <input v-model="form.content" name="taskInstanceContent" required />
+          </label>
+          <label>
+            开始时间
+            <input v-model="form.startAt" name="taskInstanceStartAt" required />
+          </label>
+          <label>
+            结束时间
+            <input v-model="form.endAt" name="taskInstanceEndAt" required />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" @click="emit('close')">取消</button>
+          <button type="submit" class="primary-action">保存</button>
+        </div>
+      </form>
+    </div>
+
+    <div v-if="refreshOpen" class="modal-backdrop" role="presentation" @click.self="emit('close-refresh')">
+      <form class="modal-form task-instance-modal" @submit.prevent="emit('refresh')">
+        <div class="modal-heading">
+          <div>
+            <h2>刷新实例</h2>
+          </div>
+          <button type="button" aria-label="关闭刷新实例弹窗" @click="emit('close-refresh')">×</button>
+        </div>
+        <div class="form-grid">
+          <label class="wide-field">
+            巡视模板
+            <select v-model="refreshForm.templateId" name="taskInstanceRefreshTemplate">
+              <option value="">全部巡视模板</option>
+              <option v-for="plan in patrolPlans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
+            </select>
+          </label>
+          <label>
+            开始日期
+            <input v-model="refreshForm.windowStartDate" name="taskInstanceRefreshStartDate" type="date" required />
+          </label>
+          <label>
+            结束日期
+            <input
+              v-model="refreshForm.windowEndDate"
+              name="taskInstanceRefreshEndDate"
+              type="date"
+              :min="refreshForm.windowStartDate"
+              required
+            />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" @click="emit('close-refresh')">取消</button>
+          <button type="submit" class="primary-action">执行</button>
+        </div>
+      </form>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import type { TaskInstanceRecord } from "../../api/client";
-import type { TaskInstanceStatus } from "../../api/types";
-import type { TaskInstanceForm } from "../../composables/admin/useTaskInstanceAdmin";
+import type { PatrolPlanRecord, TaskInstanceRecord } from "../../api/client";
+import type { TaskInstanceForm, TaskInstanceRefreshForm } from "../../composables/admin/useTaskInstanceAdmin";
 import DateToolbar from "./DateToolbar.vue";
 import ListHeader from "./ListHeader.vue";
 
@@ -112,24 +137,29 @@ defineProps<{
   selectedDate: string;
   today: string;
   yesterday: string;
+  showAll: boolean;
   rows: TaskInstanceRecord[];
+  patrolPlans: PatrolPlanRecord[];
   form: TaskInstanceForm;
   formOpen: boolean;
+  refreshForm: TaskInstanceRefreshForm;
+  refreshOpen: boolean;
   editingId: string | null;
-  generationEndDate: string;
   generationSummary: string;
 }>();
 
 const emit = defineEmits<{
   "update:selectedDate": [value: string];
-  "update:generationEndDate": [value: string];
+  "update:showAll": [value: boolean];
   add: [];
   today: [];
   yesterday: [];
   edit: [record: TaskInstanceRecord];
   cancel: [record: TaskInstanceRecord];
   delete: [record: TaskInstanceRecord];
-  regenerate: [];
+  "open-refresh": [];
+  "close-refresh": [];
+  refresh: [];
   save: [];
   close: [];
 }>();
@@ -146,10 +176,6 @@ function sourceText(source: TaskInstanceRecord["sourceType"]): string {
   return { generated: "生成", manual: "手动", override: "覆盖" }[source];
 }
 
-function statusText(status: TaskInstanceStatus): string {
-  return { pending: "待处理", in_progress: "进行中", done: "完成", cancelled: "取消" }[status];
-}
-
 function formatTime(value: string): string {
   return value.replace("T", " ").replace("+08:00", "");
 }
@@ -158,18 +184,18 @@ function formatTime(value: string): string {
 <style scoped src="./managerStyles.css"></style>
 <style scoped src="./modalStyles.css"></style>
 <style scoped>
-.task-instance-panel {
-  border-bottom: 1px solid #d8dee8;
-}
-
 .manager-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
 }
 
-.inline-admin-form {
-  width: 100%;
-  box-shadow: none;
+.refresh-action {
+  margin-left: auto;
+}
+
+.task-instance-modal {
+  width: min(560px, 100%);
 }
 </style>

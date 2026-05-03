@@ -4,6 +4,7 @@ import {
   deleteTaskInstance,
   fetchTaskInstances,
   generateTaskInstances,
+  type PatrolPlanRecord,
   type TaskInstanceInput,
   type TaskInstanceRecord,
   updateTaskInstance,
@@ -19,12 +20,19 @@ export interface TaskInstanceForm {
   metadataJson: string;
 }
 
+export interface TaskInstanceRefreshForm {
+  templateId: string;
+  windowStartDate: string;
+  windowEndDate: string;
+}
+
 export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   const { selectedDate, today, withStatus, refresh, requestConfirmation } = context;
   const taskInstanceRows = ref<TaskInstanceRecord[]>([]);
+  const taskInstanceShowAll = ref(false);
   const taskInstanceFormOpen = ref(false);
+  const taskInstanceRefreshOpen = ref(false);
   const taskInstanceEditingId = ref<string | null>(null);
-  const taskInstanceGenerationEndDate = ref(selectedDate.value);
   const taskInstanceGenerationSummary = ref("");
   const taskInstanceForm = reactive<TaskInstanceForm>({
     type: "patrol",
@@ -33,15 +41,18 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     content: "",
     metadataJson: "{}"
   });
+  const taskInstanceRefreshForm = reactive<TaskInstanceRefreshForm>({
+    templateId: "",
+    windowStartDate: selectedDate.value,
+    windowEndDate: selectedDate.value
+  });
 
   watch(selectedDate, (date) => {
-    if (!taskInstanceGenerationEndDate.value || taskInstanceGenerationEndDate.value < date) {
-      taskInstanceGenerationEndDate.value = date;
-    }
+    if (!taskInstanceRefreshOpen.value) resetRefreshForm(date);
   });
 
   async function loadTaskInstanceRows(): Promise<void> {
-    taskInstanceRows.value = await fetchTaskInstances(selectedDate.value, "patrol");
+    taskInstanceRows.value = await fetchTaskInstances(selectedDate.value, "patrol", taskInstanceShowAll.value ? "all" : "date");
   }
 
   function openTaskInstanceCreate(): void {
@@ -106,23 +117,36 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     });
   }
 
-  async function regenerateTaskInstances(): Promise<void> {
-    const windowEndDate = generationWindowEndDate();
+  function openTaskInstanceRefresh(): void {
+    resetRefreshForm(selectedDate.value || today);
+    taskInstanceRefreshOpen.value = true;
+  }
+
+  function closeTaskInstanceRefresh(): void {
+    taskInstanceRefreshOpen.value = false;
+  }
+
+  async function refreshTaskInstances(plans: PatrolPlanRecord[]): Promise<void> {
+    const windowEndDate = refreshWindowEndDate();
+    const plan = plans.find((row) => row.id === taskInstanceRefreshForm.templateId);
+    const scopeText = plan ? `模板「${plan.name}」` : "全部巡视模板";
     const confirmed = await requestConfirmation({
-      title: "重新生成实例",
-      message: `将刷新 ${selectedDate.value} 至 ${windowEndDate} 的待处理生成实例。`,
+      title: "刷新实例",
+      message: `将刷新 ${scopeText} 在 ${taskInstanceRefreshForm.windowStartDate} 至 ${windowEndDate} 的待处理生成实例。`,
       detail: "已完成、进行中、取消或手动实例不会被覆盖。",
-      confirmLabel: "重新生成"
+      confirmLabel: "执行刷新"
     });
     if (!confirmed) return;
     await withStatus(async () => {
       const result = await generateTaskInstances({
-        windowStartDate: selectedDate.value,
+        windowStartDate: taskInstanceRefreshForm.windowStartDate,
         windowEndDate,
         types: ["patrol"],
+        templateIds: taskInstanceRefreshForm.templateId ? [taskInstanceRefreshForm.templateId] : undefined,
         refreshPending: true
       });
       taskInstanceGenerationSummary.value = `新增 ${result.inserted}，更新 ${result.updated}，跳过 ${result.skipped}`;
+      closeTaskInstanceRefresh();
       await refresh();
     });
   }
@@ -137,16 +161,26 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     };
   }
 
-  function generationWindowEndDate(): string {
-    return taskInstanceGenerationEndDate.value >= selectedDate.value ? taskInstanceGenerationEndDate.value : selectedDate.value;
+  function resetRefreshForm(date: string): void {
+    taskInstanceRefreshForm.templateId = "";
+    taskInstanceRefreshForm.windowStartDate = date;
+    taskInstanceRefreshForm.windowEndDate = date;
+  }
+
+  function refreshWindowEndDate(): string {
+    return taskInstanceRefreshForm.windowEndDate >= taskInstanceRefreshForm.windowStartDate
+      ? taskInstanceRefreshForm.windowEndDate
+      : taskInstanceRefreshForm.windowStartDate;
   }
 
   return {
     taskInstanceRows,
+    taskInstanceShowAll,
     taskInstanceForm,
     taskInstanceFormOpen,
+    taskInstanceRefreshForm,
+    taskInstanceRefreshOpen,
     taskInstanceEditingId,
-    taskInstanceGenerationEndDate,
     taskInstanceGenerationSummary,
     loadTaskInstanceRows,
     openTaskInstanceCreate,
@@ -155,7 +189,9 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     saveTaskInstance,
     cancelTaskInstance,
     removeTaskInstance,
-    regenerateTaskInstances
+    openTaskInstanceRefresh,
+    closeTaskInstanceRefresh,
+    refreshTaskInstances
   };
 }
 
