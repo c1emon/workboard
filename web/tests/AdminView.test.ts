@@ -9,7 +9,6 @@ import OperationTaskTimeline from "../src/components/OperationTaskTimeline.vue";
 import {
 	  createLeavePerson,
 	  createOperationPlan,
-	  createOperationPlanItem,
 	  createPermit,
   fetchTaskInstances,
   fetchPatrolPlans,
@@ -35,7 +34,6 @@ vi.mock("../src/api/client", () => ({
   createPatrolPlan: vi.fn().mockResolvedValue({ id: "patrol-plan-2" }),
 	  createOtherArrangement: vi.fn().mockResolvedValue({ id: "other-1" }),
 	  createPermit: vi.fn().mockResolvedValue({ id: "permit-1" }),
-	  createOperationPlanItem: vi.fn().mockResolvedValue({ id: "item-1" }),
 	  deleteOperationPlan: vi.fn().mockResolvedValue(undefined),
 	  deleteOperationPlanItem: vi.fn().mockResolvedValue(undefined),
 	  deleteOtherArrangement: vi.fn().mockResolvedValue(undefined),
@@ -787,8 +785,90 @@ describe("AdminView", () => {
     );
   });
 
+  it("keeps the operation item modal open with an inline metadata error until JSON is an object", async () => {
+    const wrapper = mountAdmin();
+    await openOperationSection(wrapper);
+
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve, 310));
+    wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
+      id: "item-2",
+      offsetMinutes: 150,
+      durationMinutes: 60,
+      content: "复核记录",
+      metadata: { crew: "B" },
+      sortOrder: 1
+    });
+    await wrapper.vm.$nextTick();
+
+    await wrapper.find('textarea[name="operationItemMetadata"]').setValue("{");
+    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
+    await wrapper.vm.$nextTick();
+
+    expect(updateOperationPlan).not.toHaveBeenCalled();
+    expect(wrapper.find(".operation-item-modal").exists()).toBe(true);
+    expect(wrapper.find(".operation-item-metadata-error").text()).toContain("Metadata JSON 格式无效");
+    expect(wrapper.find(".admin-toolbar").text()).not.toContain("JSON 格式无效");
+
+    await wrapper.find('textarea[name="operationItemMetadata"]').setValue("[1]");
+    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
+    await wrapper.vm.$nextTick();
+
+    expect(updateOperationPlan).not.toHaveBeenCalled();
+    expect(wrapper.find(".operation-item-modal").exists()).toBe(true);
+    expect(wrapper.find(".operation-item-metadata-error").text()).toContain("Metadata JSON 必须是对象");
+    expect(wrapper.find(".admin-toolbar").text()).not.toContain("JSON 必须是对象");
+
+    await wrapper.find('textarea[name="operationItemMetadata"]').setValue('{"crew":"C"}');
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find(".operation-item-metadata-error").exists()).toBe(false);
+
+    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
+    await wrapper.vm.$nextTick();
+
+    expect(updateOperationPlan).toHaveBeenCalledWith(
+      "operation-1",
+      expect.objectContaining({
+        item: expect.objectContaining({ id: "item-2", metadata: { crew: "C" } })
+      })
+    );
+    expect(wrapper.find(".operation-item-modal").exists()).toBe(false);
+
+    wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
+      id: "item-1",
+      offsetMinutes: 0,
+      durationMinutes: 120,
+      content: "A、B 操作",
+      metadata: {},
+      sortOrder: 0
+    });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find(".operation-item-metadata-error").exists()).toBe(false);
+  });
+
   it("adds operation child tasks from the preview action while editing", async () => {
-	    vi.mocked(createOperationPlanItem).mockResolvedValueOnce({ id: "item-3" });
+    vi.mocked(fetchOperationPlan).mockResolvedValueOnce({
+      id: "operation-1",
+      name: "倒闸操作",
+      description: "主线切换",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T20:00:00+08:00",
+      recurrenceType: "once",
+      recurrenceIntervalMinutes: null,
+      recurrenceCount: null,
+      skipWeekends: false,
+      skipHolidays: false,
+      enabled: true,
+      childTaskCount: 3,
+      firstItemContent: "A、B 操作",
+      items: [
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", metadata: { crew: "B" }, sortOrder: 1 },
+        { id: "item-existing-duplicate", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", metadata: {}, sortOrder: 3 }
+      ]
+    });
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
@@ -844,18 +924,46 @@ describe("AdminView", () => {
     expect((wrapper.find('input[name="operationItemDurationHours"]').element as HTMLInputElement).value).toBe("1");
     expect((wrapper.find('input[name="operationItemDurationMinutes"]').element as HTMLInputElement).value).toBe("15");
     await wrapper.find('input[name="operationItemContent"]').setValue("新增班次");
+    vi.mocked(fetchOperationPlan).mockResolvedValueOnce({
+      id: "operation-1",
+      name: "倒闸操作",
+      description: "主线切换",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T20:00:00+08:00",
+      recurrenceType: "once",
+      recurrenceIntervalMinutes: null,
+      recurrenceCount: null,
+      skipWeekends: false,
+      skipHolidays: false,
+      enabled: true,
+      childTaskCount: 3,
+      firstItemContent: "A、B 操作",
+      items: [
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", metadata: { crew: "B" }, sortOrder: 1 },
+        { id: "item-existing-duplicate", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", metadata: {}, sortOrder: 3 },
+        { id: "item-3", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", metadata: {}, sortOrder: 3 }
+      ]
+    });
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
 
-	    expect(createOperationPlanItem).toHaveBeenCalledWith(
-	      "operation-1",
-	      expect.objectContaining({
+    expect(updateOperationPlan).toHaveBeenCalledWith(
+      "operation-1",
+      expect.objectContaining({
+        recurrenceIntervalMinutes: null,
+        recurrenceCount: null,
+        item: expect.objectContaining({
 	        offsetMinutes: 195,
 	        durationMinutes: 75,
 	        content: "新增班次",
 	        metadata: {},
-	        sortOrder: 2
+	        sortOrder: 3
 	      })
+      })
     );
+    expect(fetchOperationPlan).toHaveBeenCalledTimes(2);
+    expect(fetchOperationPlan).toHaveBeenLastCalledWith("operation-1");
+    expect(wrapper.findComponent(OperationTaskTimeline).props("selectedItemId")).toBe("item-3");
     expect(wrapper.find(".operation-task-timeline").text()).toContain("新增班次");
   });
 
@@ -893,7 +1001,6 @@ describe("AdminView", () => {
       firstItemContent: "白班1",
       items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 510, content: "白班1", metadata: {}, sortOrder: 0 }]
     });
-	    vi.mocked(createOperationPlanItem).mockResolvedValueOnce({ id: "item-2" });
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
@@ -911,16 +1018,10 @@ describe("AdminView", () => {
       "operation-single",
       expect.objectContaining({
         endAt: null,
-        recurrenceIntervalMinutes: 1020
+        recurrenceIntervalMinutes: 1020,
+        item: expect.objectContaining({ offsetMinutes: 510, durationMinutes: 510 })
       })
     );
-	    expect(createOperationPlanItem).toHaveBeenCalledWith(
-	      "operation-single",
-	      expect.objectContaining({ offsetMinutes: 510, durationMinutes: 510 })
-	    );
-	    expect(vi.mocked(updateOperationPlan).mock.invocationCallOrder[0]).toBeLessThan(
-	      vi.mocked(createOperationPlanItem).mock.invocationCallOrder[0]
-	    );
   });
 
   it("deletes operation child tasks with confirmation while editing", async () => {
@@ -954,15 +1055,7 @@ describe("AdminView", () => {
     await waitForAssertion(() => {
 	      expect(deleteOperationPlanItem).toHaveBeenCalledWith("operation-1", "item-2");
     });
-    expect(updateOperationPlan).toHaveBeenCalledWith(
-      "operation-1",
-      expect.objectContaining({
-        endAt: null,
-        recurrenceIntervalMinutes: null,
-        recurrenceCount: null
-      })
-    );
-    expect(updateOperationPlan).toHaveBeenCalledWith("operation-1", expect.not.objectContaining({ item: expect.anything() }));
+    expect(updateOperationPlan).not.toHaveBeenCalled();
     await waitForAssertion(() => {
       expect(wrapper.find(".operation-item-modal").exists()).toBe(false);
     });

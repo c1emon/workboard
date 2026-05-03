@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type { AppDatabase } from "../db/database.js";
+import { formatWithChinaOffset, toChinaDate } from "./dateTime.js";
 import { expandTemplate, type ExpandedTemplateItem, type TaskTemplate, type TaskTemplateItemInput } from "./templateExpansion.js";
 import { parseTaskInstanceMetadata, type TaskInstanceSource, type TaskInstanceStatus } from "./taskInstances.js";
 import { timeRangeForDateTag, type TimeTag } from "./timeTags.js";
@@ -84,7 +85,7 @@ export function generateTaskInstances(db: AppDatabase, input: GenerateTaskInstan
   const run = db.transaction(() => {
     for (const template of templates) {
       if (!template.enabled) continue;
-      if (chinaDate(template.startAt) > input.windowEndDate) continue;
+      if (toChinaDate(template.startAt) > input.windowEndDate) continue;
       const items = itemsByTemplate.get(template.id) ?? [];
       const snapshots =
         template.type === "patrol"
@@ -141,7 +142,7 @@ function patrolSnapshots(
   const snapshots: InstanceSnapshot[] = [];
   const cycleLength = maxPatrolCycleDay(items);
   if (cycleLength === 0) return snapshots;
-  const startDate = chinaDate(template.startAt);
+  const startDate = toChinaDate(template.startAt);
   let eligibleDateCount = 0;
 
   for (let date = startDate; date <= windowEndDate; date = addDays(date, 1)) {
@@ -169,8 +170,8 @@ function patrolSnapshots(
         templateItemId: item.id,
         generationKey: generationKey(template.id, item.id, patrolOccurrenceAnchor(date)),
         occurrenceDate: date,
-        startAt,
-        endAt,
+        startAt: formatWithChinaOffset(new Date(startAt).getTime()),
+        endAt: formatWithChinaOffset(new Date(endAt).getTime()),
         content: item.content ?? "",
         metadata
       });
@@ -318,11 +319,6 @@ function patrolOccurrenceAnchor(date: string): string {
   return `${date}T00:00:00+08:00`;
 }
 
-function chinaDate(value: string): string {
-  const shifted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1000);
-  return shifted.toISOString().slice(0, 10);
-}
-
 function addDays(date: string, days: number): string {
   const [year, month, day] = date.split("-").map(Number);
   const next = new Date(Date.UTC(year, month - 1, day + days));
@@ -347,11 +343,6 @@ function positiveInteger(value: unknown, fallback: number): number {
 
 function maxPatrolCycleDay(items: TaskTemplateItemInput[]): number {
   return items.reduce((max, item) => Math.max(max, positiveInteger(item.metadata.cycleDay, 0)), 0);
-}
-
-function formatWithChinaOffset(epochMs: number): string {
-  const shifted = new Date(epochMs + 8 * 60 * 60 * 1000);
-  return `${shifted.toISOString().slice(0, 23)}+08:00`;
 }
 
 function metadataString(metadata: Record<string, unknown>, key: string): string {

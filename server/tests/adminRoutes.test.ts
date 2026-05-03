@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createTestDatabase, type AppDatabase } from "../src/db/database.js";
+import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
 import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
 describe("admin routes", () => {
@@ -148,13 +149,51 @@ describe("admin routes", () => {
       sourceType: "manual",
       generationKey: null,
       occurrenceDate: "2026-05-01",
-      startAt: "2026-05-01T08:00:00+08:00",
-      endAt: "2026-05-01T12:00:00+08:00",
+      startAt: "2026-05-01T08:00:00.000+08:00",
+      endAt: "2026-05-01T12:00:00.000+08:00",
       content: "人工巡视",
       metadata: { target: "A区" },
       status: "pending"
     }));
     expect(boardEvents.getVersion()).toBe(2);
+  });
+
+  it("canonicalizes API-created task instance datetimes to China offset", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/task-instances",
+      payload: {
+        type: "patrol",
+        startAt: "2026-04-30T16:30:00.000Z",
+        endAt: "2026-04-30T17:30:00.000Z",
+        content: "UTC 输入巡视",
+        metadata: { target: "A区" }
+      }
+    });
+    const { id } = response.json() as { id: string };
+    const stored = db
+      .prepare("select occurrence_date, start_at, end_at from task_instances where id = ?")
+      .get(id);
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T08:30:00+08:00"));
+    await app.close();
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual(expect.objectContaining({
+      occurrenceDate: "2026-05-01",
+      startAt: "2026-05-01T00:30:00.000+08:00",
+      endAt: "2026-05-01T01:30:00.000+08:00"
+    }));
+    expect(stored).toEqual({
+      occurrence_date: "2026-05-01",
+      start_at: "2026-05-01T00:30:00.000+08:00",
+      end_at: "2026-05-01T01:30:00.000+08:00"
+    });
+    expect(snapshot.patrols).toEqual([
+      expect.objectContaining({ target: "A区" })
+    ]);
   });
 
   it("edits pending manual instances and rejects generated or done instances", async () => {
@@ -406,7 +445,8 @@ describe("admin routes", () => {
           "2026-04-26": "Labour Day,劳动节,2"
         },
         inLieuDays: {
-          "2026-05-02": "Labour Day,劳动节,2"
+          "2026-05-02": "Labour Day,劳动节,2",
+          "2026-05-03": "Labour Day,劳动节,2"
         }
       }
     });
@@ -421,12 +461,13 @@ describe("admin routes", () => {
     await app.close();
 
     expect(importResponse.statusCode).toBe(200);
-    expect(importResponse.json()).toEqual({ imported: 4, holidays: 3, adjustedWorkdays: 1 });
+    expect(importResponse.json()).toEqual({ imported: 5, holidays: 4, adjustedWorkdays: 1 });
     expect(listResponse.statusCode).toBe(200);
     expect(listResponse.json()).toEqual([
       { id: expect.any(String), date: "2026-04-26", name: "劳动节", type: "adjusted_workday" },
       { id: expect.any(String), date: "2026-05-01", name: "劳动节", type: "holiday" },
-      { id: expect.any(String), date: "2026-05-02", name: "劳动节", type: "holiday" }
+      { id: expect.any(String), date: "2026-05-02", name: "劳动节", type: "holiday" },
+      { id: expect.any(String), date: "2026-05-03", name: "劳动节", type: "holiday" }
     ]);
     expect(oldYearResponse.json()).toEqual([]);
   });
@@ -489,6 +530,32 @@ describe("admin routes", () => {
     expect(detailResponse.json()).toMatchObject({
       id: planId,
       items: [{ content: "检查闭锁状态", metadata: { priority: "P1" } }]
+    });
+  });
+
+  it("falls back to empty metadata for operation plan items with invalid metadata JSON", async () => {
+    const db = createTestDatabase();
+    insertTaskTemplate(db, {
+      id: "operation-template",
+      type: "operation",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T10:00:00+08:00"
+    });
+    insertTaskTemplateItem(db, {
+      id: "operation-item",
+      templateId: "operation-template",
+      content: "检查闭锁状态"
+    });
+    db.prepare("update task_template_items set ext_data_json = ? where id = ?").run("{invalid", "operation-item");
+    const app = createApp(db);
+
+    const detailResponse = await app.inject({ method: "GET", url: "/api/admin/operation-plans/operation-template" });
+    await app.close();
+
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      id: "operation-template",
+      items: [{ id: "operation-item", metadata: {} }]
     });
   });
 
@@ -762,7 +829,7 @@ describe("admin routes", () => {
     expect(updateResponse.statusCode).toBe(200);
     expect(disableResponse.statusCode).toBe(200);
     expect(listResponse.json()).toEqual([
-      expect.objectContaining({ id, name: "更新计划", firstItemContent: "更新检查", enabled: false, skipWeekends: true })
+      expect.objectContaining({ id, name: "更新计划", firstItemContent: "检查闭锁", childTaskCount: 2, enabled: false, skipWeekends: true })
     ]);
     expect(deleteResponse.statusCode).toBe(204);
     expect(finalListResponse.json()).toEqual([]);
@@ -1084,6 +1151,64 @@ describe("admin routes", () => {
     });
   });
 
+  it("lists patrol plans with cycle lengths from items across multiple plans", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const firstPlanResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-plans",
+      payload: { name: "A巡检", startAt: "2026-05-01T00:00:00+08:00" }
+    });
+    const secondPlanResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-plans",
+      payload: { name: "B巡检", startAt: "2026-05-02T00:00:00+08:00" }
+    });
+    const { id: firstPlanId } = firstPlanResponse.json() as { id: string };
+    const { id: secondPlanId } = secondPlanResponse.json() as { id: string };
+
+    await app.inject({
+      method: "POST",
+      url: `/api/admin/patrol-plans/${firstPlanId}/items`,
+      payload: { cycleDay: 3, timeTag: "上午", target: "A3" }
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/admin/patrol-plans/${firstPlanId}/items`,
+      payload: { cycleDay: 1, timeTag: "下午", target: "A1" }
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/admin/patrol-plans/${secondPlanId}/items`,
+      payload: { cycleDay: 5, timeTag: "全天", target: "B5" }
+    });
+
+    const originalPrepare = db.prepare.bind(db);
+    let perPlanItemQueryCount = 0;
+    let multiPlanItemQueryCount = 0;
+    (db as AppDatabase & { prepare: AppDatabase["prepare"] }).prepare = ((sql: string) => {
+      const normalized = sql.replace(/\s+/g, " ").toLowerCase();
+      if (normalized.includes("from task_template_items")) {
+        if (normalized.includes("where template_id = ?")) perPlanItemQueryCount += 1;
+        if (normalized.includes("where template_id in")) multiPlanItemQueryCount += 1;
+      }
+      return originalPrepare(sql);
+    }) as AppDatabase["prepare"];
+
+    const listResponse = await app.inject({ method: "GET", url: "/api/admin/patrol-plans" });
+    db.prepare = originalPrepare as AppDatabase["prepare"];
+    await app.close();
+
+    expect(listResponse.statusCode).toBe(200);
+    expect(Object.fromEntries((listResponse.json() as Array<{ id: string; cycleLength: number }>).map((plan) => [plan.id, plan.cycleLength]))).toEqual({
+      [secondPlanId]: 5,
+      [firstPlanId]: 3
+    });
+    expect(perPlanItemQueryCount).toBe(0);
+    expect(multiPlanItemQueryCount).toBe(1);
+  });
+
   it("derives patrol cycle length from items and rejects duplicate cycle day and sort order", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
@@ -1258,6 +1383,207 @@ describe("admin routes", () => {
     expect(response.statusCode).toBe(201);
   });
 
+  it("appends operation items through plan update when item id is omitted", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const planResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "追加任务",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "原任务", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = planResponse.json() as { id: string };
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}`,
+      payload: {
+        name: "追加任务",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: null,
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 180,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 90, durationMinutes: 90, content: "新增任务", metadata: {}, sortOrder: 1 }
+      }
+    });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      recurrenceIntervalMinutes: 180,
+      recurrenceCount: null,
+      items: [
+        { content: "原任务", offsetMinutes: 0, durationMinutes: 60 },
+        { content: "新增任务", offsetMinutes: 90, durationMinutes: 90 }
+      ]
+    });
+  });
+
+  it("updates a specific operation item through plan update when item id is provided", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const planResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "指定更新",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = planResponse.json() as { id: string };
+    const secondItemResponse = await app.inject({
+      method: "POST",
+      url: `/api/admin/operation-plans/${id}/items`,
+      payload: { offsetMinutes: 60, durationMinutes: 60, content: "第二项", metadata: {}, sortOrder: 1 }
+    });
+    const detailBeforeResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    const firstItemId = (detailBeforeResponse.json() as { items: Array<{ id: string }> }).items[0].id;
+    const { id: secondItemId } = secondItemResponse.json() as { id: string };
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}`,
+      payload: {
+        name: "指定更新",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: null,
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 180,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { id: secondItemId, offsetMinutes: 120, durationMinutes: 60, content: "第二项更新", metadata: { crew: "B" }, sortOrder: 1 }
+      }
+    });
+    const detailAfterResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(updateResponse.statusCode).toBe(200);
+    expect(detailAfterResponse.json()).toMatchObject({
+      childTaskCount: 2,
+      recurrenceIntervalMinutes: 180,
+      items: [
+        { id: firstItemId, content: "第一项", offsetMinutes: 0, durationMinutes: 60 },
+        { id: secondItemId, content: "第二项更新", offsetMinutes: 120, durationMinutes: 60, metadata: { crew: "B" } }
+      ]
+    });
+  });
+
+  it("leaves operation plan fields unchanged when plan update item id is missing", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const planResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "原计划",
+        description: "原说明",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T12:00:00+08:00",
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "原任务", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = planResponse.json() as { id: string };
+
+    const updateResponse = await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}`,
+      payload: {
+        name: "不应保存",
+        description: "不应保存",
+        startAt: "2026-05-02T08:00:00+08:00",
+        endAt: null,
+        recurrenceType: "once",
+        skipWeekends: true,
+        skipHolidays: true,
+        item: { id: "missing-item", offsetMinutes: 120, durationMinutes: 60, content: "不应保存", metadata: {}, sortOrder: 1 }
+      }
+    });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(updateResponse.statusCode).toBe(404);
+    expect(detailResponse.json()).toMatchObject({
+      name: "原计划",
+      description: "原说明",
+      startAt: "2026-05-01T08:00:00+08:00",
+      recurrenceType: "infinite",
+      recurrenceIntervalMinutes: 60,
+      skipWeekends: false,
+      skipHolidays: false,
+      items: [{ content: "原任务", offsetMinutes: 0, durationMinutes: 60 }]
+    });
+  });
+
+  it("recomputes operation plan recurrence fields after item endpoint changes", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+    const planResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "有限任务",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T20:00:00+08:00",
+        recurrenceType: "finite",
+        recurrenceIntervalMinutes: 60,
+        recurrenceCount: 12,
+        skipWeekends: false,
+        skipHolidays: false
+      }
+    });
+    const { id } = planResponse.json() as { id: string };
+
+    const itemResponse = await app.inject({
+      method: "POST",
+      url: `/api/admin/operation-plans/${id}/items`,
+      payload: { offsetMinutes: 0, durationMinutes: 180, content: "长任务", metadata: {}, sortOrder: 0 }
+    });
+    const { id: itemId } = itemResponse.json() as { id: string };
+    const afterCreateResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+
+    await app.inject({
+      method: "PUT",
+      url: `/api/admin/operation-plans/${id}/items/${itemId}`,
+      payload: { offsetMinutes: 0, durationMinutes: 240, content: "更长任务", metadata: {}, sortOrder: 0 }
+    });
+    const afterUpdateResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+
+    const deleteResponse = await app.inject({ method: "DELETE", url: `/api/admin/operation-plans/${id}/items/${itemId}` });
+    const afterDeleteResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
+    await app.close();
+
+    expect(afterCreateResponse.json()).toMatchObject({ recurrenceIntervalMinutes: 180, recurrenceCount: 4 });
+    expect(afterUpdateResponse.json()).toMatchObject({ recurrenceIntervalMinutes: 240, recurrenceCount: 3 });
+    expect(deleteResponse.statusCode).toBe(204);
+    expect(afterDeleteResponse.json()).toMatchObject({ recurrenceIntervalMinutes: null, recurrenceCount: null, items: [] });
+  });
+
   it("publishes a board event version after successful admin writes", async () => {
     const db = createTestDatabase();
     const boardEvents = createBoardEventBroadcaster();
@@ -1300,14 +1626,14 @@ describe("admin routes", () => {
 
     expect(permitListResponse.json()).toEqual([
       expect.objectContaining({
-        startAt: "2026-05-01T08:00:00+08:00",
-        endAt: "2026-05-01T12:00:00+08:00"
+        startAt: "2026-05-01T08:00:00.000+08:00",
+        endAt: "2026-05-01T12:00:00.000+08:00"
       })
     ]);
     expect(otherListResponse.json()).toEqual([
       expect.objectContaining({
-        startAt: "2026-05-01T00:00:00+08:00",
-        endAt: "2026-05-01T23:59:59+08:00"
+        startAt: "2026-05-01T00:00:00.000+08:00",
+        endAt: "2026-05-01T23:59:59.000+08:00"
       })
     ]);
   });
@@ -1404,8 +1730,8 @@ describe("admin routes", () => {
         personnel: "张三",
         vehicle: "工程车",
         other: "已审批",
-        startAt: "2026-05-01T08:00:00+08:00",
-        endAt: "2026-05-01T12:00:00+08:00",
+        startAt: "2026-05-01T08:00:00.000+08:00",
+        endAt: "2026-05-01T12:00:00.000+08:00",
         enabled: true
       }
     ]);
@@ -1420,8 +1746,8 @@ describe("admin routes", () => {
         personnel: "李四",
         vehicle: "抢修车",
         other: "待复核",
-        startAt: "2026-05-01T12:00:00+08:00",
-        endAt: "2026-05-01T17:00:00+08:00",
+        startAt: "2026-05-01T12:00:00.000+08:00",
+        endAt: "2026-05-01T17:00:00.000+08:00",
         enabled: true
       }
     ]);
@@ -1506,8 +1832,8 @@ describe("admin routes", () => {
       source_type: "manual",
       generation_key: null,
       occurrence_date: "2026-05-01",
-      start_at: "2026-05-01T08:00:00+08:00",
-      end_at: "2026-05-01T12:00:00+08:00",
+      start_at: "2026-05-01T08:00:00.000+08:00",
+      end_at: "2026-05-01T12:00:00.000+08:00",
       content: "动火许可",
       status: "pending"
     });
@@ -1557,8 +1883,8 @@ describe("admin routes", () => {
       source_type: "manual",
       generation_key: null,
       occurrence_date: "2026-05-01",
-      start_at: "2026-05-01T12:00:00+08:00",
-      end_at: "2026-05-01T17:00:00+08:00",
+      start_at: "2026-05-01T12:00:00.000+08:00",
+      end_at: "2026-05-01T17:00:00.000+08:00",
       content: "设备巡检",
       status: "pending"
     });

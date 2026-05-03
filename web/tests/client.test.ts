@@ -16,6 +16,7 @@ import {
   fetchPermitArrangements,
   fetchTaskInstances,
   generateTaskInstances,
+  importChineseDaysHolidays,
   updateOperationPlanItem,
   updatePatrolPlan,
   updatePatrolPlanEnabled,
@@ -221,6 +222,27 @@ describe("api client", () => {
     });
     expect(fetchMock).toHaveBeenNthCalledWith(3, expect.stringContaining("/api/admin/operation-plans/plan%201/items/item%201"), {
       method: "DELETE"
+    });
+  });
+
+  it("routes holiday imports through the typed admin POST helper", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ imported: 2, holidays: 1, adjustedWorkdays: 1 })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const input = {
+      holidays: { "2026-05-01": "劳动节" },
+      workdays: { "2026-04-26": "劳动节" },
+      inLieuDays: {}
+    };
+
+    await expect(importChineseDaysHolidays(input)).resolves.toEqual({ imported: 2, holidays: 1, adjustedWorkdays: 1 });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/admin/holidays/import"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
     });
   });
 });

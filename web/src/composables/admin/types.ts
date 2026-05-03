@@ -1,5 +1,4 @@
 import type { ComputedRef, Ref } from "vue";
-import type { TimeTag } from "../../api/types";
 
 export type SectionKey = "operation" | "permit" | "patrol" | "other" | "leave" | "holiday";
 export type RecurrenceType = "once" | "finite" | "infinite";
@@ -29,16 +28,6 @@ export type RequestConfirmation = (request: ConfirmationRequest) => Promise<bool
 export type WithStatus = (action: () => Promise<void>) => Promise<void>;
 export type RefreshAdminList = () => Promise<void>;
 
-export interface ArrangementForm {
-  date: string;
-  timeTag: TimeTag;
-  primary: string;
-  personnel: string;
-  secondary: string;
-  tertiary: string;
-  other: string;
-}
-
 export interface ArrangementAdminContext {
   activeSection: ComputedRef<AdminSection>;
   selectedDate: Ref<string>;
@@ -48,42 +37,12 @@ export interface ArrangementAdminContext {
   requestConfirmation: RequestConfirmation;
 }
 
-export interface OperationPlanForm {
-  name: string;
-  description: string;
-  startAt: string;
-  endAt: string;
-  recurrenceType: RecurrenceType;
-  recurrenceIntervalMinutes: number;
-  recurrenceCount: number;
-  skipWeekends: boolean;
-  skipHolidays: boolean;
-}
-
-export interface OperationItemForm {
-  id: string;
-  baseItemId: string;
-  offsetHours: number;
-  offsetMinutes: number;
-  durationHours: number;
-  durationMinutes: number;
-  content: string;
-  metadataJson: string;
-  metadataExpanded: boolean;
-  sortOrder: number;
-}
-
 export interface OperationAdminContext {
   selectedDate: Ref<string>;
   today: string;
   withStatus: WithStatus;
   refresh: RefreshAdminList;
   requestConfirmation: RequestConfirmation;
-}
-
-export interface HolidayImportForm {
-  source: HolidayImportSource;
-  url: string;
 }
 
 export interface HolidayAdminContext {

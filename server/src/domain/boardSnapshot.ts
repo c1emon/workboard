@@ -1,4 +1,5 @@
 import type { AppDatabase } from "../db/database.js";
+import { toChinaDate, toChinaOffsetDateTime } from "./dateTime.js";
 import { compareTimeTag, type TimeTag } from "./timeTags.js";
 
 export interface BoardSnapshot {
@@ -124,34 +125,30 @@ function loadTaskInstances(
   type: TaskInstanceRow["type"],
   window: { start: Date; end: Date }
 ): SnapshotTaskInstance[] {
+  const windowStart = toChinaOffsetDateTime(window.start);
+  const windowEnd = toChinaOffsetDateTime(window.end);
   const rows = db
-    .prepare<[TaskInstanceRow["type"]], TaskInstanceRow>(
+    .prepare<[TaskInstanceRow["type"], string, string], TaskInstanceRow>(
       `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
               start_at, end_at, content, ext_data_json, status
        from task_instances
        where type = ?
          and status <> 'cancelled'
+         and julianday(start_at) <= julianday(?)
+         and julianday(end_at) >= julianday(?)
        order by start_at, end_at, id`
     )
-    .all(type);
+    .all(type, windowEnd, windowStart);
 
-  return rows
-    .filter((row) => overlapsWindow(row.start_at, row.end_at, window))
-    .map((row) => ({
-      id: row.id,
-      type: row.type,
-      startAt: row.start_at,
-      endAt: row.end_at,
-      content: row.content,
-      status: row.status,
-      metadata: parseMetadata(row.ext_data_json)
-    }));
-}
-
-function overlapsWindow(startAt: string, endAt: string, window: { start: Date; end: Date }): boolean {
-  const startMs = new Date(startAt).getTime();
-  const endMs = new Date(endAt).getTime();
-  return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= window.end.getTime() && endMs >= window.start.getTime();
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    startAt: row.start_at,
+    endAt: row.end_at,
+    content: row.content,
+    status: row.status,
+    metadata: parseMetadata(row.ext_data_json)
+  }));
 }
 
 function metadataString(metadata: Record<string, unknown>, key: string): string {
@@ -173,9 +170,4 @@ function parseMetadata(raw: string): Record<string, unknown> {
     return {};
   }
   return {};
-}
-
-function toChinaDate(date: Date): string {
-  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  return shifted.toISOString().slice(0, 10);
 }

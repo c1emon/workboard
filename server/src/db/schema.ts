@@ -63,6 +63,7 @@ create table if not exists holidays (
 );
 
 create unique index if not exists leave_people_date_name_unique on leave_people (date, name);
+create index if not exists task_template_items_template_id_idx on task_template_items (template_id);
 create index if not exists task_instances_date_type_idx on task_instances (occurrence_date, type);
 create index if not exists task_instances_time_idx on task_instances (start_at, end_at);
 create unique index if not exists task_instances_generation_key_unique on task_instances (generation_key) where generation_key is not null;

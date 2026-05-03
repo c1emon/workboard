@@ -1,3 +1,5 @@
+import { formatWithChinaOffset } from "./dateTime.js";
+
 export type RecurrenceType = "once" | "finite" | "infinite";
 
 export interface TaskTemplate {
@@ -159,9 +161,4 @@ function shouldSkipOccurrence(
   if (!template.skipWeekends || adjustedWorkdays.has(chinaDate)) return false;
   const day = new Date(occurrenceStart + 8 * 60 * 60 * 1000).getUTCDay();
   return day === 0 || day === 6;
-}
-
-function formatWithChinaOffset(epochMs: number): string {
-  const shifted = new Date(epochMs + 8 * 60 * 60 * 1000);
-  return `${shifted.toISOString().slice(0, 23)}+08:00`;
 }

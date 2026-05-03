@@ -1,7 +1,6 @@
 import { computed, reactive, ref, watch } from "vue";
 import {
 	  createOperationPlan,
-	  createOperationPlanItem,
 	  deleteOperationPlan,
 	  deleteOperationPlanItem,
   fetchOperationPlan,
@@ -74,6 +73,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     durationMinutes: 60,
     content: "",
     metadataJson: "{}",
+    metadataError: null as string | null,
     metadataExpanded: false,
     sortOrder: 0
   });
@@ -100,6 +100,13 @@ export function useOperationAdmin(context: OperationAdminContext) {
   watch(selectedDate, (date) => {
     if (!operationRefreshOpen.value) resetOperationRefreshForm(date);
   });
+
+  watch(
+    () => operationItemForm.metadataJson,
+    () => {
+      if (operationItemForm.metadataError) operationItemForm.metadataError = null;
+    }
+  );
 
   async function loadOperationRows(): Promise<void> {
     operationRows.value = await fetchOperationPlans(selectedDate.value, operationShowAll.value ? "all" : "date");
@@ -244,12 +251,17 @@ export function useOperationAdmin(context: OperationAdminContext) {
     };
   }
 
-  function parseMetadata(value: string): Record<string, unknown> {
-    const parsed = JSON.parse(value || "{}");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("JSON 必须是对象");
+  function parseMetadata(value: string): { metadata: Record<string, unknown> } | { error: string } {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value || "{}");
+    } catch {
+      return { error: "Metadata JSON 格式无效" };
     }
-    return parsed as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { error: "Metadata JSON 必须是对象" };
+    }
+    return { metadata: parsed as Record<string, unknown> };
   }
 
   function resetOperationForm(): void {
@@ -280,6 +292,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function resetOperationItemForm(): void {
+    operationItemForm.metadataError = null;
     operationItemModalOpen.value = false;
     operationItemModalMode.value = "edit";
     operationItemForm.id = "";
@@ -329,6 +342,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function selectOperationItem(item: OperationPlanItemRecord): void {
+    operationItemForm.metadataError = null;
     operationSelectedItemId.value = item.id;
     operationItemModalMode.value = "edit";
     operationItemForm.id = item.id;
@@ -344,6 +358,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
 
   function openOperationItemCreate(): void {
     if (operationReadOnly.value || !operationRecordId.value) return;
+    operationItemForm.metadataError = null;
     operationSelectedItemId.value = null;
     operationItemModalMode.value = "create";
     operationItemForm.id = "";
@@ -368,6 +383,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function closeOperationItemModal(): void {
+    operationItemForm.metadataError = null;
     operationItemModalOpen.value = false;
   }
 
@@ -405,24 +421,31 @@ export function useOperationAdmin(context: OperationAdminContext) {
   async function saveOperationItem(): Promise<void> {
     if (operationReadOnly.value || !operationRecordId.value) return;
     const recordId = operationRecordId.value;
+    const metadataResult = parseMetadata(operationItemForm.metadataJson);
+    if ("error" in metadataResult) {
+      operationItemForm.metadataError = metadataResult.error;
+      return;
+    }
+    operationItemForm.metadataError = null;
     await withStatus(async () => {
-      const itemMetadata = parseMetadata(operationItemForm.metadataJson);
       const itemPayload = {
         offsetMinutes: operationItemAbsoluteOffsetMinutes(),
         durationMinutes: operationItemDurationTotalMinutes(),
         content: operationItemForm.content,
-        metadata: itemMetadata,
+        metadata: metadataResult.metadata,
         sortOrder: operationItemForm.sortOrder
       };
       if (operationItemModalMode.value === "create") {
+        const existingItemIds = new Set(operationDetailItems.value.map((item) => item.id));
         const draftItem = { id: "", ...itemPayload };
         const nextItems = [...operationDetailItems.value, draftItem].sort(
           (a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes
         );
-        await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
-	        const created = await createOperationPlanItem(recordId, itemPayload);
-        const newItem = { id: created.id, ...itemPayload };
-        operationDetailItems.value = nextItems.map((item) => (item.id ? item : newItem));
+        await updateOperationPlan(recordId, operationPayloadForItems(nextItems, itemPayload));
+        const detail = await fetchOperationPlan(recordId);
+        operationDetailItems.value = detail.items;
+        const createdItem = detail.items.find((item) => !existingItemIds.has(item.id));
+        operationSelectedItemId.value = createdItem?.id ?? null;
         closeOperationItemModal();
         await refresh();
         return;
@@ -456,7 +479,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
     await withStatus(async () => {
 	      await deleteOperationPlanItem(recordId, itemId);
       const nextItems = operationDetailItems.value.filter((item) => item.id !== itemId);
-      await updateOperationPlan(recordId, operationPayloadForItems(nextItems));
       operationDetailItems.value = nextItems;
       operationSelectedItemId.value = null;
       closeOperationItemModal();

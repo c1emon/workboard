@@ -2,9 +2,11 @@ import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
+import { toChinaDate, toChinaOffsetDateTime } from "../domain/dateTime.js";
 import { generateTaskInstances } from "../domain/taskInstanceGeneration.js";
 import { parseTaskInstanceMetadata, taskInstanceStatuses } from "../domain/taskInstances.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
+import { validateAdminPayload } from "./validation.js";
 
 const taskInstanceTypes = ["operation", "permit", "patrol", "other"] as const;
 
@@ -84,23 +86,6 @@ function validateDateTimeRange(input: { startAt: string; endAt: string }, ctx: z
   }
 }
 
-function validateAdminPayload<TSchema extends z.ZodTypeAny>(
-  schema: TSchema,
-  value: unknown
-): { success: true; data: z.infer<TSchema> } | { success: false; error: { error: string; issues: z.ZodIssue[] } } {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    return {
-      success: false,
-      error: {
-        error: "Invalid admin payload",
-        issues: result.error.issues
-      }
-    };
-  }
-  return { success: true, data: result.data };
-}
-
 export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase, boardEvents: BoardEventBroadcaster): void {
   app.get("/api/admin/task-instances", async (request, reply) => {
     const validation = validateAdminPayload(listQuerySchema, request.query);
@@ -162,6 +147,8 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
 
     const id = nanoid();
     const now = new Date().toISOString();
+    const startAt = toChinaOffsetDateTime(validation.data.startAt);
+    const endAt = toChinaOffsetDateTime(validation.data.endAt);
     db.prepare(
       `insert into task_instances
        (id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
@@ -170,9 +157,9 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
     ).run(
       id,
       validation.data.type,
-      toChinaDate(validation.data.startAt),
-      validation.data.startAt,
-      validation.data.endAt,
+      toChinaDate(startAt),
+      startAt,
+      endAt,
       validation.data.content,
       JSON.stringify(validation.data.metadata),
       now,
@@ -197,15 +184,17 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
     }
 
     const now = new Date().toISOString();
+    const startAt = toChinaOffsetDateTime(validation.data.startAt);
+    const endAt = toChinaOffsetDateTime(validation.data.endAt);
     db.prepare(
       `update task_instances
        set type = ?, occurrence_date = ?, start_at = ?, end_at = ?, content = ?, ext_data_json = ?, updated_at = ?
        where id = ?`
     ).run(
       validation.data.type,
-      toChinaDate(validation.data.startAt),
-      validation.data.startAt,
-      validation.data.endAt,
+      toChinaDate(startAt),
+      startAt,
+      endAt,
       validation.data.content,
       JSON.stringify(validation.data.metadata),
       now,
@@ -288,9 +277,4 @@ function mapTaskInstanceRow(row: TaskInstanceRow) {
     generatedAt: row.generated_at,
     updatedAt: row.updated_at
   };
-}
-
-function toChinaDate(value: string): string {
-  const shifted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1000);
-  return shifted.toISOString().slice(0, 10);
 }

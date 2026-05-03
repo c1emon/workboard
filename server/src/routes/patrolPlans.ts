@@ -2,7 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
+import { parseTaskInstanceMetadata } from "../domain/taskInstances.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
+import { validateAdminPayload } from "./validation.js";
 
 type TimeTag = "全天" | "上午" | "下午";
 
@@ -94,23 +96,6 @@ function validateDateTimeRange(input: { startAt: string; endAt?: string }, ctx: 
   }
 }
 
-function validateAdminPayload<TSchema extends z.ZodTypeAny>(
-  schema: TSchema,
-  value: unknown
-): { success: true; data: z.infer<TSchema> } | { success: false; error: { error: string; issues: z.ZodIssue[] } } {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    return {
-      success: false,
-      error: {
-        error: "Invalid admin payload",
-        issues: result.error.issues
-      }
-    };
-  }
-  return { success: true, data: result.data };
-}
-
 export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, boardEvents: BoardEventBroadcaster): void {
   app.get("/api/admin/patrol-plans", async () => {
     const rows = db
@@ -122,7 +107,8 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       )
       .all();
 
-    return rows.map((row) => mapPlanRow(db, row));
+    const cycleLengths = cycleLengthsForPlanIds(db, rows.map((row) => row.id));
+    return rows.map((row) => mapPlanRowWithCycleLength(row, cycleLengths.get(row.id) ?? 0));
   });
 
   app.get("/api/admin/patrol-plans/:id", async (request, reply) => {
@@ -324,6 +310,18 @@ function listPlanItems(db: AppDatabase, planId: string): PatrolItemRow[] {
     .all(planId);
 }
 
+function listPlanItemsForPlans(db: AppDatabase, planIds: string[]): PatrolItemRow[] {
+  if (planIds.length === 0) return [];
+  const placeholders = planIds.map(() => "?").join(", ");
+  return db
+    .prepare<unknown[], PatrolItemRow>(
+      `select id, template_id, content, ext_data_json, sort_order
+       from task_template_items
+       where template_id in (${placeholders})`
+    )
+    .all(...planIds);
+}
+
 function getItem(db: AppDatabase, planId: string, itemId: string): PatrolItemRow | undefined {
   return db
     .prepare<[string, string], PatrolItemRow>(
@@ -336,6 +334,10 @@ function getItem(db: AppDatabase, planId: string, itemId: string): PatrolItemRow
 
 function mapPlanRow(db: AppDatabase, row: PatrolPlanRow) {
   const cycleLength = maxItemCycleDay(db, row.id);
+  return mapPlanRowWithCycleLength(row, cycleLength);
+}
+
+function mapPlanRowWithCycleLength(row: PatrolPlanRow, cycleLength: number) {
   return {
     id: row.id,
     name: row.name,
@@ -383,13 +385,7 @@ function parseItemMetadata(raw: string): PatrolItemMetadata {
 }
 
 function parseObject(raw: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-  return {};
+  return parseTaskInstanceMetadata(raw);
 }
 
 function stringValue(value: unknown): string {
@@ -425,6 +421,15 @@ function timeTagOrder(timeTag: TimeTag): number {
 
 function maxItemCycleDay(db: AppDatabase, planId: string): number {
   return listPlanItems(db, planId).reduce((max, row) => Math.max(max, parseItemMetadata(row.ext_data_json).cycleDay), 0);
+}
+
+function cycleLengthsForPlanIds(db: AppDatabase, planIds: string[]): Map<string, number> {
+  const cycleLengths = new Map<string, number>();
+  for (const row of listPlanItemsForPlans(db, planIds)) {
+    const current = cycleLengths.get(row.template_id) ?? 0;
+    cycleLengths.set(row.template_id, Math.max(current, parseItemMetadata(row.ext_data_json).cycleDay));
+  }
+  return cycleLengths;
 }
 
 function refreshPatrolPlanDerivedEndAt(db: AppDatabase, planId: string): void {

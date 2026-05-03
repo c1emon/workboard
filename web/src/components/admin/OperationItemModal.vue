@@ -95,6 +95,33 @@
             :disabled="readOnly"
           />
         </label>
+        <div class="wide-field operation-item-metadata-field">
+          <button
+            type="button"
+            class="secondary-action operation-item-metadata-toggle"
+            :aria-expanded="showMetadataEditor"
+            @click="form.metadataExpanded = !form.metadataExpanded"
+          >
+            Metadata JSON
+          </button>
+          <textarea
+            v-if="showMetadataEditor"
+            v-model="form.metadataJson"
+            name="operationItemMetadata"
+            rows="4"
+            spellcheck="false"
+            :aria-invalid="form.metadataError ? 'true' : undefined"
+            :aria-describedby="form.metadataError ? 'operation-item-metadata-error' : undefined"
+            :disabled="readOnly"
+          />
+          <span
+            v-if="form.metadataError"
+            id="operation-item-metadata-error"
+            class="operation-item-metadata-error"
+          >
+            {{ form.metadataError }}
+          </span>
+        </div>
       </div>
       <div class="modal-actions">
         <button v-if="!readOnly && mode === 'edit'" type="button" class="danger-action operation-item-delete" @click="emit('delete')">
@@ -108,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import type { OperationPlanItemRecord } from "../../api/client";
 
 export type OperationItemModalMode = "create" | "edit";
@@ -121,11 +149,12 @@ export interface OperationItemForm {
   durationMinutes: number;
   content: string;
   metadataJson: string;
+  metadataError: string | null;
   metadataExpanded: boolean;
   sortOrder: number;
 }
 
-defineProps<{
+const props = defineProps<{
   title: string;
   mode: OperationItemModalMode;
   form: OperationItemForm;
@@ -141,6 +170,10 @@ const emit = defineEmits<{
   "normalize-duration": [];
 }>();
 
+const showMetadataEditor = computed(
+  () => props.form.metadataExpanded || Boolean(props.form.metadataError) || hasNonDefaultMetadata(props.form.metadataJson)
+);
+
 function formatMinutesAsHoursMinutes(totalMinutes: number): string {
   const safeTotal = Math.max(0, Math.trunc(totalMinutes));
   return `${Math.floor(safeTotal / 60)}时${safeTotal % 60}分`;
@@ -149,6 +182,17 @@ function formatMinutesAsHoursMinutes(totalMinutes: number): string {
 function formatBaseOption(item: OperationPlanItemRecord): string {
   const content = item.content || "未命名子任务";
   return `${content} · 结束 ${formatMinutesAsHoursMinutes(item.offsetMinutes + item.durationMinutes)}`;
+}
+
+function hasNonDefaultMetadata(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "{}") return false;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    return Boolean(parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.keys(parsed).length > 0);
+  } catch {
+    return true;
+  }
 }
 </script>
 
@@ -200,6 +244,23 @@ function formatBaseOption(item: OperationPlanItemRecord): string {
 .operation-item-duration-field input {
   min-width: 0;
   text-align: center;
+}
+
+.operation-item-metadata-field {
+  display: grid;
+  gap: 6px;
+}
+
+.operation-item-metadata-field textarea {
+  min-height: 92px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.operation-item-metadata-error {
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .duration-unit {

@@ -398,14 +398,7 @@ export async function fetchHolidays(year: number): Promise<HolidayRecord[]> {
 }
 
 export async function importChineseDaysHolidays(input: ChineseDaysPayload): Promise<HolidayImportResult> {
-  const response = await fetch(`${apiBase}/api/admin/holidays/import`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input)
-  });
-
-  if (!response.ok) await throwApiError(response, "Admin request failed");
-  return response.json();
+  return postAdminFor<ChineseDaysPayload, HolidayImportResult>("holidays/import", input);
 }
 
 export async function fetchOperationPlans(date: string, scope: "date" | "all"): Promise<OperationPlanRecord[]> {

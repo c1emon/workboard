@@ -78,6 +78,19 @@ describe("database schema", () => {
     }));
   });
 
+  it("creates an index for task template items by template id", () => {
+    const db = createTestDatabase();
+    const indexes = db
+      .prepare("pragma index_list(task_template_items)")
+      .all()
+      .map((row) => row as { name: string; unique: number });
+
+    expect(indexes).toContainEqual(expect.objectContaining({
+      name: "task_template_items_template_id_idx",
+      unique: 0
+    }));
+  });
+
   it("enforces one leave person per date and name", () => {
     const db = createTestDatabase();
 

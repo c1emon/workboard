@@ -218,8 +218,8 @@ describe("task instance generation", () => {
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-01", types: ["patrol"] });
 
     const [instance] = readInstances(db);
-    expect(instance.start_at).toBe("2026-05-01T12:00:00+08:00");
-    expect(instance.end_at).toBe("2026-05-01T17:00:00+08:00");
+    expect(instance.start_at).toBe("2026-05-01T12:00:00.000+08:00");
+    expect(instance.end_at).toBe("2026-05-01T17:00:00.000+08:00");
     expect(JSON.parse(instance.ext_data_json)).toEqual({
       timeTag: "下午",
       target: "A区",
@@ -433,8 +433,8 @@ describe("task instance generation", () => {
     expect(readInstances(db)).toEqual([
       expect.objectContaining({
         generation_key: "patrol-1:day-1:2026-05-01T00:00:00+08:00",
-        start_at: "2026-05-01T12:00:00+08:00",
-        end_at: "2026-05-01T17:00:00+08:00"
+        start_at: "2026-05-01T12:00:00.000+08:00",
+        end_at: "2026-05-01T17:00:00.000+08:00"
       })
     ]);
   });

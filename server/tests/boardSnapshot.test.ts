@@ -281,6 +281,47 @@ describe("board snapshot", () => {
     expect(snapshot.patrols).toMatchObject([{ target: "围界" }]);
   });
 
+  it("filters task instances by SQL time-window overlap across legacy timestamp formats", () => {
+    const db = createTestDatabase();
+    insertTaskInstance(db, {
+      id: "legacy-boundary-permit",
+      type: "permit",
+      date: "2026-04-30",
+      startAt: "2026-04-30T22:00:00+08:00",
+      endAt: "2026-05-01T00:00:00+08:00",
+      content: "边界许可",
+      target: "边界区域"
+    });
+    insertTaskInstance(db, {
+      id: "utc-permit",
+      type: "permit",
+      date: "2026-05-01",
+      startAt: "2026-04-30T16:30:00.000Z",
+      endAt: "2026-04-30T17:30:00.000Z",
+      content: "UTC许可",
+      target: "UTC区域"
+    });
+    insertTaskInstance(db, {
+      id: "outside-permit",
+      type: "permit",
+      date: "2026-05-03",
+      startAt: "2026-05-03T08:00:00.000+08:00",
+      endAt: "2026-05-03T09:00:00.000+08:00",
+      content: "远期许可",
+      target: "远期区域"
+    });
+    const prepareSpy = vi.spyOn(db, "prepare");
+
+    const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
+
+    const taskInstanceSql = prepareSpy.mock.calls
+      .map(([sql]) => sql)
+      .filter((sql) => typeof sql === "string" && sql.includes("from task_instances"));
+    expect(taskInstanceSql.some((sql) => sql.includes("julianday(start_at) <= julianday(?)") && sql.includes("julianday(end_at) >= julianday(?)"))).toBe(true);
+    expect(snapshot.permits.map((permit) => permit.task)).toEqual(expect.arrayContaining(["边界许可", "UTC许可"]));
+    expect(snapshot.permits).toHaveLength(2);
+  });
+
   it("omits cancelled instances from the board", () => {
     const db = createTestDatabase();
     insertTaskInstance(db, {
