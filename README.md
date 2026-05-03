@@ -28,3 +28,8 @@ npm run dev --workspace web
 npm run test
 npm run build
 ```
+
+## Project Notes
+
+- Server notes: [server/README.md](server/README.md)
+- Web notes: [web/README.md](web/README.md)
