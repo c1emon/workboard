@@ -39,6 +39,8 @@ describe("admin managers", () => {
 
     expect(wrapper.text()).toContain("许可列表");
     expect(wrapper.text()).toContain("动火许可");
+    expect(wrapper.find("thead th").text()).toBe("日期");
+    expect(wrapper.find("tbody td").text()).toBe("2026-05-01");
 
     await wrapper.find('[aria-label="禁用许可"]').trigger("click");
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
@@ -75,6 +77,8 @@ describe("admin managers", () => {
 
     expect(wrapper.text()).toContain("其他列表");
     expect(wrapper.text()).toContain("清点物资");
+    expect(wrapper.find("thead th").text()).toBe("日期");
+    expect(wrapper.find("tbody td").text()).toBe("2026-05-01");
 
     await wrapper.findAll("tbody .row-actions button")[0].trigger("click");
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");

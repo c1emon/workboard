@@ -19,19 +19,21 @@
       <table class="leave-table">
         <thead>
           <tr>
+            <th class="leave-date-column">日期</th>
             <th class="leave-name-column">姓名</th>
             <th class="actions-column">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="record in rows" :key="record.id" :class="{ disabled: !record.enabled }">
+            <td class="leave-date-column">{{ record.date }}</td>
             <td class="leave-name-column">{{ record.name }}</td>
             <td class="row-actions">
               <button type="button" class="danger" @click="emit('delete', record.id)">删除</button>
             </td>
           </tr>
           <tr v-if="rows.length === 0">
-            <td class="empty-cell" colspan="2">当前日期暂无休假人员</td>
+            <td class="empty-cell" colspan="3">当前日期暂无休假人员</td>
           </tr>
         </tbody>
       </table>
@@ -84,6 +86,7 @@ const emit = defineEmits<{
   table-layout: fixed;
 }
 
+.leave-date-column,
 .leave-name-column {
   width: 120px;
 }

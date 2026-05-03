@@ -19,6 +19,7 @@
       <table>
         <thead>
           <tr>
+            <th>日期</th>
             <th>时间</th>
             <th>对象</th>
             <th>任务</th>
@@ -30,6 +31,7 @@
         </thead>
         <tbody>
           <tr v-for="record in rows" :key="record.id" :class="{ disabled: !record.enabled }">
+            <td>{{ record.date }}</td>
             <td>{{ record.timeTag }}</td>
             <td>{{ record.target || "-" }}</td>
             <td>{{ record.task }}</td>
@@ -45,7 +47,7 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0">
-            <td class="empty-cell" colspan="7">当前日期暂无许可</td>
+            <td class="empty-cell" colspan="8">当前日期暂无许可</td>
           </tr>
         </tbody>
       </table>

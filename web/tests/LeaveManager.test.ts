@@ -25,6 +25,8 @@ describe("LeaveManager", () => {
 
     expect(wrapper.text()).toContain("休假列表");
     expect(wrapper.find(".leave-table").exists()).toBe(true);
+    expect(wrapper.find("thead th").text()).toBe("日期");
+    expect(wrapper.find("tbody td").text()).toBe("2026-05-01");
     expect(wrapper.find("tbody tr").text()).toContain("王五");
 
     await wrapper.find('input[type="date"]').setValue("2026-05-03");
