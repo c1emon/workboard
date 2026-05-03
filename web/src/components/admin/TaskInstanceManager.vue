@@ -23,19 +23,21 @@
       <table>
         <thead>
           <tr>
-            <th>类型</th>
-            <th>来源</th>
+            <th>日期</th>
             <th>时间</th>
             <th>内容</th>
+            <th>人员</th>
+            <th>来源</th>
             <th class="actions-column">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="record in rows" :key="record.id" :class="{ disabled: record.status === 'cancelled' }">
-            <td>{{ typeText(record.type) }}</td>
-            <td>{{ sourceText(record.sourceType) }}</td>
+            <td>{{ record.occurrenceDate }}</td>
             <td>{{ displayTimeTag(record) }}</td>
             <td>{{ record.content || "-" }}</td>
+            <td>{{ displayPersonnel(record) }}</td>
+            <td>{{ sourceText(record.sourceType) }}</td>
             <td class="row-actions">
               <button v-if="canEdit(record)" type="button" @click="emit('edit', record)">修改</button>
               <button v-if="record.status !== 'cancelled'" type="button" @click="emit('cancel', record)">取消</button>
@@ -43,7 +45,7 @@
             </td>
           </tr>
           <tr v-if="rows.length === 0">
-            <td class="empty-cell" colspan="5">{{ showAll ? "暂无实例" : "当前日期暂无实例" }}</td>
+            <td class="empty-cell" colspan="6">{{ showAll ? "暂无实例" : "当前日期暂无实例" }}</td>
           </tr>
         </tbody>
       </table>
@@ -177,12 +179,13 @@ function canEdit(record: TaskInstanceRecord): boolean {
   return record.sourceType === "manual" && record.status === "pending";
 }
 
-function typeText(type: TaskInstanceRecord["type"]): string {
-  return { operation: "操作", permit: "许可", patrol: "巡视", other: "其他" }[type];
-}
-
 function sourceText(source: TaskInstanceRecord["sourceType"]): string {
   return { generated: "生成", manual: "手动", override: "覆盖" }[source];
+}
+
+function displayPersonnel(record: TaskInstanceRecord): string {
+  const personnel = record.metadata.personnel;
+  return typeof personnel === "string" && personnel.trim() ? personnel : "-";
 }
 
 function displayTimeTag(record: TaskInstanceRecord): string {

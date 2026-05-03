@@ -20,7 +20,7 @@ vi.mock("../src/api/client", () => ({
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T12:00:00+08:00",
       content: "人工巡视",
-      metadata: { target: "1号线" },
+      metadata: { target: "1号线", personnel: "张三" },
       status: "pending",
       generatedAt: "2026-05-01T00:00:00.000Z",
       updatedAt: "2026-05-01T00:00:00.000Z"
@@ -92,6 +92,14 @@ describe("TaskInstanceManager", () => {
     await flush();
 
     expect(fetchTaskInstances).toHaveBeenCalledWith("2026-05-01", "patrol", "date");
+    expect(wrapper.find("thead tr").findAll("th").map((header) => header.text())).toEqual(["日期", "时间", "内容", "人员", "来源", "操作"]);
+    expect(wrapper.find("tbody tr").findAll("td").slice(0, 5).map((cell) => cell.text())).toEqual([
+      "2026-05-01",
+      "上午",
+      "人工巡视",
+      "张三",
+      "手动"
+    ]);
     expect(wrapper.text()).toContain("人工巡视");
     expect(wrapper.text()).toContain("手动");
     expect(wrapper.text()).toContain("上午");
