@@ -19,7 +19,7 @@
           </label>
           <label>开始时间<input v-model="form.startAt" required type="datetime-local" :disabled="readOnly" /></label>
         </div>
-        <label v-if="hasEndAt">结束时间<input :value="computedEndAt" name="operationEndAt" type="datetime-local" disabled /></label>
+        <label v-if="form.recurrenceType === 'finite'">结束时间<input v-model="form.endAt" name="operationEndAt" required type="datetime-local" :disabled="readOnly" /></label>
         <label v-if="readOnly && form.recurrenceType !== 'once'">
           循环间隔（分钟）
           <input :value="derivedRecurrenceIntervalMinutes" name="operationRecurrenceInterval" type="number" disabled />

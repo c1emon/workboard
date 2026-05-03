@@ -99,6 +99,7 @@ describe("template expansion", () => {
     const expanded = expandTemplate(
       {
         ...baseTemplate,
+        type: "permit",
         recurrenceType: "finite",
         recurrenceIntervalMinutes: 24 * 60,
         recurrenceCount: 3,
@@ -123,7 +124,7 @@ describe("template expansion", () => {
   it("rejects finite recurrence with missing or zero interval", () => {
     expect(() =>
       expandTemplate(
-        { ...baseTemplate, recurrenceType: "finite", recurrenceIntervalMinutes: null, recurrenceCount: 2 },
+        { ...baseTemplate, type: "permit", recurrenceType: "finite", recurrenceIntervalMinutes: null, recurrenceCount: 2 },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -135,7 +136,7 @@ describe("template expansion", () => {
 
     expect(() =>
       expandTemplate(
-        { ...baseTemplate, recurrenceType: "finite", recurrenceIntervalMinutes: 0, recurrenceCount: 2 },
+        { ...baseTemplate, type: "permit", recurrenceType: "finite", recurrenceIntervalMinutes: 0, recurrenceCount: 2 },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -149,7 +150,7 @@ describe("template expansion", () => {
   it("rejects infinite recurrence with missing or zero interval", () => {
     expect(() =>
       expandTemplate(
-        { ...baseTemplate, recurrenceType: "infinite", recurrenceIntervalMinutes: null },
+        { ...baseTemplate, type: "permit", recurrenceType: "infinite", recurrenceIntervalMinutes: null },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",
@@ -161,7 +162,7 @@ describe("template expansion", () => {
 
     expect(() =>
       expandTemplate(
-        { ...baseTemplate, recurrenceType: "infinite", recurrenceIntervalMinutes: 0 },
+        { ...baseTemplate, type: "permit", recurrenceType: "infinite", recurrenceIntervalMinutes: 0 },
         [baseItem],
         {
           windowStart: "2026-05-01T00:00:00+08:00",

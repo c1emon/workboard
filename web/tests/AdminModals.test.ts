@@ -90,6 +90,63 @@ describe("admin modals", () => {
     expect(wrapper.emitted("save")).toEqual([[]]);
   });
 
+  it("shows the operation end time input only for finite plans", async () => {
+    const baseForm: {
+      name: string;
+      description: string;
+      startAt: string;
+      endAt: string;
+      recurrenceType: "once" | "finite" | "infinite";
+      recurrenceIntervalMinutes: number;
+      recurrenceCount: number;
+      skipWeekends: boolean;
+      skipHolidays: boolean;
+    } = {
+      name: "倒闸操作",
+      description: "主线切换",
+      startAt: "2026-05-01T08:00",
+      endAt: "2026-05-01T20:00",
+      recurrenceType: "once",
+      recurrenceIntervalMinutes: 1440,
+      recurrenceCount: 7,
+      skipWeekends: false,
+      skipHolidays: false
+    };
+    const mountModal = (form: typeof baseForm) =>
+      mount(OperationPlanModal, {
+        props: {
+          title: "修改计划",
+          mode: "edit",
+          form,
+          readOnly: false,
+          hasEndAt: true,
+          computedEndAt: "2026-05-01T09:00",
+          derivedRecurrenceIntervalMinutes: 60,
+          derivedRecurrenceCount: 1,
+          durationMinutes: 60,
+          items: [],
+          selectedItemId: null,
+          canAddItems: true
+        }
+      });
+
+    const onceWrapper = mountModal(baseForm);
+    expect(onceWrapper.find('input[name="operationEndAt"]').exists()).toBe(false);
+
+    const infiniteWrapper = mountModal({ ...baseForm, recurrenceType: "infinite" });
+    expect(infiniteWrapper.find('input[name="operationEndAt"]').exists()).toBe(false);
+
+    const finiteForm = { ...baseForm, recurrenceType: "finite" as const };
+    const finiteWrapper = mountModal(finiteForm);
+    const endInput = finiteWrapper.find('input[name="operationEndAt"]');
+    expect(endInput.exists()).toBe(true);
+    expect(endInput.attributes("disabled")).toBeUndefined();
+
+    await endInput.setValue("2026-05-01T18:30");
+
+    expect(finiteForm.endAt).toBe("2026-05-01T18:30");
+  });
+
   it("renders operation item modal and emits edit actions", async () => {
     const form = {
       id: "item-1",

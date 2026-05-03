@@ -57,7 +57,9 @@ export function expandTemplate(
   if (!template.enabled) return [];
   const start = new Date(template.startAt);
   const end = new Date(template.endAt);
-  const duration = end.getTime() - start.getTime();
+  const templateDuration = end.getTime() - start.getTime();
+  const duration = template.type === "operation" ? operationCycleDurationMs(items) : templateDuration;
+  if (duration <= 0) return [];
   const windowStart = new Date(options.windowStart).getTime();
   const windowEnd = new Date(options.windowEnd).getTime();
   const occurrences = occurrenceStarts(
@@ -83,8 +85,23 @@ export function expandTemplate(
           endAt: formatWithChinaOffset(childEnd)
         };
       })
+      .filter((item) => {
+        if (template.type !== "operation" || template.recurrenceType !== "finite") return true;
+        const childStart = new Date(item.startAt).getTime();
+        const childEnd = new Date(item.endAt).getTime();
+        return childStart >= start.getTime() && childEnd <= end.getTime();
+      })
       .filter((item) => new Date(item.endAt).getTime() >= windowStart && new Date(item.startAt).getTime() <= windowEnd);
   });
+}
+
+function operationCycleDurationMs(items: TaskTemplateItemInput[]): number {
+  const latestItemEndMinutes = items.reduce(
+    (latest, item) => Math.max(latest, item.offsetMinutes + item.durationMinutes),
+    0
+  );
+  if (latestItemEndMinutes > 0) return latestItemEndMinutes * 60_000;
+  return 0;
 }
 
 function occurrenceStarts(
@@ -98,20 +115,31 @@ function occurrenceStarts(
   const first = new Date(template.startAt).getTime();
   if (template.recurrenceType === "once") return shouldSkipOccurrence(template, first, holidays, adjustedWorkdays) ? [] : [first];
   const intervalMinutes = template.recurrenceIntervalMinutes ?? 0;
-  if (intervalMinutes <= 0) {
+  if (template.type !== "operation" && intervalMinutes <= 0) {
     throw new Error(`recurrenceIntervalMinutes must be positive for ${template.recurrenceType} recurrence`);
   }
-  if (template.recurrenceType === "finite" && (template.recurrenceCount ?? 0) <= 0) {
+  if (template.type !== "operation" && template.recurrenceType === "finite" && (template.recurrenceCount ?? 0) <= 0) {
     throw new Error("recurrenceCount must be positive for finite recurrence");
   }
 
-  const interval = intervalMinutes * 60_000;
-  const countLimit = template.recurrenceType === "finite" ? template.recurrenceCount ?? 0 : 10_000;
+  const interval = template.type === "operation" ? durationMs : intervalMinutes * 60_000;
+  const operationFiniteEnd = template.type === "operation" && template.recurrenceType === "finite"
+    ? new Date(template.endAt).getTime()
+    : null;
+  const countLimit = template.type === "operation"
+    ? Number.POSITIVE_INFINITY
+    : template.recurrenceType === "finite"
+      ? template.recurrenceCount ?? 0
+      : 10_000;
   const starts: number[] = [];
   let eligibleCount = 0;
-  for (let index = 0; eligibleCount < countLimit; index += 1) {
+  const firstIndex = template.type === "operation"
+    ? Math.max(0, Math.floor((windowStart - first - durationMs) / interval))
+    : 0;
+  for (let index = firstIndex; eligibleCount < countLimit; index += 1) {
     const occurrence = first + index * interval;
     const occurrenceEnd = occurrence + durationMs;
+    if (operationFiniteEnd !== null && occurrence >= operationFiniteEnd) break;
     if (occurrence > windowEnd) break;
     if (shouldSkipOccurrence(template, occurrence, holidays, adjustedWorkdays)) continue;
     eligibleCount += 1;

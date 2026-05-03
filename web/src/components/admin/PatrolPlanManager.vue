@@ -35,9 +35,9 @@
             <td>{{ skipText(record) }}</td>
             <td class="row-actions">
               <button type="button" @click="emit('select-plan', record)">详情</button>
-              <button type="button" @click="emit('manage-items', record)">子项管理</button>
-              <button type="button" @click="emit('toggle-plan', record)">{{ record.enabled ? "禁用" : "启用" }}</button>
+              <button type="button" @click="emit('manage-items', record)">周期项管理</button>
               <button type="button" @click="emit('edit-plan', record)">修改</button>
+              <button type="button" @click="emit('toggle-plan', record)">{{ record.enabled ? "禁用" : "启用" }}</button>
               <button type="button" class="danger" @click="emit('delete-plan', record)">删除</button>
             </td>
           </tr>
@@ -57,7 +57,7 @@
           <button type="button" aria-label="关闭巡视模板表单" @click="emit('close-plan')">×</button>
         </div>
         <div class="form-grid">
-          <label>
+          <label class="wide-field">
             名称
             <input v-model="planForm.name" name="patrolPlanName" required />
           </label>
@@ -128,10 +128,10 @@
       <section class="modal-form patrol-detail-modal patrol-item-manager-modal cycle-detail">
         <div class="modal-heading">
           <div>
-            <h2>{{ detail.name }} 子项管理</h2>
+            <h2>{{ detail.name }} 周期项管理</h2>
             <p>{{ detail.items.length }} 项</p>
           </div>
-          <button type="button" aria-label="关闭子项管理" @click="emit('close-item-manager')">×</button>
+          <button type="button" aria-label="关闭周期项管理" @click="emit('close-item-manager')">×</button>
         </div>
         <div class="detail-toolbar">
           <button

@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
-import { validateTaskItem } from "../domain/templateExpansion.js";
 import { timeRangeForDateTag } from "../domain/timeTags.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 
@@ -90,7 +89,7 @@ const operationPlanInputSchema = z
     name: z.string().min(1),
     description: z.string().default(""),
     startAt: dateTimeSchema,
-    endAt: dateTimeSchema,
+    endAt: dateTimeSchema.nullable().optional(),
     recurrenceType: z.enum(["once", "finite", "infinite"]),
     recurrenceIntervalMinutes: z.number().int().positive().nullable().optional(),
     recurrenceCount: z.number().int().positive().nullable().optional(),
@@ -102,14 +101,22 @@ const operationPlanInputSchema = z
 
 interface RecurrenceFieldsInput {
   startAt: string;
-  endAt: string;
+  endAt?: string | null;
   recurrenceType: "once" | "finite" | "infinite";
   recurrenceIntervalMinutes?: number | null;
   recurrenceCount?: number | null;
 }
 
 function validateRecurrenceFields(input: RecurrenceFieldsInput, ctx: z.RefinementCtx): void {
-  if (new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
+  if (input.recurrenceType === "finite" && !input.endAt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endAt"],
+      message: "endAt is required for finite recurrence"
+    });
+  }
+
+  if (input.endAt && new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["endAt"],
@@ -128,13 +135,6 @@ function validateRecurrenceFields(input: RecurrenceFieldsInput, ctx: z.Refinemen
     });
   }
 
-  if (input.recurrenceType === "finite" && (input.recurrenceCount ?? 0) <= 0) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["recurrenceCount"],
-      message: "recurrenceCount must be positive"
-    });
-  }
 }
 interface OperationPlanDurationRow {
   start_at: string;
@@ -245,8 +245,7 @@ function mapOperationItemRow(row: OperationItemAdminRow) {
 
 function validateOperationItem(input: z.infer<typeof operationPlanInputSchema>) {
   if (!input.item) return { ok: true } as const;
-  const parentDurationMinutes = Math.floor((new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 60_000);
-  return validateTaskItem(parentDurationMinutes, input.item);
+  return validateOperationItemTiming(input.item);
 }
 
 function insertOperationItem(db: AppDatabase, templateId: string, input: z.infer<typeof operationItemInputSchema>): string {
@@ -279,8 +278,7 @@ function validateOperationPlanItem(db: AppDatabase, planId: string, item: z.infe
     return { ok: false, statusCode: 404, message: "Not found" } as const;
   }
 
-  const parentDurationMinutes = Math.floor((new Date(parent.end_at).getTime() - new Date(parent.start_at).getTime()) / 60_000);
-  const itemValidation = validateTaskItem(parentDurationMinutes, item);
+  const itemValidation = validateOperationItemTiming(item);
   if (!itemValidation.ok) {
     return { ok: false, statusCode: 400, message: itemValidation.message } as const;
   }
@@ -288,36 +286,9 @@ function validateOperationPlanItem(db: AppDatabase, planId: string, item: z.infe
   return { ok: true } as const;
 }
 
-function validateOperationItemsForDuration(
-  db: AppDatabase,
-  planId: string,
-  parentDurationMinutes: number,
-  replacement?: z.infer<typeof operationItemInputSchema>
-) {
-  const rows = db
-    .prepare<[string], OperationItemAdminRow>(
-      `select id, offset_minutes, duration_minutes, content, ext_data_json, sort_order
-       from task_template_items
-       where template_id = ?
-       order by sort_order, offset_minutes`
-    )
-    .all(planId);
-  let targetId = replacement?.id;
-  if (replacement && !targetId) targetId = rows[0]?.id;
-  const candidateItems = rows.map((row) =>
-    row.id === targetId
-      ? { offsetMinutes: replacement?.offsetMinutes ?? row.offset_minutes, durationMinutes: replacement?.durationMinutes ?? row.duration_minutes }
-      : { offsetMinutes: row.offset_minutes, durationMinutes: row.duration_minutes }
-  );
-  if (replacement && !targetId) {
-    candidateItems.push({ offsetMinutes: replacement.offsetMinutes, durationMinutes: replacement.durationMinutes });
-  }
-
-  for (const item of candidateItems) {
-    const validation = validateTaskItem(parentDurationMinutes, item);
-    if (!validation.ok) return validation;
-  }
-
+function validateOperationItemTiming(item: Pick<z.infer<typeof operationItemInputSchema>, "offsetMinutes" | "durationMinutes">) {
+  if (item.offsetMinutes < 0) return { ok: false, message: "offset must be non-negative" } as const;
+  if (item.durationMinutes <= 0) return { ok: false, message: "duration must be positive" } as const;
   return { ok: true } as const;
 }
 
@@ -917,7 +888,21 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
            order by c.start_at desc, c.name`
 	        : `${baseSql}
 	           and julianday(c.start_at) <= julianday(?)
-	           and julianday(c.end_at) >= julianday(?)
+	           and (
+	             c.recurrence_type = 'infinite'
+	             or (
+	               c.recurrence_type = 'once'
+	               and julianday(c.start_at) + coalesce((
+	                 select max(child.offset_minutes + child.duration_minutes)
+	                 from task_template_items child
+	                 where child.template_id = c.id
+	               ), 0) / 1440.0 >= julianday(?)
+	             )
+	             or (
+	               c.recurrence_type = 'finite'
+	               and julianday(c.end_at) >= julianday(?)
+	             )
+	           )
 	           group by c.id
 	           order by c.start_at, c.name`;
 
@@ -925,8 +910,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       validation.data.scope === "all"
         ? db.prepare<[], OperationPlanAdminRow>(sql).all()
         : db
-            .prepare<[string, string], OperationPlanAdminRow>(sql)
-            .all(`${validation.data.date}T23:59:59+08:00`, `${validation.data.date}T00:00:00+08:00`);
+            .prepare<[string, string, string], OperationPlanAdminRow>(sql)
+            .all(
+              `${validation.data.date}T23:59:59+08:00`,
+              `${validation.data.date}T00:00:00+08:00`,
+              `${validation.data.date}T00:00:00+08:00`
+            );
 
     return rows.map(mapOperationPlanRow);
   });
@@ -979,6 +968,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
 
     const id = nanoid();
     const now = new Date().toISOString();
+    const storedEndAt = input.endAt ?? input.startAt;
     db.prepare(
       `insert into task_templates
        (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
@@ -989,7 +979,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       input.name,
       input.description,
       input.startAt,
-      input.endAt,
+      storedEndAt,
       input.recurrenceType,
       input.recurrenceIntervalMinutes ?? null,
       input.recurrenceCount ?? null,
@@ -1010,20 +1000,16 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
     if (!params.success) return reply.code(400).send(params.error);
     if (!validation.success) return reply.code(400).send(validation.error);
 
-	    const input = validation.data;
-	    const itemValidation = validateOperationItem(input);
-	    if (!itemValidation.ok) {
-	      return reply.code(400).send({ error: "Invalid admin payload", message: itemValidation.message });
-	    }
-	    const existingPlan = operationPlanDuration(db, params.data.id);
-	    if (!existingPlan) return reply.code(404).send({ error: "Not found" });
-	    const parentDurationMinutes = Math.floor((new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 60_000);
-	    const existingItemsValidation = validateOperationItemsForDuration(db, params.data.id, parentDurationMinutes, input.item);
-	    if (!existingItemsValidation.ok) {
-	      return reply.code(400).send({ error: "Invalid admin payload", message: existingItemsValidation.message });
-	    }
+    const input = validation.data;
+    const itemValidation = validateOperationItem(input);
+    if (!itemValidation.ok) {
+      return reply.code(400).send({ error: "Invalid admin payload", message: itemValidation.message });
+    }
+    const existingPlan = operationPlanDuration(db, params.data.id);
+    if (!existingPlan) return reply.code(404).send({ error: "Not found" });
 
-	    const now = new Date().toISOString();
+    const now = new Date().toISOString();
+    const storedEndAt = input.endAt ?? input.startAt;
     const result = db
       .prepare(
         `update task_templates
@@ -1035,7 +1021,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
         input.name,
         input.description,
         input.startAt,
-        input.endAt,
+        storedEndAt,
         input.recurrenceType,
         input.recurrenceIntervalMinutes ?? null,
         input.recurrenceCount ?? null,

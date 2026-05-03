@@ -534,7 +534,10 @@ describe("AdminView", () => {
 
     expect(createOperationPlan).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "新增操作"
+        name: "新增操作",
+        endAt: null,
+        recurrenceIntervalMinutes: null,
+        recurrenceCount: null
       })
     );
     expect(createOperationPlan).toHaveBeenCalledWith(expect.not.objectContaining({ item: expect.anything() }));
@@ -728,7 +731,9 @@ describe("AdminView", () => {
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-1",
       expect.objectContaining({
-        endAt: "2026-05-01T12:20:00+08:00",
+        endAt: null,
+        recurrenceIntervalMinutes: null,
+        recurrenceCount: null,
         item: expect.objectContaining({ id: "item-2", content: "复核记录", offsetMinutes: 200 })
       })
     );
@@ -857,7 +862,7 @@ describe("AdminView", () => {
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-single",
       expect.objectContaining({
-        endAt: "2026-05-03T01:00:00+08:00",
+        endAt: null,
         recurrenceIntervalMinutes: 1020
       })
     );
@@ -904,7 +909,9 @@ describe("AdminView", () => {
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-1",
       expect.objectContaining({
-        endAt: "2026-05-01T10:00:00+08:00"
+        endAt: null,
+        recurrenceIntervalMinutes: null,
+        recurrenceCount: null
       })
     );
     expect(updateOperationPlan).toHaveBeenCalledWith("operation-1", expect.not.objectContaining({ item: expect.anything() }));
@@ -969,6 +976,62 @@ describe("AdminView", () => {
 
     expect(wrapper.find('input[name="operationRecurrenceInterval"]').exists()).toBe(false);
     expect(wrapper.find('input[name="operationRecurrenceCount"]').exists()).toBe(false);
+  });
+
+  it("saves finite operation plans with explicit window end and derived cycle fields", async () => {
+    vi.mocked(fetchOperationPlans).mockResolvedValueOnce([
+      {
+        id: "operation-finite",
+        name: "有限操作",
+        description: "两轮",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: "2026-05-01T15:00:00+08:00",
+        recurrenceType: "finite",
+        recurrenceIntervalMinutes: 999,
+        recurrenceCount: 99,
+        skipWeekends: false,
+        skipHolidays: false,
+        enabled: true,
+        childTaskCount: 2,
+        firstItemContent: "第一步"
+      }
+    ]);
+    vi.mocked(fetchOperationPlan).mockResolvedValueOnce({
+      id: "operation-finite",
+      name: "有限操作",
+      description: "两轮",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T15:00:00+08:00",
+      recurrenceType: "finite",
+      recurrenceIntervalMinutes: 999,
+      recurrenceCount: 99,
+      skipWeekends: false,
+      skipHolidays: false,
+      enabled: true,
+      childTaskCount: 2,
+      firstItemContent: "第一步",
+      items: [
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "第一步", metadata: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "第二步", metadata: {}, sortOrder: 1 }
+      ]
+    });
+
+    const wrapper = mountAdmin();
+    await new Promise((resolve) => setTimeout(resolve));
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await new Promise((resolve) => setTimeout(resolve, 310));
+
+    await wrapper.find('input[name="operationEndAt"]').setValue("2026-05-01T16:00");
+    await wrapper.find(".operation-modal").trigger("submit.prevent");
+
+    expect(updateOperationPlan).toHaveBeenCalledWith(
+      "operation-finite",
+      expect.objectContaining({
+        endAt: "2026-05-01T16:00:00+08:00",
+        recurrenceIntervalMinutes: 210,
+        recurrenceCount: 3
+      })
+    );
   });
 
   it("hides end time for infinite operation plans", async () => {

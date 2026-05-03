@@ -92,7 +92,7 @@ export interface OperationPlanInput {
   name: string;
   description: string;
   startAt: string;
-  endAt: string;
+  endAt: string | null;
   recurrenceType: "once" | "finite" | "infinite";
   recurrenceIntervalMinutes?: number | null;
   recurrenceCount?: number | null;

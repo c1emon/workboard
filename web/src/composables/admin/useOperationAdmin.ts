@@ -63,7 +63,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     sortOrder: 0
   });
 
-  const operationStoredDurationMinutes = computed(() => {
+  const operationFiniteWindowMinutes = computed(() => {
     const start = new Date(normalizeDateTime(operationForm.startAt)).getTime();
     const end = new Date(normalizeDateTime(operationForm.endAt)).getTime();
     if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return 1;
@@ -71,7 +71,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   });
   const operationCycleDurationMinutes = computed(() => cycleDurationForItems(operationDetailItems.value));
   const operationDurationMinutes = computed(() => operationCycleDurationMinutes.value);
-  const operationHasEndAt = computed(() => operationForm.recurrenceType !== "infinite");
+  const operationHasEndAt = computed(() => operationForm.recurrenceType === "finite");
   const operationDerivedRecurrenceIntervalMinutes = computed(() => operationCycleDurationMinutes.value);
   const operationDerivedRecurrenceCount = computed(() => recurrenceCountForItems(operationDetailItems.value));
   const operationComputedEndAt = computed(() => computedEndAtForItems(operationDetailItems.value));
@@ -157,11 +157,11 @@ export function useOperationAdmin(context: OperationAdminContext) {
 
   function cycleDurationForItems(items: OperationPlanItemRecord[]): number {
     const latestItemEnd = items.reduce((latest, item) => Math.max(latest, item.offsetMinutes + item.durationMinutes), 0);
-    return Math.max(1, latestItemEnd || operationStoredDurationMinutes.value);
+    return Math.max(1, latestItemEnd || operationFiniteWindowMinutes.value);
   }
 
   function recurrenceCountForItems(items: OperationPlanItemRecord[]): number {
-    return Math.max(1, Math.ceil(operationStoredDurationMinutes.value / cycleDurationForItems(items)));
+    return Math.max(1, Math.ceil(operationFiniteWindowMinutes.value / cycleDurationForItems(items)));
   }
 
   function computedEndAtForItems(items: OperationPlanItemRecord[]): string {
@@ -183,7 +183,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
       name: operationForm.name,
       description: operationForm.description,
       startAt: normalizeDateTime(operationForm.startAt),
-      endAt: normalizeDateTime(computedEndAtForItems(items)),
+      endAt: operationForm.recurrenceType === "finite" ? normalizeDateTime(operationForm.endAt) : null,
       ...recurrencePayloadForItems(operationForm, items),
       skipWeekends: operationForm.skipWeekends,
       skipHolidays: operationForm.skipHolidays,

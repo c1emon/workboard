@@ -547,6 +547,148 @@ describe("admin routes", () => {
     });
   });
 
+  it("keeps infinite operation plans visible after their compatibility end date", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "无限循环操作",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        endAt: null,
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "循环项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const response = await app.inject({ method: "GET", url: "/api/admin/operation-plans?date=2026-05-02&scope=date" });
+    await app.close();
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([expect.objectContaining({ id, name: "无限循环操作", recurrenceType: "infinite" })]);
+  });
+
+  it("lists once operation plans on dates covered by their derived child cycle", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "跨日一次操作",
+        description: "",
+        startAt: "2026-05-01T23:00:00+08:00",
+        endAt: null,
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 90, durationMinutes: 60, content: "跨日子任务", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+
+    const response = await app.inject({ method: "GET", url: "/api/admin/operation-plans?date=2026-05-02&scope=date" });
+    await app.close();
+
+    expect(createResponse.statusCode).toBe(201);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([expect.objectContaining({ id, name: "跨日一次操作", recurrenceType: "once" })]);
+  });
+
+  it("validates nullable operation endAt by recurrence type", async () => {
+    const db = createTestDatabase();
+    const app = createApp(db);
+
+    const onceResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "一次操作",
+        description: "",
+        startAt: "2026-05-01T08:00:00+08:00",
+        recurrenceType: "once",
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "一次项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const infiniteResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "无限操作",
+        description: "",
+        startAt: "2026-05-01T09:00:00+08:00",
+        endAt: null,
+        recurrenceType: "infinite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "无限项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const finiteMissingResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "有限缺失结束",
+        description: "",
+        startAt: "2026-05-01T10:00:00+08:00",
+        endAt: null,
+        recurrenceType: "finite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "有限项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const finiteEqualResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/operation-plans",
+      payload: {
+        name: "有限结束相同",
+        description: "",
+        startAt: "2026-05-01T11:00:00+08:00",
+        endAt: "2026-05-01T11:00:00+08:00",
+        recurrenceType: "finite",
+        recurrenceIntervalMinutes: 60,
+        skipWeekends: false,
+        skipHolidays: false,
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "有限项", metadata: {}, sortOrder: 0 }
+      }
+    });
+    const onceId = (onceResponse.json() as { id: string }).id;
+    const infiniteId = (infiniteResponse.json() as { id: string }).id;
+    const rows = db
+      .prepare("select id, start_at, end_at from task_templates where id in (?, ?) order by start_at")
+      .all(onceId, infiniteId);
+    await app.close();
+
+    expect(onceResponse.statusCode).toBe(201);
+    expect(infiniteResponse.statusCode).toBe(201);
+    expect(rows).toEqual([
+      { id: onceId, start_at: "2026-05-01T08:00:00+08:00", end_at: "2026-05-01T08:00:00+08:00" },
+      { id: infiniteId, start_at: "2026-05-01T09:00:00+08:00", end_at: "2026-05-01T09:00:00+08:00" }
+    ]);
+    expect(finiteMissingResponse.statusCode).toBe(400);
+    expect(finiteMissingResponse.json()).toMatchObject({
+      issues: [expect.objectContaining({ path: ["endAt"], message: "endAt is required for finite recurrence" })]
+    });
+    expect(finiteEqualResponse.statusCode).toBe(400);
+    expect(finiteEqualResponse.json()).toMatchObject({
+      issues: [expect.objectContaining({ path: ["endAt"], message: "endAt must be after startAt" })]
+    });
+  });
+
   it("lists operation plans with non-China-offset datetimes by actual overlap", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
@@ -821,7 +963,7 @@ describe("admin routes", () => {
     });
   });
 
-  it("rejects operation plan updates that would make existing child items exceed the parent duration", async () => {
+  it("allows operation plan updates when child items extend the derived cycle beyond endAt", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
 
@@ -857,11 +999,10 @@ describe("admin routes", () => {
     const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
     await app.close();
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ message: "child task ends after parent occurrence" });
+    expect(response.statusCode).toBe(200);
     expect(detailResponse.json()).toMatchObject({
-      name: "操作计划",
-      endAt: "2026-05-01T12:00:00+08:00",
+      name: "缩短计划",
+      endAt: "2026-05-01T10:00:00+08:00",
       items: [{ content: "末尾任务", offsetMinutes: 180, durationMinutes: 45 }]
     });
   });
@@ -1086,7 +1227,7 @@ describe("admin routes", () => {
     expect(boardEvents.getVersion()).toBe(9);
   });
 
-  it("returns 400 when an operation item exceeds the parent occurrence duration", async () => {
+  it("allows operation items to extend beyond the stored compatibility duration", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
     const planResponse = await app.inject({
@@ -1115,11 +1256,7 @@ describe("admin routes", () => {
     });
     await app.close();
 
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({
-      error: "Invalid admin payload",
-      message: "child task ends after parent occurrence"
-    });
+    expect(response.statusCode).toBe(201);
   });
 
   it("publishes a board event version after successful admin writes", async () => {

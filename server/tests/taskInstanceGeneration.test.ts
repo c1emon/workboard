@@ -49,17 +49,122 @@ describe("task instance generation", () => {
     ]);
   });
 
+  it("expands a once operation plan as one complete child-task cycle using compatibility endAt", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, {
+      id: "operation-once-cycle",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T08:00:00+08:00"
+    });
+    insertItem(db, { id: "first", templateId: "operation-once-cycle", offsetMinutes: 0, durationMinutes: 60, content: "第一项" });
+    insertItem(db, { id: "last", templateId: "operation-once-cycle", offsetMinutes: 90, durationMinutes: 80, content: "结束最晚" });
+
+    const result = generateTaskInstances(db, {
+      windowStartDate: "2026-05-01",
+      windowEndDate: "2026-05-01",
+      types: ["operation"]
+    });
+
+    expect(result).toEqual({ inserted: 2, updated: 0, skipped: 0 });
+    expect(readInstances(db).map((row) => `${row.content}:${row.start_at}:${row.end_at}`)).toEqual([
+      "第一项:2026-05-01T08:00:00.000+08:00:2026-05-01T09:00:00.000+08:00",
+      "结束最晚:2026-05-01T09:30:00.000+08:00:2026-05-01T10:50:00.000+08:00"
+    ]);
+  });
+
+  it("derives operation cycle duration from the latest child-task end", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, {
+      id: "operation-derived-cycle",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T08:01:00+08:00",
+      recurrenceType: "infinite",
+      recurrenceIntervalMinutes: 5
+    });
+    insertItem(db, { id: "late-offset", templateId: "operation-derived-cycle", offsetMinutes: 120, durationMinutes: 10, content: "偏移最大" });
+    insertItem(db, { id: "late-end", templateId: "operation-derived-cycle", offsetMinutes: 90, durationMinutes: 80, content: "结束最晚" });
+
+    const result = generateTaskInstances(db, {
+      windowStartDate: "2026-05-01",
+      windowEndDate: "2026-05-01",
+      types: ["operation"]
+    });
+
+    expect(result).toEqual({ inserted: 11, updated: 0, skipped: 0 });
+    expect(readInstances(db).map((row) => `${row.content}:${row.start_at}`)).toEqual([
+      "结束最晚:2026-05-01T09:30:00.000+08:00",
+      "偏移最大:2026-05-01T10:00:00.000+08:00",
+      "结束最晚:2026-05-01T12:20:00.000+08:00",
+      "偏移最大:2026-05-01T12:50:00.000+08:00",
+      "结束最晚:2026-05-01T15:10:00.000+08:00",
+      "偏移最大:2026-05-01T15:40:00.000+08:00",
+      "结束最晚:2026-05-01T18:00:00.000+08:00",
+      "偏移最大:2026-05-01T18:30:00.000+08:00",
+      "结束最晚:2026-05-01T20:50:00.000+08:00",
+      "偏移最大:2026-05-01T21:20:00.000+08:00",
+      "结束最晚:2026-05-01T23:40:00.000+08:00"
+    ]);
+  });
+
+  it("does not generate operation instances when no child task defines a cycle", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, {
+      id: "operation-empty",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T20:00:00+08:00",
+      recurrenceType: "infinite",
+      recurrenceIntervalMinutes: 60
+    });
+
+    const result = generateTaskInstances(db, {
+      windowStartDate: "2026-05-01",
+      windowEndDate: "2026-05-01",
+      types: ["operation"]
+    });
+
+    expect(result).toEqual({ inserted: 0, updated: 0, skipped: 0 });
+    expect(readInstances(db)).toEqual([]);
+  });
+
+  it("keeps finite operation child instances fully inside the plan window", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, {
+      id: "operation-finite",
+      startAt: "2026-05-01T08:00:00+08:00",
+      endAt: "2026-05-01T11:00:00+08:00",
+      recurrenceType: "finite",
+      recurrenceIntervalMinutes: 999
+    });
+    insertItem(db, { id: "first", templateId: "operation-finite", offsetMinutes: 0, durationMinutes: 60, content: "完整第一项" });
+    insertItem(db, { id: "second", templateId: "operation-finite", offsetMinutes: 90, durationMinutes: 30, content: "完整第二项" });
+
+    const result = generateTaskInstances(db, {
+      windowStartDate: "2026-05-01",
+      windowEndDate: "2026-05-01",
+      types: ["operation"]
+    });
+
+    expect(result).toEqual({ inserted: 3, updated: 0, skipped: 0 });
+    expect(readInstances(db).map((row) => `${row.content}:${row.start_at}:${row.end_at}`)).toEqual([
+      "完整第一项:2026-05-01T08:00:00.000+08:00:2026-05-01T09:00:00.000+08:00",
+      "完整第二项:2026-05-01T09:30:00.000+08:00:2026-05-01T10:00:00.000+08:00",
+      "完整第一项:2026-05-01T10:00:00.000+08:00:2026-05-01T11:00:00.000+08:00"
+    ]);
+    expect(readInstances(db).every((row) => new Date(row.end_at).getTime() <= new Date("2026-05-01T11:00:00+08:00").getTime())).toBe(true);
+  });
+
   it("creates simple daily recurrence instances", () => {
     const db = createTestDatabase();
     insertTemplate(db, {
-      id: "operation-1",
+      id: "permit-1",
+      type: "permit",
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T09:00:00+08:00",
       recurrenceType: "finite",
       recurrenceIntervalMinutes: 24 * 60,
       recurrenceCount: 3
     });
-    insertItem(db, { id: "item-1", templateId: "operation-1", offsetMinutes: 0, durationMinutes: 30, content: "日报" });
+    insertItem(db, { id: "item-1", templateId: "permit-1", offsetMinutes: 0, durationMinutes: 30, content: "日报" });
 
     const result = generateTaskInstances(db, {
       windowStartDate: "2026-05-01",
