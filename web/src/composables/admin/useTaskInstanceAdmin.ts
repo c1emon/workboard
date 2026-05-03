@@ -13,11 +13,12 @@ import {
 import type { TaskInstanceAdminContext } from "./types";
 
 export interface TaskInstanceForm {
-  type: TaskInstanceRecord["type"];
-  startAt: string;
-  endAt: string;
-  content: string;
-  metadataJson: string;
+  date: string;
+  timeTag: "全天" | "上午" | "下午";
+  target: string;
+  personnel: string;
+  vehicle: string;
+  other: string;
 }
 
 export interface TaskInstanceRefreshForm {
@@ -35,11 +36,12 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   const taskInstanceEditingId = ref<string | null>(null);
   const taskInstanceGenerationSummary = ref("");
   const taskInstanceForm = reactive<TaskInstanceForm>({
-    type: "patrol",
-    startAt: `${today}T08:00:00+08:00`,
-    endAt: `${today}T12:00:00+08:00`,
-    content: "",
-    metadataJson: "{}"
+    date: today,
+    timeTag: "上午",
+    target: "",
+    personnel: "",
+    vehicle: "",
+    other: ""
   });
   const taskInstanceRefreshForm = reactive<TaskInstanceRefreshForm>({
     templateId: "",
@@ -58,21 +60,18 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   function openTaskInstanceCreate(): void {
     taskInstanceEditingId.value = null;
     taskInstanceFormOpen.value = true;
-    taskInstanceForm.type = "patrol";
-    taskInstanceForm.startAt = `${selectedDate.value || today}T08:00:00+08:00`;
-    taskInstanceForm.endAt = `${selectedDate.value || today}T12:00:00+08:00`;
-    taskInstanceForm.content = "";
-    taskInstanceForm.metadataJson = "{}";
+    resetTaskInstanceForm();
   }
 
   function openTaskInstanceEdit(record: TaskInstanceRecord): void {
     taskInstanceEditingId.value = record.id;
     taskInstanceFormOpen.value = true;
-    taskInstanceForm.type = record.type;
-    taskInstanceForm.startAt = record.startAt;
-    taskInstanceForm.endAt = record.endAt;
-    taskInstanceForm.content = record.content;
-    taskInstanceForm.metadataJson = JSON.stringify(record.metadata, null, 2);
+    taskInstanceForm.timeTag = metadataTimeTag(record.metadata) ?? timeTagFromRange(record.startAt, record.endAt);
+    taskInstanceForm.date = toChinaDate(record.startAt);
+    taskInstanceForm.target = metadataString(record.metadata, "target") || record.content;
+    taskInstanceForm.personnel = metadataString(record.metadata, "personnel");
+    taskInstanceForm.vehicle = metadataString(record.metadata, "vehicle");
+    taskInstanceForm.other = metadataString(record.metadata, "other");
   }
 
   function closeTaskInstanceForm(): void {
@@ -152,13 +151,29 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   }
 
   function taskInstancePayload(): TaskInstanceInput {
+    const { startAt, endAt } = timeRangeForDateTag(taskInstanceForm.date || selectedDate.value || today, taskInstanceForm.timeTag);
     return {
-      type: taskInstanceForm.type,
-      startAt: taskInstanceForm.startAt,
-      endAt: taskInstanceForm.endAt,
-      content: taskInstanceForm.content,
-      metadata: parseMetadata(taskInstanceForm.metadataJson)
+      type: "patrol",
+      startAt,
+      endAt,
+      content: taskInstanceForm.target,
+      metadata: {
+        timeTag: taskInstanceForm.timeTag,
+        target: taskInstanceForm.target,
+        personnel: taskInstanceForm.personnel,
+        vehicle: taskInstanceForm.vehicle,
+        other: taskInstanceForm.other
+      }
     };
+  }
+
+  function resetTaskInstanceForm(): void {
+    taskInstanceForm.date = selectedDate.value || today;
+    taskInstanceForm.timeTag = "上午";
+    taskInstanceForm.target = "";
+    taskInstanceForm.personnel = "";
+    taskInstanceForm.vehicle = "";
+    taskInstanceForm.other = "";
   }
 
   function resetRefreshForm(date: string): void {
@@ -195,17 +210,29 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   };
 }
 
-function parseMetadata(raw: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-  return {};
-}
-
 function toChinaDate(value: string): string {
   const shifted = new Date(new Date(value).getTime() + 8 * 60 * 60 * 1000);
   return shifted.toISOString().slice(0, 10);
+}
+
+function timeRangeForDateTag(date: string, timeTag: TaskInstanceForm["timeTag"]): { startAt: string; endAt: string } {
+  if (timeTag === "全天") return { startAt: `${date}T00:00:00+08:00`, endAt: `${date}T23:59:59+08:00` };
+  if (timeTag === "下午") return { startAt: `${date}T12:00:00+08:00`, endAt: `${date}T17:00:00+08:00` };
+  return { startAt: `${date}T08:00:00+08:00`, endAt: `${date}T12:00:00+08:00` };
+}
+
+function metadataString(metadata: Record<string, unknown>, key: string): string {
+  const value = metadata[key];
+  return typeof value === "string" ? value : "";
+}
+
+function metadataTimeTag(metadata: Record<string, unknown>): TaskInstanceForm["timeTag"] | null {
+  const value = metadata.timeTag;
+  return value === "全天" || value === "上午" || value === "下午" ? value : null;
+}
+
+function timeTagFromRange(startAt: string, endAt: string): TaskInstanceForm["timeTag"] {
+  if (startAt.includes("T00:00:00") && endAt.includes("T23:59:59")) return "全天";
+  if (startAt.includes("T12:00:00") && endAt.includes("T17:00:00")) return "下午";
+  return "上午";
 }

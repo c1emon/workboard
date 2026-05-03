@@ -94,6 +94,8 @@ describe("TaskInstanceManager", () => {
     expect(fetchTaskInstances).toHaveBeenCalledWith("2026-05-01", "patrol", "date");
     expect(wrapper.text()).toContain("人工巡视");
     expect(wrapper.text()).toContain("手动");
+    expect(wrapper.text()).toContain("上午");
+    expect(wrapper.text()).not.toContain("08:00:00");
   });
 
   it("loads all instances when show all is enabled", async () => {
@@ -115,15 +117,34 @@ describe("TaskInstanceManager", () => {
 
     expect(wrapper.find(".modal-backdrop").exists()).toBe(true);
     expect(wrapper.text()).not.toContain("元数据 JSON");
+    expect(wrapper.find('select[name="taskInstanceType"]').exists()).toBe(false);
+    expect(wrapper.find('input[name="taskInstanceStartAt"]').exists()).toBe(false);
+    expect(wrapper.find('input[name="taskInstanceEndAt"]').exists()).toBe(false);
+    expect(wrapper.find('input[name="taskInstanceDate"]').exists()).toBe(true);
+    expect(wrapper.find('select[name="taskInstanceTimeTag"]').exists()).toBe(true);
+    expect(wrapper.find('input[name="taskInstanceTarget"]').exists()).toBe(true);
 
-    await wrapper.find('input[name="taskInstanceContent"]').setValue("临时巡视");
-    await wrapper.find('select[name="taskInstanceType"]').setValue("patrol");
+    await wrapper.find('input[name="taskInstanceDate"]').setValue("2026-05-02");
+    await wrapper.find('select[name="taskInstanceTimeTag"]').setValue("下午");
+    await wrapper.find('input[name="taskInstanceTarget"]').setValue("2号线");
+    await wrapper.find('input[name="taskInstancePersonnel"]').setValue("李四");
+    await wrapper.find('input[name="taskInstanceVehicle"]').setValue("巡检车");
+    await wrapper.find('input[name="taskInstanceOther"]').setValue("带记录仪");
     await wrapper.find(".task-instance-modal").trigger("submit.prevent");
 
-    expect(createTaskInstance).toHaveBeenCalledWith(expect.objectContaining({
+    expect(createTaskInstance).toHaveBeenCalledWith({
       type: "patrol",
-      content: "临时巡视"
-    }));
+      startAt: "2026-05-02T12:00:00+08:00",
+      endAt: "2026-05-02T17:00:00+08:00",
+      content: "2号线",
+      metadata: {
+        timeTag: "下午",
+        target: "2号线",
+        personnel: "李四",
+        vehicle: "巡检车",
+        other: "带记录仪"
+      }
+    });
   });
 
   it("confirms before regenerating instances", async () => {
