@@ -146,7 +146,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       `insert into task_templates
        (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
         recurrence_count, skip_weekends, skip_holidays, enabled, ext_data_json, created_at, updated_at)
-       values (?, 'patrol', ?, ?, ?, ?, 'once', null, null, ?, ?, ?, ?, ?, ?)`
+       values (?, 'patrol', ?, ?, ?, ?, 'infinite', 1440, null, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       validation.data.name,

@@ -856,7 +856,14 @@ describe("admin routes", () => {
     });
     const listResponse = await app.inject({ method: "GET", url: "/api/admin/patrol-plans" });
     const detailResponse = await app.inject({ method: "GET", url: `/api/admin/patrol-plans/${id}` });
-    const template = db.prepare("select type, name, description, start_at, end_at, skip_weekends, skip_holidays, enabled, ext_data_json from task_templates where id = ?").get(id) as { ext_data_json: string } | undefined;
+    const template = db
+      .prepare(
+        `select type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
+                skip_weekends, skip_holidays, enabled, ext_data_json
+         from task_templates
+         where id = ?`
+      )
+      .get(id) as { ext_data_json: string } | undefined;
     const firstItem = db.prepare("select template_id, content, ext_data_json, sort_order from task_template_items where id = ?").get((firstItemResponse.json() as { id: string }).id) as { ext_data_json: string } | undefined;
     await app.close();
 
@@ -869,6 +876,8 @@ describe("admin routes", () => {
       description: "90天周期",
       start_at: "2026-05-01T00:00:00+08:00",
       end_at: "2026-07-29T23:59:59+08:00",
+      recurrence_type: "infinite",
+      recurrence_interval_minutes: 1440,
       skip_weekends: 0,
       skip_holidays: 1,
       enabled: 1

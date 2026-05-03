@@ -1,4 +1,4 @@
-import { reactive, ref } from "vue";
+import { reactive, ref, watch } from "vue";
 import {
   createTaskInstance,
   deleteTaskInstance,
@@ -24,6 +24,7 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   const taskInstanceRows = ref<TaskInstanceRecord[]>([]);
   const taskInstanceFormOpen = ref(false);
   const taskInstanceEditingId = ref<string | null>(null);
+  const taskInstanceGenerationEndDate = ref(selectedDate.value);
   const taskInstanceGenerationSummary = ref("");
   const taskInstanceForm = reactive<TaskInstanceForm>({
     type: "patrol",
@@ -31,6 +32,12 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     endAt: `${today}T12:00:00+08:00`,
     content: "",
     metadataJson: "{}"
+  });
+
+  watch(selectedDate, (date) => {
+    if (!taskInstanceGenerationEndDate.value || taskInstanceGenerationEndDate.value < date) {
+      taskInstanceGenerationEndDate.value = date;
+    }
   });
 
   async function loadTaskInstanceRows(): Promise<void> {
@@ -100,9 +107,10 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   }
 
   async function regenerateTaskInstances(): Promise<void> {
+    const windowEndDate = generationWindowEndDate();
     const confirmed = await requestConfirmation({
       title: "重新生成实例",
-      message: `将刷新 ${selectedDate.value} 的待处理生成实例。`,
+      message: `将刷新 ${selectedDate.value} 至 ${windowEndDate} 的待处理生成实例。`,
       detail: "已完成、进行中、取消或手动实例不会被覆盖。",
       confirmLabel: "重新生成"
     });
@@ -110,7 +118,7 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     await withStatus(async () => {
       const result = await generateTaskInstances({
         windowStartDate: selectedDate.value,
-        windowEndDate: selectedDate.value,
+        windowEndDate,
         types: ["patrol"],
         refreshPending: true
       });
@@ -129,11 +137,16 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     };
   }
 
+  function generationWindowEndDate(): string {
+    return taskInstanceGenerationEndDate.value >= selectedDate.value ? taskInstanceGenerationEndDate.value : selectedDate.value;
+  }
+
   return {
     taskInstanceRows,
     taskInstanceForm,
     taskInstanceFormOpen,
     taskInstanceEditingId,
+    taskInstanceGenerationEndDate,
     taskInstanceGenerationSummary,
     loadTaskInstanceRows,
     openTaskInstanceCreate,

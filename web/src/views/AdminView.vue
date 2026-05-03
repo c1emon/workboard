@@ -48,6 +48,7 @@
         <div v-else-if="activeKey === 'patrol'" class="patrol-admin-stack">
           <TaskInstanceManager
             v-model:selected-date="selectedDate"
+            v-model:generation-end-date="taskInstanceGenerationEndDate"
             :today="today"
             :yesterday="yesterday"
             :rows="taskInstanceRows"
@@ -226,7 +227,7 @@ import { useAdminViewModel } from "../composables/admin/useAdminViewModel";
 const {
   sections, today, yesterday, activeKey, selectedDate, statusText, activeSection,
   permitRows, otherRows, leaveRows, permitShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
-  taskInstanceRows, taskInstanceForm, taskInstanceFormOpen, taskInstanceEditingId, taskInstanceGenerationSummary,
+  taskInstanceRows, taskInstanceForm, taskInstanceFormOpen, taskInstanceEditingId, taskInstanceGenerationEndDate, taskInstanceGenerationSummary,
   patrolPlanRows, patrolPlanDetail, patrolPlanForm, patrolPlanFormOpen, patrolPlanEditingId, patrolCycleItemForm, patrolCycleItemEditingId,
   holidayYear, holidayRows, adjustedWorkdayRows, holidayImportModalOpen, holidayImportForm,
   modalKind, modalTitle, modalForm, operationModalOpen, operationModalMode, operationRecordId,

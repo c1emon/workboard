@@ -53,6 +53,7 @@ function mountHarness() {
     template: `
       <TaskInstanceManager
         v-model:selected-date="selectedDate"
+        v-model:generation-end-date="admin.taskInstanceGenerationEndDate.value"
         today="2026-05-01"
         yesterday="2026-04-30"
         :rows="admin.taskInstanceRows.value"
@@ -108,12 +109,13 @@ describe("TaskInstanceManager", () => {
     const { wrapper, requestConfirmation } = mountHarness();
     await flush();
 
+    await wrapper.find('input[name="taskInstanceGenerationEndDate"]').setValue("2026-05-31");
     await wrapper.find(".manager-actions .secondary-action").trigger("click");
 
     expect(requestConfirmation).toHaveBeenCalledWith(expect.objectContaining({ title: "重新生成实例" }));
     expect(generateTaskInstances).toHaveBeenCalledWith({
       windowStartDate: "2026-05-01",
-      windowEndDate: "2026-05-01",
+      windowEndDate: "2026-05-31",
       types: ["patrol"],
       refreshPending: true
     });

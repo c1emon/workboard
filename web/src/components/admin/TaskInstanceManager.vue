@@ -14,6 +14,16 @@
       @update:model-value="emit('update:selectedDate', $event)"
     />
     <div class="manager-actions">
+      <label>
+        生成至
+        <input
+          :value="generationEndDate"
+          type="date"
+          name="taskInstanceGenerationEndDate"
+          :min="selectedDate"
+          @input="emit('update:generationEndDate', ($event.target as HTMLInputElement).value)"
+        />
+      </label>
       <button type="button" class="secondary-action" @click="emit('regenerate')">重新生成</button>
       <span v-if="generationSummary">{{ generationSummary }}</span>
     </div>
@@ -106,11 +116,13 @@ defineProps<{
   form: TaskInstanceForm;
   formOpen: boolean;
   editingId: string | null;
+  generationEndDate: string;
   generationSummary: string;
 }>();
 
 const emit = defineEmits<{
   "update:selectedDate": [value: string];
+  "update:generationEndDate": [value: string];
   add: [];
   today: [];
   yesterday: [];
