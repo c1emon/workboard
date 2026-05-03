@@ -58,7 +58,7 @@ function mountHarness() {
         yesterday="2026-04-30"
         v-model:show-all="admin.taskInstanceShowAll.value"
         :rows="admin.taskInstanceRows.value"
-        :patrol-plans="[{ id: 'plan-1', name: '日常巡检', description: '', startAt: '2026-05-01T00:00:00+08:00', endAt: '2026-05-31T23:59:59+08:00', skipWeekends: false, skipHolidays: false, enabled: true, cycleLength: 90 }]"
+        :patrol-plans="[{ id: 'plan-1', name: '日常巡检', description: '', startAt: '2026-05-01T00:00:00+08:00', endAt: '2026-05-31T23:59:59+08:00', recurrenceType: 'infinite', skipWeekends: false, skipHolidays: false, enabled: true, cycleLength: 90 }]"
         :form="admin.taskInstanceForm"
         :form-open="admin.taskInstanceFormOpen.value"
         :refresh-form="admin.taskInstanceRefreshForm"
@@ -73,7 +73,7 @@ function mountHarness() {
         @delete="admin.removeTaskInstance"
         @open-refresh="admin.openTaskInstanceRefresh"
         @close-refresh="admin.closeTaskInstanceRefresh"
-        @refresh="admin.refreshTaskInstances([{ id: 'plan-1', name: '日常巡检', description: '', startAt: '2026-05-01T00:00:00+08:00', endAt: '2026-05-31T23:59:59+08:00', skipWeekends: false, skipHolidays: false, enabled: true, cycleLength: 90 }])"
+        @refresh="admin.refreshTaskInstances([{ id: 'plan-1', name: '日常巡检', description: '', startAt: '2026-05-01T00:00:00+08:00', endAt: '2026-05-31T23:59:59+08:00', recurrenceType: 'infinite', skipWeekends: false, skipHolidays: false, enabled: true, cycleLength: 90 }])"
         @save="admin.saveTaskInstance"
         @close="admin.closeTaskInstanceForm"
       />`

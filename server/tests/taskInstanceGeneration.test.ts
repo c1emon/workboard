@@ -489,6 +489,26 @@ describe("task instance generation", () => {
     expect(readInstances(db).map((row) => `${row.occurrence_date}:${row.content}`)).toEqual(["2026-05-02:第二天"]);
   });
 
+  it("generates patrol once templates for only one derived cycle", () => {
+    const db = createTestDatabase();
+    insertTemplate(db, {
+      id: "patrol-once",
+      type: "patrol",
+      recurrenceType: "once",
+      startAt: "2026-05-01T00:00:00+08:00",
+      endAt: "2026-05-02T23:59:59+08:00"
+    });
+    insertItem(db, { id: "day-1", templateId: "patrol-once", content: "首日", metadata: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-once", content: "次日", metadata: { cycleDay: 2 } });
+
+    generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-05", types: ["patrol"] });
+
+    expect(readInstances(db).map((row) => `${row.occurrence_date}:${row.content}`)).toEqual([
+      "2026-05-01:首日",
+      "2026-05-02:次日"
+    ]);
+  });
+
   it("does not generate when template start_at is after windowEndDate", () => {
     const db = createTestDatabase();
     insertTemplate(db, { id: "operation-1", startAt: "2026-05-02T08:00:00+08:00", endAt: "2026-05-02T09:00:00+08:00" });
@@ -563,7 +583,7 @@ function insertTemplate(
     input.name ?? input.id,
     input.startAt ?? "2026-05-01T08:00:00+08:00",
     input.endAt ?? "2026-05-01T09:00:00+08:00",
-    input.recurrenceType ?? "once",
+    input.recurrenceType ?? (input.type === "patrol" ? "infinite" : "once"),
     input.recurrenceIntervalMinutes ?? null,
     input.recurrenceCount ?? null,
     input.skipWeekends ? 1 : 0,

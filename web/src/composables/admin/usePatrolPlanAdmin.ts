@@ -22,7 +22,7 @@ export interface PatrolPlanForm {
   name: string;
   description: string;
   startAt: string;
-  endAt: string;
+  recurrenceType: "once" | "infinite";
   skipWeekends: boolean;
   skipHolidays: boolean;
 }
@@ -47,12 +47,13 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
   const patrolPlanEditingId = ref<string | null>(null);
   const patrolPlanFormOpen = ref(false);
   const patrolCycleItemEditingId = ref<string | null>(null);
+  const patrolPlanCycleLength = ref(0);
   const patrolPlanForm = reactive<PatrolPlanForm>({
     name: "",
     description: "",
     startAt: "",
-    endAt: "",
-    skipWeekends: false,
+    recurrenceType: "infinite",
+    skipWeekends: true,
     skipHolidays: true
   });
   const patrolCycleItemForm = reactive<PatrolCycleItemForm>({
@@ -100,25 +101,27 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
 
   function openPatrolPlanCreate(): void {
     patrolPlanEditingId.value = null;
+    patrolPlanCycleLength.value = 0;
     patrolPlanFormOpen.value = true;
     Object.assign(patrolPlanForm, {
       name: "",
       description: "",
       startAt: "",
-      endAt: "",
-      skipWeekends: false,
+      recurrenceType: "infinite",
+      skipWeekends: true,
       skipHolidays: true
     });
   }
 
   function openPatrolPlanEdit(record: PatrolPlanRecord): void {
     patrolPlanEditingId.value = record.id;
+    patrolPlanCycleLength.value = record.cycleLength;
     patrolPlanFormOpen.value = true;
     Object.assign(patrolPlanForm, {
       name: record.name,
       description: record.description,
       startAt: toDateInput(record.startAt),
-      endAt: toDateInput(record.endAt),
+      recurrenceType: record.recurrenceType,
       skipWeekends: record.skipWeekends,
       skipHolidays: record.skipHolidays
     });
@@ -127,6 +130,7 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
   function closePatrolPlanForm(): void {
     patrolPlanFormOpen.value = false;
     patrolPlanEditingId.value = null;
+    patrolPlanCycleLength.value = 0;
   }
 
   async function savePatrolPlan(): Promise<void> {
@@ -230,7 +234,8 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
       name: patrolPlanForm.name,
       description: patrolPlanForm.description,
       startAt: `${patrolPlanForm.startAt}T00:00:00+08:00`,
-      endAt: `${patrolPlanForm.endAt}T23:59:59+08:00`,
+      endAt: patrolPlanEndAt(patrolPlanForm.startAt, patrolPlanCycleLength.value),
+      recurrenceType: patrolPlanForm.recurrenceType,
       skipWeekends: patrolPlanForm.skipWeekends,
       skipHolidays: patrolPlanForm.skipHolidays
     };
@@ -289,4 +294,11 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
 
 function toDateInput(value: string): string {
   return value.slice(0, 10);
+}
+
+function patrolPlanEndAt(startDate: string, cycleLength: number): string {
+  const [year, month, day] = startDate.split("-").map(Number);
+  const derivedDays = Math.max(1, Number.isFinite(cycleLength) ? Math.floor(cycleLength) : 1);
+  const date = new Date(Date.UTC(year, month - 1, day + derivedDays - 1));
+  return `${date.toISOString().slice(0, 10)}T23:59:59+08:00`;
 }

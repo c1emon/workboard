@@ -174,6 +174,7 @@ export interface PatrolPlanRecord {
   description: string;
   startAt: string;
   endAt: string;
+  recurrenceType: "once" | "infinite";
   skipWeekends: boolean;
   skipHolidays: boolean;
   enabled: boolean;
@@ -189,6 +190,7 @@ export interface PatrolPlanInput {
   description: string;
   startAt: string;
   endAt: string;
+  recurrenceType: "once" | "infinite";
   skipWeekends: boolean;
   skipHolidays: boolean;
   enabled?: boolean;

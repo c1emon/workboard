@@ -132,6 +132,7 @@ describe("api client", () => {
       description: "90 天循环",
       startAt: "2026-05-01T00:00:00+08:00",
       endAt: "2026-05-01T23:59:59+08:00",
+      recurrenceType: "infinite" as const,
       skipWeekends: true,
       skipHolidays: true,
       enabled: true

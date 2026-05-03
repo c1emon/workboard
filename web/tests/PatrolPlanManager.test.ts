@@ -5,7 +5,7 @@ import { defineComponent, onMounted } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import PatrolPlanManager from "../src/components/admin/PatrolPlanManager.vue";
 import { usePatrolPlanAdmin } from "../src/composables/admin/usePatrolPlanAdmin";
-import { createPatrolPlan, createPatrolPlanItem, fetchPatrolPlan, fetchPatrolPlans, updatePatrolPlanItem } from "../src/api/client";
+import { createPatrolPlan, createPatrolPlanItem, fetchPatrolPlan, fetchPatrolPlans, updatePatrolPlan, updatePatrolPlanItem } from "../src/api/client";
 
 vi.mock("../src/api/client", () => ({
   fetchPatrolPlans: vi.fn().mockResolvedValue([
@@ -15,6 +15,7 @@ vi.mock("../src/api/client", () => ({
       description: "90天周期",
       startAt: "2026-05-01T00:00:00+08:00",
       endAt: "2026-07-29T23:59:59+08:00",
+      recurrenceType: "infinite",
       skipWeekends: false,
       skipHolidays: true,
       enabled: true,
@@ -27,6 +28,7 @@ vi.mock("../src/api/client", () => ({
     description: "90天周期",
     startAt: "2026-05-01T00:00:00+08:00",
     endAt: "2026-07-29T23:59:59+08:00",
+    recurrenceType: "infinite",
     skipWeekends: false,
     skipHolidays: true,
     enabled: true,
@@ -134,18 +136,39 @@ describe("PatrolPlanManager", () => {
     expect(wrapper.find(".modal-backdrop").exists()).toBe(true);
     expect(wrapper.find(".patrol-plan-modal").exists()).toBe(true);
     expect(wrapper.find('input[name="patrolPlanStartAt"]').attributes("type")).toBe("date");
-    expect(wrapper.find('input[name="patrolPlanEndAt"]').attributes("type")).toBe("date");
+    expect(wrapper.find('input[name="patrolPlanEndAt"]').exists()).toBe(false);
+    expect(wrapper.find('select[name="patrolPlanRecurrenceType"]').exists()).toBe(true);
     expect(wrapper.find('input[name="patrolPlanCycleLength"]').exists()).toBe(false);
+    expect(wrapper.find('input[name="patrolPlanSkipWeekends"]').element).toHaveProperty("checked", true);
 
     await wrapper.find('input[name="patrolPlanName"]').setValue("临时巡检");
     await wrapper.find('input[name="patrolPlanStartAt"]').setValue("2026-05-01");
-    await wrapper.find('input[name="patrolPlanEndAt"]').setValue("2026-05-31");
+    await wrapper.find('select[name="patrolPlanRecurrenceType"]').setValue("once");
     await wrapper.find(".patrol-plan-modal").trigger("submit.prevent");
 
     expect(createPatrolPlan).toHaveBeenCalledWith(expect.objectContaining({
       name: "临时巡检",
       startAt: "2026-05-01T00:00:00+08:00",
-      endAt: "2026-05-31T23:59:59+08:00"
+      endAt: "2026-05-01T23:59:59+08:00",
+      recurrenceType: "once",
+      skipWeekends: true
+    }));
+  });
+
+  it("derives patrol plan end time from the current cycle length when editing", async () => {
+    const wrapper = mountHarness();
+    await flush();
+
+    await wrapper.findAll("tbody .row-actions button")[2].trigger("click");
+
+    expect(wrapper.find('input[name="patrolPlanEndAt"]').exists()).toBe(false);
+
+    await wrapper.find('input[name="patrolPlanStartAt"]').setValue("2026-06-01");
+    await wrapper.find(".patrol-plan-modal").trigger("submit.prevent");
+
+    expect(updatePatrolPlan).toHaveBeenCalledWith("plan-1", expect.objectContaining({
+      startAt: "2026-06-01T00:00:00+08:00",
+      endAt: "2026-08-29T23:59:59+08:00"
     }));
   });
 

@@ -147,6 +147,7 @@ function patrolSnapshots(
   for (let date = startDate; date <= windowEndDate; date = addDays(date, 1)) {
     if (shouldSkipDate(template, date, holidaySets)) continue;
     eligibleDateCount += 1;
+    if (template.recurrenceType === "once" && eligibleDateCount > cycleLength) break;
     if (date < windowStartDate) continue;
 
     const cycleDay = ((eligibleDateCount - 1) % cycleLength) + 1;

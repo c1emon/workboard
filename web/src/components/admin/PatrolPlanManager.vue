@@ -66,8 +66,11 @@
             <input v-model="planForm.startAt" name="patrolPlanStartAt" type="date" required />
           </label>
           <label>
-            结束时间
-            <input v-model="planForm.endAt" name="patrolPlanEndAt" type="date" :min="planForm.startAt" required />
+            类型
+            <select v-model="planForm.recurrenceType" name="patrolPlanRecurrenceType">
+              <option value="infinite">循环</option>
+              <option value="once">一次性</option>
+            </select>
           </label>
           <label class="wide-field">
             说明

@@ -1053,10 +1053,10 @@ describe("admin routes", () => {
       name: "日常巡检",
       description: "90天周期",
       start_at: "2026-05-01T00:00:00+08:00",
-      end_at: "2026-07-29T23:59:59+08:00",
+      end_at: "2026-05-02T23:59:59+08:00",
       recurrence_type: "infinite",
       recurrence_interval_minutes: 1440,
-      skip_weekends: 0,
+      skip_weekends: 1,
       skip_holidays: 1,
       enabled: 1
     });
@@ -1071,7 +1071,7 @@ describe("admin routes", () => {
     });
     expect(firstItem).toMatchObject({ template_id: id, content: "1号线", sort_order: 0 });
     expect(listResponse.json()).toEqual([
-      expect.objectContaining({ id, name: "日常巡检", cycleLength: 2, skipWeekends: false, skipHolidays: true, enabled: true })
+      expect.objectContaining({ id, name: "日常巡检", cycleLength: 2, skipWeekends: true, skipHolidays: true, enabled: true })
     ]);
     expect(detailResponse.json()).toMatchObject({
       id,
@@ -1092,8 +1092,7 @@ describe("admin routes", () => {
       url: "/api/admin/patrol-plans",
       payload: {
         name: "短周期巡检",
-        startAt: "2026-05-01T00:00:00+08:00",
-        endAt: "2026-05-10T23:59:59+08:00"
+        startAt: "2026-05-01T00:00:00+08:00"
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -1126,7 +1125,7 @@ describe("admin routes", () => {
     expect(duplicateResponse.statusCode).toBe(409);
     expect(duplicateResponse.json()).toEqual({ error: "Duplicate patrol cycle item" });
     expect(otherTimeResponse.statusCode).toBe(201);
-    expect(detailResponse.json()).toMatchObject({ cycleLength: 4 });
+    expect(detailResponse.json()).toMatchObject({ cycleLength: 4, endAt: "2026-05-04T23:59:59+08:00" });
   });
 
   it("does not delete operation items through patrol plan item routes", async () => {

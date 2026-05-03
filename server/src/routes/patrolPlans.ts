@@ -7,6 +7,7 @@ import type { BoardEventBroadcaster } from "./boardEvents.js";
 type TimeTag = "全天" | "上午" | "下午";
 
 const timeTagSchema = z.enum(["全天", "上午", "下午"]);
+const patrolRecurrenceTypeSchema = z.enum(["once", "infinite"]);
 const dateTimeSchema = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: "Invalid datetime"
 });
@@ -17,8 +18,9 @@ const planCreateSchema = z
     name: z.string().min(1),
     description: z.string().default(""),
     startAt: dateTimeSchema,
-    endAt: dateTimeSchema,
-    skipWeekends: z.boolean().default(false),
+    endAt: dateTimeSchema.optional(),
+    recurrenceType: patrolRecurrenceTypeSchema.default("infinite"),
+    skipWeekends: z.boolean().default(true),
     skipHolidays: z.boolean().default(true),
     enabled: z.boolean().default(true)
   })
@@ -29,8 +31,9 @@ const planUpdateSchema = z
     name: z.string().min(1),
     description: z.string().default(""),
     startAt: dateTimeSchema,
-    endAt: dateTimeSchema,
-    skipWeekends: z.boolean().default(false),
+    endAt: dateTimeSchema.optional(),
+    recurrenceType: patrolRecurrenceTypeSchema.default("infinite"),
+    skipWeekends: z.boolean().default(true),
     skipHolidays: z.boolean().default(true),
     enabled: z.boolean().optional()
   })
@@ -57,6 +60,7 @@ interface PatrolPlanRow {
   description: string;
   start_at: string;
   end_at: string;
+  recurrence_type: "once" | "finite" | "infinite";
   skip_weekends: number;
   skip_holidays: number;
   enabled: number;
@@ -80,8 +84,8 @@ interface PatrolItemMetadata {
   other: string;
 }
 
-function validateDateTimeRange(input: { startAt: string; endAt: string }, ctx: z.RefinementCtx): void {
-  if (new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
+function validateDateTimeRange(input: { startAt: string; endAt?: string }, ctx: z.RefinementCtx): void {
+  if (input.endAt && new Date(input.endAt).getTime() <= new Date(input.startAt).getTime()) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["endAt"],
@@ -111,7 +115,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
   app.get("/api/admin/patrol-plans", async () => {
     const rows = db
       .prepare<[], PatrolPlanRow>(
-        `select id, name, description, start_at, end_at, skip_weekends, skip_holidays, enabled, ext_data_json
+        `select id, name, description, start_at, end_at, recurrence_type, skip_weekends, skip_holidays, enabled, ext_data_json
          from task_templates
          where type = 'patrol'
          order by start_at desc, name, id`
@@ -144,13 +148,14 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       `insert into task_templates
        (id, type, name, description, start_at, end_at, recurrence_type, recurrence_interval_minutes,
         recurrence_count, skip_weekends, skip_holidays, enabled, ext_data_json, created_at, updated_at)
-       values (?, 'patrol', ?, ?, ?, ?, 'infinite', 1440, null, ?, ?, ?, ?, ?, ?)`
+       values (?, 'patrol', ?, ?, ?, ?, ?, 1440, null, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       validation.data.name,
       validation.data.description,
       validation.data.startAt,
-      validation.data.endAt,
+      patrolPlanEndAt(validation.data.startAt, 0),
+      validation.data.recurrenceType,
       validation.data.skipWeekends ? 1 : 0,
       validation.data.skipHolidays ? 1 : 0,
       validation.data.enabled ? 1 : 0,
@@ -174,16 +179,18 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
     if (!current) return reply.code(404).send({ error: "Not found" });
 
     const now = new Date().toISOString();
+    const cycleLength = maxItemCycleDay(db, params.data.id);
     db.prepare(
       `update task_templates
-       set name = ?, description = ?, start_at = ?, end_at = ?, skip_weekends = ?, skip_holidays = ?,
+       set name = ?, description = ?, start_at = ?, end_at = ?, recurrence_type = ?, skip_weekends = ?, skip_holidays = ?,
            enabled = ?, ext_data_json = ?, updated_at = ?
        where id = ? and type = 'patrol'`
     ).run(
       validation.data.name,
       validation.data.description,
       validation.data.startAt,
-      validation.data.endAt,
+      patrolPlanEndAt(validation.data.startAt, cycleLength),
+      validation.data.recurrenceType,
       validation.data.skipWeekends ? 1 : 0,
       validation.data.skipHolidays ? 1 : 0,
       validation.data.enabled ?? current.enabled === 1 ? 1 : 0,
@@ -241,6 +248,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
        (id, template_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
        values (?, ?, 0, 0, ?, ?, ?)`
     ).run(id, params.data.id, validation.data.content ?? validation.data.target, JSON.stringify(itemMetadata(validation.data)), validation.data.sortOrder);
+    refreshPatrolPlanDerivedEndAt(db, params.data.id);
     boardEvents.publish();
 
     const row = getItem(db, params.data.id, id);
@@ -273,6 +281,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       params.data.itemId,
       params.data.id
     );
+    refreshPatrolPlanDerivedEndAt(db, params.data.id);
     boardEvents.publish();
 
     const row = getItem(db, params.data.id, params.data.itemId);
@@ -288,6 +297,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
 
     const result = db.prepare("delete from task_template_items where id = ? and template_id = ?").run(params.data.itemId, params.data.id);
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
+    refreshPatrolPlanDerivedEndAt(db, params.data.id);
     boardEvents.publish();
 
     return reply.code(204).send();
@@ -297,7 +307,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
 function getPlan(db: AppDatabase, id: string): PatrolPlanRow | undefined {
   return db
     .prepare<[string], PatrolPlanRow>(
-      `select id, name, description, start_at, end_at, skip_weekends, skip_holidays, enabled, ext_data_json
+      `select id, name, description, start_at, end_at, recurrence_type, skip_weekends, skip_holidays, enabled, ext_data_json
        from task_templates
        where id = ? and type = 'patrol'`
     )
@@ -325,13 +335,15 @@ function getItem(db: AppDatabase, planId: string, itemId: string): PatrolItemRow
 }
 
 function mapPlanRow(db: AppDatabase, row: PatrolPlanRow) {
+  const cycleLength = maxItemCycleDay(db, row.id);
   return {
     id: row.id,
     name: row.name,
     description: row.description,
     startAt: row.start_at,
-    endAt: row.end_at,
-    cycleLength: maxItemCycleDay(db, row.id),
+    endAt: patrolPlanEndAt(row.start_at, cycleLength),
+    recurrenceType: row.recurrence_type === "once" ? "once" : "infinite",
+    cycleLength,
     skipWeekends: row.skip_weekends === 1,
     skipHolidays: row.skip_holidays === 1,
     enabled: row.enabled === 1
@@ -413,4 +425,22 @@ function timeTagOrder(timeTag: TimeTag): number {
 
 function maxItemCycleDay(db: AppDatabase, planId: string): number {
   return listPlanItems(db, planId).reduce((max, row) => Math.max(max, parseItemMetadata(row.ext_data_json).cycleDay), 0);
+}
+
+function refreshPatrolPlanDerivedEndAt(db: AppDatabase, planId: string): void {
+  const plan = getPlan(db, planId);
+  if (!plan) return;
+  db.prepare("update task_templates set end_at = ?, updated_at = ? where id = ? and type = 'patrol'").run(
+    patrolPlanEndAt(plan.start_at, maxItemCycleDay(db, planId)),
+    new Date().toISOString(),
+    planId
+  );
+}
+
+function patrolPlanEndAt(startAt: string, cycleLength: number): string {
+  const startDate = startAt.slice(0, 10);
+  const [year, month, day] = startDate.split("-").map(Number);
+  const derivedDays = Math.max(1, cycleLength);
+  const date = new Date(Date.UTC(year, month - 1, day + derivedDays - 1));
+  return `${date.toISOString().slice(0, 10)}T23:59:59+08:00`;
 }
