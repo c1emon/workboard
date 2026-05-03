@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import type { PatrolCycleItemImportInput } from "../api/client";
 
 type ImportedPatrolCycleItem = PatrolCycleItemImportInput["items"][number];
@@ -7,6 +6,7 @@ const requiredHeaders = ["周期第几天", "时间", "目标", "人员", "车�
 const validTimeTags = new Set(["全天", "上午", "下午"]);
 
 export async function parsePatrolCycleItemExcel(file: File): Promise<ImportedPatrolCycleItem[]> {
+  const XLSX = await import("xlsx");
   const workbook = XLSX.read(await readFileArrayBuffer(file), { type: "array" });
   const firstSheet = workbook.SheetNames[0];
   if (!firstSheet) throw new Error("Excel 文件没有工作表");

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { createTestDatabase, type AppDatabase } from "../src/db/database.js";
 import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
+import { toChinaOffsetDateTime } from "../src/domain/dateTime.js";
 import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
 describe("board snapshot", () => {
@@ -276,7 +277,7 @@ describe("board snapshot", () => {
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
     expect(snapshot.operation.items).toEqual([
-      { content: "跨日运行", startAt: "2026-04-30T23:00:00+08:00", endAt: "2026-05-01T02:00:00+08:00", status: "pending", metadata: {} }
+      { content: "跨日运行", startAt: "2026-04-30T23:00:00.000+08:00", endAt: "2026-05-01T02:00:00.000+08:00", status: "pending", metadata: {} }
     ]);
     expect(snapshot.patrols).toMatchObject([{ target: "围界" }]);
   });
@@ -317,7 +318,8 @@ describe("board snapshot", () => {
     const taskInstanceSql = prepareSpy.mock.calls
       .map(([sql]) => sql)
       .filter((sql) => typeof sql === "string" && sql.includes("from task_instances"));
-    expect(taskInstanceSql.some((sql) => sql.includes("julianday(start_at) <= julianday(?)") && sql.includes("julianday(end_at) >= julianday(?)"))).toBe(true);
+    expect(taskInstanceSql.some((sql) => sql.includes("start_at <= ?") && sql.includes("end_at >= ?"))).toBe(true);
+    expect(taskInstanceSql.some((sql) => sql.includes("julianday(start_at)") || sql.includes("julianday(end_at)"))).toBe(false);
     expect(snapshot.permits.map((permit) => permit.task)).toEqual(expect.arrayContaining(["边界许可", "UTC许可"]));
     expect(snapshot.permits).toHaveLength(2);
   });
@@ -433,8 +435,8 @@ function insertTaskInstance(
     input.sourceType ?? "generated",
     input.generationKey ?? null,
     input.date,
-    input.startAt ?? `${input.date}T${start}`,
-    input.endAt ?? `${input.date}T${end}`,
+    toChinaOffsetDateTime(input.startAt ?? `${input.date}T${start}`),
+    toChinaOffsetDateTime(input.endAt ?? `${input.date}T${end}`),
     input.content,
     JSON.stringify(metadata),
     input.status ?? "pending",

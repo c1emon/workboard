@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { createTestDatabase, type AppDatabase } from "../src/db/database.js";
 import { getBoardSnapshot } from "../src/domain/boardSnapshot.js";
+import { toChinaOffsetDateTime } from "../src/domain/dateTime.js";
 import { createBoardEventBroadcaster } from "../src/routes/boardEvents.js";
 
 describe("admin routes", () => {
@@ -95,15 +96,15 @@ describe("admin routes", () => {
     expect(allScopeResponse.json().map((row: { id: string }) => row.id)).toEqual(["manual-patrol", "generated-patrol"]);
   });
 
-  it("lists task instances with non-China-offset datetimes by actual overlap", async () => {
+  it("lists task instances by direct canonical China-offset datetime overlap", async () => {
     const db = createTestDatabase();
     insertTaskInstance(db, {
       id: "utc-instance",
       type: "operation",
       sourceType: "manual",
       occurrenceDate: "2026-05-01",
-      startAt: "2026-04-30T16:30:00.000Z",
-      endAt: "2026-04-30T17:30:00.000Z",
+      startAt: "2026-05-01T00:30:00.000+08:00",
+      endAt: "2026-05-01T01:30:00.000+08:00",
       content: "UTC 时间实例"
     });
     const app = createApp(db);
@@ -116,8 +117,8 @@ describe("admin routes", () => {
       expect.objectContaining({
         id: "utc-instance",
         occurrenceDate: "2026-05-01",
-        startAt: "2026-04-30T16:30:00.000Z",
-        endAt: "2026-04-30T17:30:00.000Z"
+        startAt: "2026-05-01T00:30:00.000+08:00",
+        endAt: "2026-05-01T01:30:00.000+08:00"
       })
     ]);
   });
@@ -2159,8 +2160,8 @@ function insertTaskInstance(
     input.sourceType,
     input.generationKey ?? null,
     input.occurrenceDate ?? "2026-05-01",
-    input.startAt ?? "2026-05-01T08:00:00+08:00",
-    input.endAt ?? "2026-05-01T09:00:00+08:00",
+    toChinaOffsetDateTime(input.startAt ?? "2026-05-01T08:00:00+08:00"),
+    toChinaOffsetDateTime(input.endAt ?? "2026-05-01T09:00:00+08:00"),
     input.content ?? input.id,
     JSON.stringify(input.metadata ?? {}),
     input.status ?? "pending",

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createTestDatabase, openDatabase } from "../src/db/database.js";
+import { createTestDatabase, migrate, openDatabase } from "../src/db/database.js";
 
 describe("database schema", () => {
   it("creates all MVP tables", () => {
@@ -115,5 +115,26 @@ describe("database schema", () => {
     } finally {
       rmSync(tempRoot, { force: true, recursive: true });
     }
+  });
+
+  it("canonicalizes legacy task instance datetimes during migration", () => {
+    const db = createTestDatabase();
+    db.prepare(
+      `insert into task_instances
+       (id, type, source_type, occurrence_date, start_at, end_at, content, ext_data_json, status, generated_at, updated_at)
+       values ('legacy-task', 'patrol', 'manual', '2026-05-01',
+               '2026-04-30T16:30:00.000Z', '2026-04-30T17:30:00.000Z',
+               'UTC legacy task', '{}', 'pending', '2026-05-01T00:00:00.000Z', '2026-05-01T00:00:00.000Z')`
+    ).run();
+
+    migrate(db);
+
+    const row = db
+      .prepare("select start_at, end_at from task_instances where id = 'legacy-task'")
+      .get();
+    expect(row).toEqual({
+      start_at: "2026-05-01T00:30:00.000+08:00",
+      end_at: "2026-05-01T01:30:00.000+08:00"
+    });
   });
 });

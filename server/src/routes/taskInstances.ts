@@ -115,7 +115,7 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
 	             `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
 	                     start_at, end_at, content, ext_data_json, status, generated_at, updated_at
 	              from task_instances
-	             where type = ? and julianday(start_at) <= julianday(?) and julianday(end_at) >= julianday(?)
+	             where type = ? and start_at <= ? and end_at >= ?
 	             order by start_at, content, id`
           )
           .all(validation.data.type, dayEnd, dayStart)
@@ -133,7 +133,7 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
 	             `select id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
 	                     start_at, end_at, content, ext_data_json, status, generated_at, updated_at
 	              from task_instances
-	             where julianday(start_at) <= julianday(?) and julianday(end_at) >= julianday(?)
+	             where start_at <= ? and end_at >= ?
 	             order by start_at, content, id`
           )
           .all(dayEnd, dayStart);

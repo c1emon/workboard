@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import process from "node:process";
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { parsePatrolCycleItemExcel } from "../src/utils/patrolCycleItemExcel";
@@ -25,6 +28,13 @@ describe("parsePatrolCycleItemExcel", () => {
     ]);
 
     await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("第 2 行时间必须是 全天、上午 或 下午");
+  });
+
+  it("loads xlsx only when parsing an import file", () => {
+    const source = readFileSync(join(process.cwd(), "src/utils/patrolCycleItemExcel.ts"), "utf8");
+
+    expect(source).not.toContain("import * as XLSX from \"xlsx\"");
+    expect(source).toContain("import(\"xlsx\")");
   });
 });
 

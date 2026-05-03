@@ -134,8 +134,8 @@ function loadTaskInstances(
        from task_instances
        where type = ?
          and status <> 'cancelled'
-         and julianday(start_at) <= julianday(?)
-         and julianday(end_at) >= julianday(?)
+         and start_at <= ?
+         and end_at >= ?
        order by start_at, end_at, id`
     )
     .all(type, windowEnd, windowStart);
