@@ -50,7 +50,7 @@
 - Modify: `server/src/db/schema.ts`
 - Modify: `server/tests/schema.test.ts`
 
-- [ ] **Step 1: Write schema test**
+- [x] **Step 1: Write schema test**
 
 Add assertions that:
 
@@ -69,7 +69,7 @@ npm run test --workspace server -- schema.test.ts
 
 Expected: FAIL because the new template and instance tables do not exist.
 
-- [ ] **Step 2: Replace old template tables and add `task_instances` schema**
+- [x] **Step 2: Replace old template tables and add `task_instances` schema**
 
 Because this is a non-production reset, replace the old `task_containers` and `task_items` schema definitions with `task_templates` and `task_template_items`.
 
@@ -116,7 +116,7 @@ create index if not exists task_instances_time_idx on task_instances (start_at, 
 create unique index if not exists task_instances_generation_key_unique on task_instances (generation_key) where generation_key is not null;
 ```
 
-- [ ] **Step 3: Verify schema**
+- [x] **Step 3: Verify schema**
 
 Run:
 
@@ -126,7 +126,7 @@ npm run test --workspace server -- schema.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/src/db/schema.ts server/tests/schema.test.ts
@@ -142,7 +142,7 @@ git commit -m "feat: add template and instance schema"
 - Move/replace: `server/tests/taskExpansion.test.ts` -> `server/tests/templateExpansion.test.ts`
 - Create: `server/tests/taskInstanceGeneration.test.ts`
 
-- [ ] **Step 1: Rename expansion tests and imports**
+- [x] **Step 1: Rename expansion tests and imports**
 
 Rename the existing recurrence expansion test file to `server/tests/templateExpansion.test.ts`.
 
@@ -160,7 +160,7 @@ npm run test --workspace server -- templateExpansion.test.ts
 
 Expected: FAIL because `server/src/domain/templateExpansion.ts` does not exist yet.
 
-- [ ] **Step 2: Rename expansion domain**
+- [x] **Step 2: Rename expansion domain**
 
 Replace `server/src/domain/taskExpansion.ts` with `server/src/domain/templateExpansion.ts`.
 
@@ -194,7 +194,7 @@ export interface TaskTemplateItemInput {
 
 Keep the existing recurrence behavior, holiday behavior, weekend behavior, and `validateTaskItem` validation semantics.
 
-- [ ] **Step 3: Verify renamed expansion tests**
+- [x] **Step 3: Verify renamed expansion tests**
 
 Run:
 
@@ -204,7 +204,7 @@ npm run test --workspace server -- templateExpansion.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Write generation tests**
+- [x] **Step 4: Write generation tests**
 
 Cover these cases in `server/tests/taskInstanceGeneration.test.ts`:
 
@@ -232,7 +232,7 @@ npm run test --workspace server -- taskInstanceGeneration.test.ts
 
 Expected: FAIL because the generation module does not exist.
 
-- [ ] **Step 5: Implement instance helpers**
+- [x] **Step 5: Implement instance helpers**
 
 Create shared constants and helpers:
 
@@ -245,7 +245,7 @@ export type TaskInstanceStatus = (typeof taskInstanceStatuses)[number];
 
 Include JSON metadata parsing that returns `{}` for invalid or non-object JSON.
 
-- [ ] **Step 6: Implement idempotent generation**
+- [x] **Step 6: Implement idempotent generation**
 
 Implement a function shaped like:
 
@@ -270,7 +270,7 @@ For patrol cycle generation:
 - Resolve patrol instance `startAt` and `endAt` with `timeRangeForDateTag(occurrenceDate, timeTag)`.
 - Copy `timeTag`, `target`, `personnel`, `vehicle`, `other`, and `cycleDay` into instance `ext_data_json`.
 
-- [ ] **Step 7: Verify generation**
+- [x] **Step 7: Verify generation**
 
 Run:
 
@@ -280,7 +280,7 @@ npm run test --workspace server -- templateExpansion.test.ts taskInstanceGenerat
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A server/src/domain/taskExpansion.ts server/src/domain/templateExpansion.ts server/src/domain/taskInstances.ts server/src/domain/taskInstanceGeneration.ts server/tests/taskExpansion.test.ts server/tests/templateExpansion.test.ts server/tests/taskInstanceGeneration.test.ts
@@ -293,7 +293,7 @@ git commit -m "feat: generate task instances from templates"
 - Modify: `server/src/domain/boardSnapshot.ts`
 - Modify: `server/tests/boardSnapshot.test.ts`
 
-- [ ] **Step 1: Write board snapshot tests**
+- [x] **Step 1: Write board snapshot tests**
 
 Add tests that insert `task_instances` directly and assert:
 
@@ -312,7 +312,7 @@ npm run test --workspace server -- boardSnapshot.test.ts
 
 Expected: FAIL because board snapshot still expands templates.
 
-- [ ] **Step 2: Replace board display source**
+- [x] **Step 2: Replace board display source**
 
 Load instances whose `start_at/end_at` intersect the correct board window:
 
@@ -338,7 +338,7 @@ Remove the old template-expansion read path from `server/src/domain/boardSnapsho
 - `SnapshotTaskItem`
 - `ExpandedArrangementItem`
 
-- [ ] **Step 3: Verify board tests**
+- [x] **Step 3: Verify board tests**
 
 Run:
 
@@ -348,7 +348,7 @@ npm run test --workspace server -- boardSnapshot.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/src/domain/boardSnapshot.ts server/tests/boardSnapshot.test.ts
@@ -372,7 +372,7 @@ After Task 3, Tasks 4, 5, 6, and 7 can be split across separate workers because 
 - Modify: `server/src/app.ts`
 - Modify: `server/tests/adminRoutes.test.ts`
 
-- [ ] **Step 1: Write admin route tests**
+- [x] **Step 1: Write admin route tests**
 
 Add tests for:
 
@@ -390,7 +390,7 @@ npm run test --workspace server -- adminRoutes.test.ts
 
 Expected: FAIL with 404 for new endpoints.
 
-- [ ] **Step 2: Implement route module**
+- [x] **Step 2: Implement route module**
 
 Use Zod validation for:
 
@@ -403,11 +403,11 @@ Use Zod validation for:
 
 Publish board events after successful create, update, status change, delete, and generation.
 
-- [ ] **Step 3: Register routes**
+- [x] **Step 3: Register routes**
 
 Register the module in `server/src/app.ts`.
 
-- [ ] **Step 4: Verify routes**
+- [x] **Step 4: Verify routes**
 
 Run:
 
@@ -417,7 +417,7 @@ npm run test --workspace server -- adminRoutes.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add server/src/routes/taskInstances.ts server/src/app.ts server/tests/adminRoutes.test.ts
@@ -430,13 +430,13 @@ git commit -m "feat: add task instance admin APIs"
 - Modify: `server/src/routes/admin.ts`
 - Modify: `server/tests/adminRoutes.test.ts`
 
-- [ ] **Step 1: Restore permit/other admin tests**
+- [x] **Step 1: Restore permit/other admin tests**
 
 Restore the existing permit, other, leave, and board exposure tests that should remain valid after the instance-backed board switch.
 
 Keep operation and old patrol/generic task tests available for Tasks 5, 6, and 9, but do not hide permit/other behavior behind unconditional skips.
 
-- [ ] **Step 2: Store permit/other arrangements as manual instances**
+- [x] **Step 2: Store permit/other arrangements as manual instances**
 
 Update permit and other arrangement routes in `server/src/routes/admin.ts` so they use `task_instances` directly:
 
@@ -448,7 +448,7 @@ Update permit and other arrangement routes in `server/src/routes/admin.ts` so th
 
 Use `source_type = 'manual'`, `generation_key = null`, and map the existing time tag metadata into `task_instances.ext_data_json`. Treat disabled rows as `status = 'cancelled'` so the board can omit them without needing an `enabled` column on instances.
 
-- [ ] **Step 3: Verify permit/other routes**
+- [x] **Step 3: Verify permit/other routes**
 
 Run:
 
@@ -466,7 +466,7 @@ Expected: permit, other, leave, holiday, and task instance tests pass without sk
 - Modify: `server/src/routes/admin.ts`
 - Modify: `server/tests/adminRoutes.test.ts`
 
-- [ ] **Step 1: Write operation remap tests**
+- [x] **Step 1: Write operation remap tests**
 
 Cover:
 
@@ -483,7 +483,7 @@ npm run test --workspace server -- adminRoutes.test.ts
 
 Expected: FAIL because operation routes still query old table names or operation child endpoints do not exist.
 
-- [ ] **Step 2: Remap operation plan storage**
+- [x] **Step 2: Remap operation plan storage**
 
 Update existing operation plan routes in `server/src/routes/admin.ts`:
 
@@ -501,7 +501,7 @@ DELETE /api/admin/operation-plans/:id/items/:itemId
 
 These operation child endpoints replace old generic `/api/admin/task-items` usage.
 
-- [ ] **Step 3: Verify operation remap**
+- [x] **Step 3: Verify operation remap**
 
 Run:
 
@@ -511,7 +511,7 @@ npm run test --workspace server -- adminRoutes.test.ts
 
 Expected: PASS for operation route tests.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/src/routes/admin.ts server/tests/adminRoutes.test.ts
@@ -525,7 +525,7 @@ git commit -m "refactor: remap operation plans to templates"
 - Modify: `server/src/app.ts`
 - Modify: `server/tests/adminRoutes.test.ts`
 
-- [ ] **Step 1: Write patrol plan API tests**
+- [x] **Step 1: Write patrol plan API tests**
 
 Cover:
 
@@ -547,7 +547,7 @@ npm run test --workspace server -- adminRoutes.test.ts
 
 Expected: FAIL with 404 for patrol plan endpoints.
 
-- [ ] **Step 2: Implement patrol plan routes**
+- [x] **Step 2: Implement patrol plan routes**
 
 Implement:
 
@@ -578,7 +578,7 @@ Use this patrol item metadata shape:
 }
 ```
 
-- [ ] **Step 3: Verify patrol APIs**
+- [x] **Step 3: Verify patrol APIs**
 
 Run:
 
@@ -588,7 +588,7 @@ npm run test --workspace server -- adminRoutes.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add server/src/routes/patrolPlans.ts server/src/app.ts server/tests/adminRoutes.test.ts
@@ -601,7 +601,7 @@ git commit -m "feat: add patrol template admin APIs"
 - Modify: `web/src/api/client.ts`
 - Modify: `web/tests/client.test.ts`
 
-- [ ] **Step 1: Write client tests**
+- [x] **Step 1: Write client tests**
 
 Assert URLs and payloads for task instances, generation, patrol plans, patrol cycle item CRUD, and operation child item CRUD.
 
@@ -613,7 +613,7 @@ npm run test --workspace web -- client.test.ts
 
 Expected: FAIL because functions do not exist.
 
-- [ ] **Step 2: Add client types and functions**
+- [x] **Step 2: Add client types and functions**
 
 Add types for:
 
@@ -636,7 +636,7 @@ Replace old generic task client functions:
 - Add `updateOperationPlanItem`.
 - Add `deleteOperationPlanItem`.
 
-- [ ] **Step 3: Verify client tests**
+- [x] **Step 3: Verify client tests**
 
 Run:
 
@@ -646,7 +646,7 @@ npm run test --workspace web -- client.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/src/api/client.ts web/tests/client.test.ts
@@ -669,7 +669,7 @@ git commit -m "feat: add task instance client APIs"
 - Modify: `web/tests/AdminView.test.ts`
 - Delete: `web/src/components/admin/PatrolManager.vue`
 
-- [ ] **Step 1: Write UI tests**
+- [x] **Step 1: Write UI tests**
 
 Cover:
 
@@ -687,7 +687,7 @@ npm run test --workspace web -- TaskInstanceManager.test.ts PatrolPlanManager.te
 
 Expected: FAIL because components do not exist or AdminView still uses old patrol arrangement UI.
 
-- [ ] **Step 2: Implement composables**
+- [x] **Step 2: Implement composables**
 
 Follow existing admin composable patterns:
 
@@ -713,7 +713,7 @@ In `web/src/composables/admin/useOperationAdmin.ts`, keep the current operation 
 - Any future item edit path should use `updateOperationPlanItem`.
 - Payloads should use the selected operation plan id from the route path, not a generic `containerId` field.
 
-- [ ] **Step 3: Implement components**
+- [x] **Step 3: Implement components**
 
 Reuse existing admin visual primitives:
 
@@ -725,13 +725,13 @@ Reuse existing admin visual primitives:
 
 Do not introduce board-specific style changes.
 
-- [ ] **Step 4: Wire AdminView**
+- [x] **Step 4: Wire AdminView**
 
 Replace the patrol arrangement section with patrol instance/template sections while keeping other admin modules stable.
 
 Delete `web/src/components/admin/PatrolManager.vue` in this task after `AdminView.vue` no longer imports or renders it. This keeps the buildable state clean before the later old-path cleanup verification.
 
-- [ ] **Step 5: Verify UI tests**
+- [x] **Step 5: Verify UI tests**
 
 Run:
 
@@ -741,7 +741,7 @@ npm run test --workspace web -- TaskInstanceManager.test.ts PatrolPlanManager.te
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A web/src/composables/admin/useTaskInstanceAdmin.ts web/src/composables/admin/usePatrolPlanAdmin.ts web/src/components/admin/TaskInstanceManager.vue web/src/components/admin/PatrolPlanManager.vue web/src/components/admin/PatrolManager.vue web/src/views/AdminView.vue web/src/composables/admin/useAdminViewModel.ts web/src/composables/admin/useArrangementAdmin.ts web/src/composables/admin/useOperationAdmin.ts web/tests/TaskInstanceManager.test.ts web/tests/PatrolPlanManager.test.ts web/tests/AdminView.test.ts
@@ -759,7 +759,7 @@ git commit -m "feat: split patrol admin into instances and templates"
 - Modify: `web/src/composables/admin/useOperationAdmin.ts`
 - Modify: `web/tests/AdminView.test.ts`
 
-- [ ] **Step 1: Write cleanup verification**
+- [x] **Step 1: Write cleanup verification**
 
 Update tests so no test calls old patrol arrangement APIs or client functions.
 
@@ -771,7 +771,7 @@ rg -n "patrol-arrangements|PatrolArrangement|fetchPatrolArrangements|createPatro
 
 Expected before cleanup: matches in server routes, server tests, web client, admin view, operation admin, and admin composables.
 
-- [ ] **Step 2: Remove server patrol arrangement routes**
+- [x] **Step 2: Remove server patrol arrangement routes**
 
 Remove these from `server/src/routes/admin.ts`:
 
@@ -788,7 +788,7 @@ Remove these from `server/src/routes/admin.ts`:
 
 Remove or rewrite tests in `server/tests/adminRoutes.test.ts` that exercise those old endpoints. Keep permit, other, leave, holiday, operation plan, operation child item, and new instance/patrol plan tests.
 
-- [ ] **Step 3: Remove frontend patrol arrangement client code**
+- [x] **Step 3: Remove frontend patrol arrangement client code**
 
 Remove these from `web/src/api/client.ts`:
 
@@ -804,13 +804,13 @@ Remove these from `web/src/api/client.ts`:
 
 Update `web/tests/client.test.ts` to assert the new patrol plan, operation child item, and task instance clients instead of old patrol arrangement and generic task URLs.
 
-- [ ] **Step 4: Remove unused patrol arrangement UI code**
+- [x] **Step 4: Remove unused patrol arrangement UI code**
 
 Remove old patrol arrangement wiring from `web/src/views/AdminView.vue` and `web/tests/AdminView.test.ts`.
 
 Remove generic task item imports and expectations from `web/src/composables/admin/useOperationAdmin.ts` and `web/tests/AdminView.test.ts`; operation child editing should use operation-specific client functions.
 
-- [ ] **Step 5: Verify cleanup**
+- [x] **Step 5: Verify cleanup**
 
 Run:
 
@@ -829,7 +829,7 @@ npm run test --workspace web -- client.test.ts AdminView.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add server/src/routes/admin.ts server/tests/adminRoutes.test.ts web/src/api/client.ts web/tests/client.test.ts web/src/views/AdminView.vue web/src/composables/admin/useOperationAdmin.ts web/tests/AdminView.test.ts
@@ -841,7 +841,7 @@ git commit -m "refactor: remove old patrol arrangement paths"
 **Files:**
 - Modify only tests if needed.
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 ```bash
 npm test
@@ -849,7 +849,7 @@ npm test
 
 Expected: PASS.
 
-- [ ] **Step 2: Run build**
+- [x] **Step 2: Run build**
 
 ```bash
 npm run build
@@ -857,7 +857,7 @@ npm run build
 
 Expected: PASS.
 
-- [ ] **Step 3: Inspect board style diff**
+- [x] **Step 3: Inspect board style diff**
 
 Run:
 
@@ -867,7 +867,7 @@ git diff -- web/src/views/BoardView.vue web/src/components/OperationTimeline.vue
 
 Expected: No style-only changes. Any diff must be limited to data mapping required by instance-backed board data.
 
-- [ ] **Step 4: Commit final verification fixes**
+- [x] **Step 4: Commit final verification fixes**
 
 If verification required test-only fixes:
 
