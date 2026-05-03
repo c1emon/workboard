@@ -19,7 +19,7 @@ const sections: AdminSection[] = [
 export function useAdminViewModel() {
   const today = toChinaDate();
   const yesterday = toChinaDate(new Date(Date.now() - 24 * 60 * 60_000));
-  const activeKey = ref<SectionKey>("operation");
+  const activeKey = ref<SectionKey>("permit");
   const selectedDate = ref(today);
   const statusText = ref("待保存");
   const activeSection = computed(() => sections.find((section) => section.key === activeKey.value) ?? sections[0]);

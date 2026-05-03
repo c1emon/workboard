@@ -140,3 +140,7 @@ Frontend tests should cover:
 - Do not modify patrol template UI in this change.
 - Do not change board snapshot response contracts.
 - Do not rewrite storage around new tables.
+
+## TODO
+
+- Consider scheduled instance refresh for infinite operation plans. Current generation is manual and bounded by the selected refresh window; a future background job could periodically generate upcoming instances, for example refreshing the next N days every night.

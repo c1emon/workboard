@@ -189,6 +189,11 @@ function mountAdmin() {
   });
 }
 
+async function openOperationSection(wrapper: ReturnType<typeof mountAdmin>): Promise<void> {
+  await wrapper.findAll(".section-nav button")[4].trigger("click");
+  await new Promise((resolve) => setTimeout(resolve));
+}
+
 async function waitForAssertion(assertion: () => void): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -223,6 +228,20 @@ describe("AdminView", () => {
       "操作",
       "节假日"
     ]);
+  });
+
+  it("selects permit by default after loading the admin panel", async () => {
+    const wrapper = mountAdmin();
+    await waitForAssertion(() => {
+      expect(fetchPermitArrangements).toHaveBeenCalled();
+    });
+
+    expect(wrapper.find(".section-nav button.active strong").text()).toBe("许可");
+    expect(wrapper.text()).toContain("许可列表");
+    await waitForAssertion(() => {
+      expect(wrapper.text()).toContain("动火许可");
+    });
+    expect(fetchOperationPlans).not.toHaveBeenCalled();
   });
 
   it("lists holidays by year in holiday and adjusted workday sections", async () => {
@@ -415,12 +434,12 @@ describe("AdminView", () => {
     await wrapper.find(".today-button").trigger("click");
 
     expect(wrapper.find('input[type="date"]').element).toHaveProperty("value", "2026-05-03");
-    expect(fetchOperationPlans).toHaveBeenCalledWith("2026-05-03", "date");
+    expect(fetchPermitArrangements).toHaveBeenCalledWith("2026-05-03", "date");
   });
 
   it("loads operation plans and disables date controls when showing all", async () => {
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     expect(fetchOperationPlans).toHaveBeenCalledWith(expect.any(String), "date");
     expect(wrapper.text()).toContain("倒闸操作");
@@ -431,6 +450,32 @@ describe("AdminView", () => {
     expect(wrapper.find('input[type="date"]').attributes("disabled")).toBeDefined();
     expect(wrapper.find(".yesterday-button").attributes("disabled")).toBeDefined();
     expect(wrapper.find(".today-button").attributes("disabled")).toBeDefined();
+  });
+
+  it("refreshes operation instances from operation plans", async () => {
+    const wrapper = mountAdmin();
+    await openOperationSection(wrapper);
+
+    await wrapper.find(".operation-panel .manager-actions .secondary-action").trigger("click");
+
+    expect(wrapper.find(".operation-refresh-modal").exists()).toBe(true);
+    expect(wrapper.find('select[name="operationRefreshTemplate"]').element).toHaveProperty("value", "");
+
+    await wrapper.find('select[name="operationRefreshTemplate"]').setValue("operation-1");
+    await wrapper.find('input[name="operationRefreshEndDate"]').setValue("2026-05-31");
+    await wrapper.find(".operation-refresh-modal").trigger("submit.prevent");
+
+    expect(wrapper.find(".confirmation-modal").text()).toContain("刷新实例");
+    await wrapper.find(".confirmation-confirm").trigger("click");
+
+    expect(generateTaskInstances).toHaveBeenCalledWith({
+      windowStartDate: expect.any(String),
+      windowEndDate: "2026-05-31",
+      types: ["operation"],
+      templateIds: ["operation-1"],
+      refreshPending: true
+    });
+    expect(wrapper.text()).toContain("新增 1，更新 0，跳过 0");
   });
 
   it("loads arrangement lists with all scope and disables date controls when showing all", async () => {
@@ -522,6 +567,7 @@ describe("AdminView", () => {
 
   it("creates operation plans from a modal instead of the main page", async () => {
     const wrapper = mountAdmin();
+    await openOperationSection(wrapper);
     await wrapper.find('[aria-label="新增计划"]').trigger("click");
 
     expect(wrapper.find(".operation-modal").exists()).toBe(true);
@@ -562,7 +608,7 @@ describe("AdminView", () => {
       }
     ]);
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     const cells = wrapper.find("tbody tr").findAll("td");
 
@@ -573,7 +619,7 @@ describe("AdminView", () => {
 
   it("shows operation plan columns with a detail action", async () => {
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     const headers = wrapper.find(".operation-panel thead tr").findAll("th").map((header) => header.text());
     const cells = wrapper.find(".operation-panel tbody tr").findAll("td");
@@ -590,7 +636,7 @@ describe("AdminView", () => {
 
   it("opens operation detail in read-only mode", async () => {
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     await wrapper.find(".operation-panel tbody .row-actions button").trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
@@ -630,7 +676,7 @@ describe("AdminView", () => {
       })
     );
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
     vi.useFakeTimers();
 
     await wrapper.find(".operation-panel tbody .row-actions button").trigger("click");
@@ -666,7 +712,7 @@ describe("AdminView", () => {
 
   it("keeps the operation loading animation visible for a minimum duration", async () => {
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
     vi.useFakeTimers();
 
     await wrapper.find(".operation-panel tbody .row-actions button").trigger("click");
@@ -690,7 +736,7 @@ describe("AdminView", () => {
 
   it("selects operation child tasks from the timeline while editing", async () => {
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
@@ -742,7 +788,7 @@ describe("AdminView", () => {
   it("adds operation child tasks from the preview action while editing", async () => {
 	    vi.mocked(createOperationPlanItem).mockResolvedValueOnce({ id: "item-3" });
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
@@ -847,7 +893,7 @@ describe("AdminView", () => {
     });
 	    vi.mocked(createOperationPlanItem).mockResolvedValueOnce({ id: "item-2" });
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
@@ -878,7 +924,7 @@ describe("AdminView", () => {
   it("deletes operation child tasks with confirmation while editing", async () => {
     const confirmSpy = vi.spyOn(window, "confirm");
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
@@ -962,7 +1008,7 @@ describe("AdminView", () => {
     });
 
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
     await wrapper.find(".operation-panel tbody .row-actions button").trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
 
@@ -1017,7 +1063,7 @@ describe("AdminView", () => {
     });
 
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
     await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
 
@@ -1052,7 +1098,7 @@ describe("AdminView", () => {
       items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "巡检", metadata: {}, sortOrder: 0 }]
     });
     const wrapper = mountAdmin();
-    await new Promise((resolve) => setTimeout(resolve));
+    await openOperationSection(wrapper);
 
     await wrapper.find(".operation-panel tbody .row-actions button").trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
@@ -1097,6 +1143,7 @@ describe("AdminView", () => {
 
   it("places operation start time and recurrence type on one row", async () => {
     const wrapper = mountAdmin();
+    await openOperationSection(wrapper);
     await wrapper.find('[aria-label="新增计划"]').trigger("click");
 
     const row = wrapper.find(".operation-schedule-row");

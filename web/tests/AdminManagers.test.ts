@@ -92,6 +92,9 @@ describe("admin managers", () => {
       props: {
         ...calendarProps,
         showAll: false,
+        refreshForm: { templateId: "", windowStartDate: "2026-05-01", windowEndDate: "2026-05-01" },
+        refreshOpen: false,
+        generationSummary: "",
         rows: [
           {
             id: "operation-1",
@@ -119,11 +122,13 @@ describe("admin managers", () => {
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
     await wrapper.findAll("tbody .row-actions button")[2].trigger("click");
     await wrapper.find("tbody .row-actions .danger").trigger("click");
+    await wrapper.find(".manager-actions .secondary-action").trigger("click");
 
     expect(wrapper.emitted("detail")?.[0][0]).toMatchObject({ id: "operation-1" });
     expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "operation-1" });
     expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "operation-1" });
     expect(wrapper.emitted("delete")).toEqual([["operation-1"]]);
+    expect(wrapper.emitted("open-refresh")).toEqual([[]]);
   });
 
   it("renders holiday and adjusted workday rows", async () => {

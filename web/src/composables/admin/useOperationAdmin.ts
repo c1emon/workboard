@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import {
 	  createOperationPlan,
 	  createOperationPlanItem,
@@ -6,6 +6,7 @@ import {
 	  deleteOperationPlanItem,
   fetchOperationPlan,
   fetchOperationPlans,
+  generateTaskInstances,
   type OperationPlanInput,
   type OperationPlanItemRecord,
   type OperationPlanRecord,
@@ -16,12 +17,20 @@ import type { OperationAdminContext, OperationItemModalMode, OperationModalMode,
 
 const OPERATION_DETAIL_LOADING_MIN_MS = 300;
 
+export interface OperationRefreshForm {
+  templateId: string;
+  windowStartDate: string;
+  windowEndDate: string;
+}
+
 export function useOperationAdmin(context: OperationAdminContext) {
   const { selectedDate, today, withStatus, refresh, requestConfirmation } = context;
   const operationRows = ref<OperationPlanRecord[]>([]);
   const operationDetailItems = ref<OperationPlanItemRecord[]>([]);
   const operationSelectedItemId = ref<string | null>(null);
   const operationShowAll = ref(false);
+  const operationRefreshOpen = ref(false);
+  const operationGenerationSummary = ref("");
   const operationModalOpen = ref(false);
   const operationModalMode = ref<OperationModalMode>("create");
   const operationRecordId = ref<string | null>(null);
@@ -48,6 +57,12 @@ export function useOperationAdmin(context: OperationAdminContext) {
     recurrenceCount: 7,
     skipWeekends: false,
     skipHolidays: false
+  });
+
+  const operationRefreshForm = reactive<OperationRefreshForm>({
+    templateId: "",
+    windowStartDate: selectedDate.value,
+    windowEndDate: selectedDate.value
   });
 
   const operationItemForm = reactive({
@@ -82,8 +97,46 @@ export function useOperationAdmin(context: OperationAdminContext) {
       .sort((a, b) => a.sortOrder - b.sortOrder || a.offsetMinutes - b.offsetMinutes)
   );
 
+  watch(selectedDate, (date) => {
+    if (!operationRefreshOpen.value) resetOperationRefreshForm(date);
+  });
+
   async function loadOperationRows(): Promise<void> {
     operationRows.value = await fetchOperationPlans(selectedDate.value, operationShowAll.value ? "all" : "date");
+  }
+
+  function openOperationRefresh(): void {
+    resetOperationRefreshForm(selectedDate.value || today);
+    operationRefreshOpen.value = true;
+  }
+
+  function closeOperationRefresh(): void {
+    operationRefreshOpen.value = false;
+  }
+
+  async function refreshOperationInstances(): Promise<void> {
+    const windowEndDate = operationRefreshWindowEndDate();
+    const plan = operationRows.value.find((row) => row.id === operationRefreshForm.templateId);
+    const scopeText = plan ? `计划「${plan.name}」` : "全部操作计划";
+    const confirmed = await requestConfirmation({
+      title: "刷新实例",
+      message: `将刷新 ${scopeText} 在 ${operationRefreshForm.windowStartDate} 至 ${windowEndDate} 的待处理生成实例。`,
+      detail: "已完成、进行中、取消或手动实例不会被覆盖。",
+      confirmLabel: "执行刷新"
+    });
+    if (!confirmed) return;
+    await withStatus(async () => {
+      const result = await generateTaskInstances({
+        windowStartDate: operationRefreshForm.windowStartDate,
+        windowEndDate,
+        types: ["operation"],
+        templateIds: operationRefreshForm.templateId ? [operationRefreshForm.templateId] : undefined,
+        refreshPending: true
+      });
+      operationGenerationSummary.value = `新增 ${result.inserted}，更新 ${result.updated}，跳过 ${result.skipped}`;
+      closeOperationRefresh();
+      await refresh();
+    });
   }
 
   function normalizeDateTime(value: string): string {
@@ -212,6 +265,18 @@ export function useOperationAdmin(context: OperationAdminContext) {
     operationDetailItems.value = [];
     operationSelectedItemId.value = null;
     resetOperationItemForm();
+  }
+
+  function resetOperationRefreshForm(date: string): void {
+    operationRefreshForm.templateId = "";
+    operationRefreshForm.windowStartDate = date;
+    operationRefreshForm.windowEndDate = date;
+  }
+
+  function operationRefreshWindowEndDate(): string {
+    return operationRefreshForm.windowEndDate >= operationRefreshForm.windowStartDate
+      ? operationRefreshForm.windowEndDate
+      : operationRefreshForm.windowStartDate;
   }
 
   function resetOperationItemForm(): void {
@@ -404,6 +469,9 @@ export function useOperationAdmin(context: OperationAdminContext) {
     operationDetailItems,
     operationSelectedItemId,
     operationShowAll,
+    operationRefreshForm,
+    operationRefreshOpen,
+    operationGenerationSummary,
     operationModalOpen,
     operationModalMode,
     operationRecordId,
@@ -422,6 +490,9 @@ export function useOperationAdmin(context: OperationAdminContext) {
     operationComputedEndAt,
     operationItemBaseOptions,
     loadOperationRows,
+    openOperationRefresh,
+    closeOperationRefresh,
+    refreshOperationInstances,
     openOperationModal,
     selectOperationItem,
     openOperationItemCreate,

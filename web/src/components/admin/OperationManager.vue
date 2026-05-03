@@ -15,6 +15,10 @@
       @update:model-value="emit('update:selectedDate', $event)"
       @update:show-all="emit('update:showAll', $event)"
     />
+    <div class="manager-actions">
+      <button type="button" class="secondary-action refresh-action" @click="emit('open-refresh')">刷新实例</button>
+      <span v-if="generationSummary">{{ generationSummary }}</span>
+    </div>
     <div class="table-shell">
       <table>
         <thead>
@@ -45,11 +49,50 @@
         </tbody>
       </table>
     </div>
+
+    <div v-if="refreshOpen" class="modal-backdrop" role="presentation" @click.self="emit('close-refresh')">
+      <form class="modal-form operation-refresh-modal" @submit.prevent="emit('refresh')">
+        <div class="modal-heading">
+          <div>
+            <h2>刷新实例</h2>
+          </div>
+          <button type="button" aria-label="关闭刷新实例弹窗" @click="emit('close-refresh')">×</button>
+        </div>
+        <div class="form-grid">
+          <label class="wide-field">
+            操作计划
+            <select v-model="refreshForm.templateId" name="operationRefreshTemplate">
+              <option value="">全部操作计划</option>
+              <option v-for="plan in rows" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
+            </select>
+          </label>
+          <label>
+            开始日期
+            <input v-model="refreshForm.windowStartDate" name="operationRefreshStartDate" type="date" required />
+          </label>
+          <label>
+            结束日期
+            <input
+              v-model="refreshForm.windowEndDate"
+              name="operationRefreshEndDate"
+              type="date"
+              :min="refreshForm.windowStartDate"
+              required
+            />
+          </label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary-action" @click="emit('close-refresh')">取消</button>
+          <button type="submit" class="primary-action">执行</button>
+        </div>
+      </form>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import type { OperationPlanRecord } from "../../api/client";
+import type { OperationRefreshForm } from "../../composables/admin/useOperationAdmin";
 import DateToolbar from "./DateToolbar.vue";
 import ListHeader from "./ListHeader.vue";
 
@@ -59,6 +102,9 @@ defineProps<{
   yesterday: string;
   showAll: boolean;
   rows: OperationPlanRecord[];
+  refreshForm: OperationRefreshForm;
+  refreshOpen: boolean;
+  generationSummary: string;
 }>();
 
 const emit = defineEmits<{
@@ -71,6 +117,9 @@ const emit = defineEmits<{
   toggle: [record: OperationPlanRecord];
   edit: [record: OperationPlanRecord];
   delete: [id: string];
+  "open-refresh": [];
+  "close-refresh": [];
+  refresh: [];
 }>();
 
 function recurrenceText(record: OperationPlanRecord): string {
@@ -81,3 +130,20 @@ function recurrenceText(record: OperationPlanRecord): string {
 </script>
 
 <style scoped src="./managerStyles.css"></style>
+<style scoped src="./modalStyles.css"></style>
+<style scoped>
+.manager-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.refresh-action {
+  margin-left: auto;
+}
+
+.operation-refresh-modal {
+  width: min(560px, 100%);
+}
+</style>

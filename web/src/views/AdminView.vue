@@ -118,6 +118,7 @@
           :today="today"
           :yesterday="yesterday"
           :rows="operationRows"
+          :refresh-form="operationRefreshForm" :refresh-open="operationRefreshOpen" :generation-summary="operationGenerationSummary"
           @add="openOperationModal()"
           @today="jumpToToday"
           @yesterday="jumpToYesterday"
@@ -125,6 +126,7 @@
           @toggle="toggleOperation"
           @edit="(record) => openOperationModal(record, 'edit')"
           @delete="removeOperation"
+          @open-refresh="openOperationRefresh" @close-refresh="closeOperationRefresh" @refresh="refreshOperationInstances"
         />
 
         <LeaveManager
@@ -238,13 +240,13 @@ const {
   taskInstanceRows, taskInstanceShowAll, taskInstanceForm, taskInstanceFormOpen, taskInstanceRefreshForm, taskInstanceRefreshOpen, taskInstanceEditingId, taskInstanceGenerationSummary,
   patrolPlanRows, patrolPlanDetail, patrolPlanDetailOpen, patrolCycleItemManagerOpen, patrolPlanForm, patrolPlanFormOpen, patrolPlanEditingId, patrolCycleItemForm, patrolCycleItemFormOpen, patrolCycleItemEditingId,
   holidayYear, holidayRows, adjustedWorkdayRows, holidayImportModalOpen, holidayImportForm,
-  modalKind, modalTitle, modalForm, operationModalOpen, operationModalMode, operationRecordId,
+  modalKind, modalTitle, modalForm, operationModalOpen, operationModalMode, operationRecordId, operationRefreshForm, operationRefreshOpen, operationGenerationSummary,
   operationForm, operationReadOnly, operationModalTitle, operationDurationMinutes, operationHasEndAt,
   operationDerivedRecurrenceIntervalMinutes, operationDerivedRecurrenceCount, operationComputedEndAt,
   operationDetailItems, operationSelectedItemId, operationDetailLoading, operationItemModalOpen,
   operationItemModalMode, operationItemModalTitle, operationItemForm, operationItemBaseOptions,
   confirmation, jumpToToday, jumpToYesterday, openPermitModal, openOtherModal,
-  openLeaveModal, openOperationModal, selectOperationItem, openOperationItemCreate, closeModal,
+  openLeaveModal, openOperationModal, selectOperationItem, openOperationItemCreate, closeModal, openOperationRefresh, closeOperationRefresh, refreshOperationInstances,
   openHolidayImportModal, closeHolidayImportModal, selectHolidayImportFile, closeOperationModal,
   closeOperationItemModal, saveModal, togglePermit, toggleOther, toggleOperation,
   confirmConfirmation, cancelConfirmation, removePermit, removeOther, removeLeave,
