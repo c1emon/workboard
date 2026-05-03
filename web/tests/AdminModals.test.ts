@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import ArrangementModal from "../src/components/admin/ArrangementModal.vue";
 import HolidayImportModal from "../src/components/admin/HolidayImportModal.vue";
@@ -240,5 +242,14 @@ describe("admin modals", () => {
     expect(nonDefaultWrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(true);
     expect(readonlyWrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(false);
     expect(readonlyWrapper.text()).not.toContain("{}");
+  });
+
+  it("keeps operation modal content scrollable when child task lists are long", () => {
+    const source = readFileSync(resolve(__dirname, "../src/components/admin/OperationPlanModal.vue"), "utf8");
+
+    expect(source).toContain("operation-modal-body");
+    expect(source).toMatch(/\.operation-modal\s*\{[^}]*max-height:/s);
+    expect(source).toMatch(/\.operation-modal\s*\{[^}]*grid-template-rows:/s);
+    expect(source).toMatch(/\.operation-modal-body\s*\{[^}]*overflow-y:\s*auto/s);
   });
 });

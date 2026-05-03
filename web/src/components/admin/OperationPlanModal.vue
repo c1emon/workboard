@@ -5,45 +5,47 @@
         <h2>{{ title }}</h2>
         <button type="button" aria-label="关闭弹窗" @click="emit('close')">×</button>
       </div>
-      <div class="form-grid">
-        <label>计划名称<input v-model="form.name" name="operationName" required :disabled="readOnly" /></label>
-        <label>说明<input v-model="form.description" :disabled="readOnly" /></label>
-        <div class="operation-schedule-row">
-          <label>
-            循环类型
-            <select v-model="form.recurrenceType" :disabled="readOnly">
-              <option value="once">一次性</option>
-              <option value="finite">有限循环</option>
-              <option value="infinite">无限循环</option>
-            </select>
+      <div class="operation-modal-body">
+        <div class="form-grid">
+          <label>计划名称<input v-model="form.name" name="operationName" required :disabled="readOnly" /></label>
+          <label>说明<input v-model="form.description" :disabled="readOnly" /></label>
+          <div class="operation-schedule-row">
+            <label>
+              循环类型
+              <select v-model="form.recurrenceType" :disabled="readOnly">
+                <option value="once">一次性</option>
+                <option value="finite">有限循环</option>
+                <option value="infinite">无限循环</option>
+              </select>
+            </label>
+            <label>开始时间<input v-model="form.startAt" required type="datetime-local" :disabled="readOnly" /></label>
+          </div>
+          <label v-if="form.recurrenceType === 'finite'">结束时间<input v-model="form.endAt" name="operationEndAt" required type="datetime-local" :disabled="readOnly" /></label>
+          <label v-if="readOnly && form.recurrenceType !== 'once'">
+            循环间隔（分钟）
+            <input :value="derivedRecurrenceIntervalMinutes" name="operationRecurrenceInterval" type="number" disabled />
           </label>
-          <label>开始时间<input v-model="form.startAt" required type="datetime-local" :disabled="readOnly" /></label>
+          <label v-if="readOnly && form.recurrenceType === 'finite'">
+            循环次数
+            <input :value="derivedRecurrenceCount" name="operationRecurrenceCount" type="number" disabled />
+          </label>
         </div>
-        <label v-if="form.recurrenceType === 'finite'">结束时间<input v-model="form.endAt" name="operationEndAt" required type="datetime-local" :disabled="readOnly" /></label>
-        <label v-if="readOnly && form.recurrenceType !== 'once'">
-          循环间隔（分钟）
-          <input :value="derivedRecurrenceIntervalMinutes" name="operationRecurrenceInterval" type="number" disabled />
-        </label>
-        <label v-if="readOnly && form.recurrenceType === 'finite'">
-          循环次数
-          <input :value="derivedRecurrenceCount" name="operationRecurrenceCount" type="number" disabled />
-        </label>
+        <div class="checkbox-row">
+          <label><input v-model="form.skipWeekends" type="checkbox" :disabled="readOnly" /> 跳过周末</label>
+          <label><input v-model="form.skipHolidays" type="checkbox" :disabled="readOnly" /> 跳过节假日</label>
+        </div>
+        <OperationTaskTimeline
+          v-if="mode !== 'create'"
+          :allow-add="canAddItems"
+          :duration-minutes="durationMinutes"
+          :items="items"
+          :readonly="readOnly"
+          :selected-item-id="selectedItemId"
+          :start-at="form.startAt"
+          @add="emit('add-item')"
+          @select="emit('select-item', $event)"
+        />
       </div>
-      <div class="checkbox-row">
-        <label><input v-model="form.skipWeekends" type="checkbox" :disabled="readOnly" /> 跳过周末</label>
-        <label><input v-model="form.skipHolidays" type="checkbox" :disabled="readOnly" /> 跳过节假日</label>
-      </div>
-      <OperationTaskTimeline
-        v-if="mode !== 'create'"
-        :allow-add="canAddItems"
-        :duration-minutes="durationMinutes"
-        :items="items"
-        :readonly="readOnly"
-        :selected-item-id="selectedItemId"
-        :start-at="form.startAt"
-        @add="emit('add-item')"
-        @select="emit('select-item', $event)"
-      />
       <div class="modal-actions">
         <button type="button" class="secondary-action" @click="emit('close')">{{ readOnly ? "关闭" : "取消" }}</button>
         <button v-if="!readOnly" type="submit" class="primary-action">保存</button>
@@ -97,6 +99,19 @@ const emit = defineEmits<{
 <style scoped src="./modalStyles.css"></style>
 
 <style scoped>
+.operation-modal {
+  max-height: calc(100vh - 36px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.operation-modal-body {
+  display: grid;
+  min-height: 0;
+  gap: 18px;
+  overflow-y: auto;
+}
+
 .operation-schedule-row {
   display: grid;
   grid-column: 1 / -1;

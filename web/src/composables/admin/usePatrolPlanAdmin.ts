@@ -6,6 +6,7 @@ import {
   deletePatrolPlanItem,
   fetchPatrolPlan,
   fetchPatrolPlans,
+  importPatrolPlanItems,
   type PatrolCycleItemInput,
   type PatrolCycleItemRecord,
   type PatrolPlanDetail,
@@ -16,6 +17,7 @@ import {
   updatePatrolPlanItem
 } from "../../api/client";
 import type { TimeTag } from "../../api/types";
+import { parsePatrolCycleItemExcel } from "../../utils/patrolCycleItemExcel";
 import type { PatrolPlanAdminContext } from "./types";
 
 export interface PatrolPlanForm {
@@ -229,6 +231,24 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     });
   }
 
+  async function importPatrolCycleItemsFromExcel(file: File): Promise<void> {
+    if (!patrolPlanDetail.value) return;
+    const planId = patrolPlanDetail.value.id;
+    const currentCount = patrolPlanDetail.value.items.length;
+    await withStatus(async () => {
+      const items = await parsePatrolCycleItemExcel(file);
+      const confirmed = await requestConfirmation({
+        title: "导入周期项",
+        message: `将从「${file.name}」导入 ${items.length} 项，并覆盖当前模板全部 ${currentCount} 项。`,
+        confirmLabel: "覆盖导入"
+      });
+      if (!confirmed) return;
+      await importPatrolPlanItems(planId, { mode: "replace", items });
+      patrolPlanDetail.value = await fetchPatrolPlan(planId);
+      await refresh();
+    });
+  }
+
   function patrolPlanPayload(): PatrolPlanInput {
     return {
       name: patrolPlanForm.name,
@@ -288,7 +308,8 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     openPatrolCycleItemEdit,
     closePatrolCycleItemForm,
     savePatrolCycleItem,
-    removePatrolCycleItem
+    removePatrolCycleItem,
+    importPatrolCycleItemsFromExcel
   };
 }
 

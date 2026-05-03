@@ -1,11 +1,21 @@
 // @vitest-environment jsdom
 
 import { mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { defineComponent, onMounted } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import PatrolPlanManager from "../src/components/admin/PatrolPlanManager.vue";
 import { usePatrolPlanAdmin } from "../src/composables/admin/usePatrolPlanAdmin";
-import { createPatrolPlan, createPatrolPlanItem, fetchPatrolPlan, fetchPatrolPlans, updatePatrolPlan, updatePatrolPlanItem } from "../src/api/client";
+import { createPatrolPlan, createPatrolPlanItem, fetchPatrolPlan, fetchPatrolPlans, importPatrolPlanItems, updatePatrolPlan, updatePatrolPlanItem } from "../src/api/client";
+import { parsePatrolCycleItemExcel } from "../src/utils/patrolCycleItemExcel";
+
+vi.mock("../src/utils/patrolCycleItemExcel", () => ({
+  parsePatrolCycleItemExcel: vi.fn().mockResolvedValue([
+    { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "巡检车", other: "带记录仪" },
+    { cycleDay: 2, timeTag: "下午", target: "2号线", personnel: "李四", vehicle: "", other: "" }
+  ])
+}));
 
 vi.mock("../src/api/client", () => ({
   fetchPatrolPlans: vi.fn().mockResolvedValue([
@@ -54,17 +64,20 @@ vi.mock("../src/api/client", () => ({
   deletePatrolPlan: vi.fn().mockResolvedValue(undefined),
   createPatrolPlanItem: vi.fn().mockResolvedValue({ id: "item-2" }),
   updatePatrolPlanItem: vi.fn().mockResolvedValue(undefined),
+  importPatrolPlanItems: vi.fn().mockResolvedValue({ imported: 2, cycleLength: 2 }),
   deletePatrolPlanItem: vi.fn().mockResolvedValue(undefined)
 }));
 
 function mountHarness() {
+  const requestConfirmation = vi.fn().mockResolvedValue(true);
+  const refresh = vi.fn();
   const Harness = defineComponent({
     components: { PatrolPlanManager },
     setup() {
       const admin = usePatrolPlanAdmin({
         withStatus: async (action) => { await action(); },
-        refresh: vi.fn(),
-        requestConfirmation: vi.fn().mockResolvedValue(true)
+        refresh,
+        requestConfirmation
       });
       onMounted(admin.loadPatrolPlans);
       return { admin };
@@ -96,10 +109,11 @@ function mountHarness() {
         @delete-item="admin.removePatrolCycleItem"
         @close-item-form="admin.closePatrolCycleItemForm"
         @save-item="admin.savePatrolCycleItem"
+        @import-file="admin.importPatrolCycleItemsFromExcel"
       />`
   });
 
-  return mount(Harness);
+  return { wrapper: mount(Harness), requestConfirmation, refresh };
 }
 
 async function flush(): Promise<void> {
@@ -108,7 +122,7 @@ async function flush(): Promise<void> {
 
 describe("PatrolPlanManager", () => {
   it("opens patrol plan detail from the detail action", async () => {
-    const wrapper = mountHarness();
+    const { wrapper } = mountHarness();
     await flush();
 
     expect(fetchPatrolPlans).toHaveBeenCalled();
@@ -128,7 +142,7 @@ describe("PatrolPlanManager", () => {
   });
 
   it("opens patrol plan creation in a modal", async () => {
-    const wrapper = mountHarness();
+    const { wrapper } = mountHarness();
     await flush();
 
     await wrapper.find('[aria-label="新增巡视模板"]').trigger("click");
@@ -156,7 +170,7 @@ describe("PatrolPlanManager", () => {
   });
 
   it("derives patrol plan end time from the current cycle length when editing", async () => {
-    const wrapper = mountHarness();
+    const { wrapper } = mountHarness();
     await flush();
 
     await wrapper.findAll("tbody .row-actions button")[2].trigger("click");
@@ -173,7 +187,7 @@ describe("PatrolPlanManager", () => {
   });
 
   it("manages patrol cycle items from a dedicated modal", async () => {
-    const wrapper = mountHarness();
+    const { wrapper } = mountHarness();
     await flush();
 
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
@@ -183,6 +197,10 @@ describe("PatrolPlanManager", () => {
     expect(wrapper.find(".patrol-item-manager-modal").exists()).toBe(true);
     expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("修改");
     expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("删除");
+    expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("批量导入");
+    const templateDownload = wrapper.find('[download="patrol-cycle-items-import-template.xlsx"]');
+    expect(templateDownload.exists()).toBe(true);
+    expect(templateDownload.attributes("href")).toBe("/templates/patrol-cycle-items-import-template.xlsx");
 
     await wrapper.find('[aria-label="新增周期项"]').trigger("click");
     expect(wrapper.find(".patrol-cycle-item-modal").exists()).toBe(true);
@@ -196,5 +214,48 @@ describe("PatrolPlanManager", () => {
     await wrapper.find('input[name="patrolCycleTarget"]').setValue("3号线");
     await wrapper.find(".patrol-cycle-item-modal").trigger("submit.prevent");
     expect(updatePatrolPlanItem).toHaveBeenCalledWith("plan-1", "item-1", expect.objectContaining({ target: "3号线" }));
+  });
+
+  it("imports patrol cycle items from Excel after confirmation", async () => {
+    const { wrapper, requestConfirmation, refresh } = mountHarness();
+    await flush();
+
+    await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
+    await flush();
+
+    const input = wrapper.find('input[name="patrolCycleItemExcel"]');
+    expect(input.exists()).toBe(true);
+    Object.defineProperty(input.element, "files", {
+      value: [new File(["excel"], "patrol.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })]
+    });
+    await input.trigger("change");
+    await flush();
+
+    expect(parsePatrolCycleItemExcel).toHaveBeenCalled();
+    expect(requestConfirmation).toHaveBeenCalledWith(expect.objectContaining({
+      title: "导入周期项",
+      message: expect.stringContaining("覆盖当前模板全部 1 项")
+    }));
+    expect(importPatrolPlanItems).toHaveBeenCalledWith("plan-1", {
+      mode: "replace",
+      items: [
+        { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "巡检车", other: "带记录仪" },
+        { cycleDay: 2, timeTag: "下午", target: "2号线", personnel: "李四", vehicle: "", other: "" }
+      ]
+    });
+    expect(fetchPatrolPlan).toHaveBeenLastCalledWith("plan-1");
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  it("keeps long patrol cycle item lists scrollable inside the manager modal", () => {
+    const source = readFileSync(resolve(__dirname, "../src/components/admin/PatrolPlanManager.vue"), "utf8");
+
+    expect(source).toContain("patrol-item-manager-table");
+    expect(source).toContain("patrol-detail-table");
+    expect(source).toMatch(/\.patrol-detail-modal\s*\{[^}]*max-height:/s);
+    expect(source).toMatch(/\.patrol-item-manager-modal\s*\{[^}]*max-height:/s);
+    expect(source).toMatch(/\.patrol-item-manager-modal\s*\{[^}]*grid-template-rows:/s);
+    expect(source).toMatch(/\.patrol-item-manager-table\s*\{[^}]*overflow-y:\s*auto/s);
+    expect(source).toMatch(/\.patrol-detail-table\s*\{[^}]*overflow-y:\s*auto/s);
   });
 });

@@ -92,7 +92,7 @@
             @delete-plan="removePatrolPlan"
             @close-plan="closePatrolPlanForm"
             @save-plan="savePatrolPlan"
-            @add-item="openPatrolCycleItemCreate" @edit-item="openPatrolCycleItemEdit" @delete-item="removePatrolCycleItem" @close-item-form="closePatrolCycleItemForm" @save-item="savePatrolCycleItem"
+            @add-item="openPatrolCycleItemCreate" @edit-item="openPatrolCycleItemEdit" @delete-item="removePatrolCycleItem" @close-item-form="closePatrolCycleItemForm" @save-item="savePatrolCycleItem" @import-file="importPatrolCycleItemsFromExcel"
           />
         </div>
 
@@ -254,7 +254,7 @@ const {
   normalizeOperationItemOffset, normalizeOperationItemDuration, openTaskInstanceCreate, openTaskInstanceEdit,
   closeTaskInstanceForm, saveTaskInstance, cancelTaskInstance, removeTaskInstance, openTaskInstanceRefresh, closeTaskInstanceRefresh, refreshTaskInstances,
   selectPatrolPlan, openPatrolCycleItemManager, closePatrolPlanDetail, closePatrolCycleItemManager, openPatrolPlanCreate, openPatrolPlanEdit, closePatrolPlanForm, savePatrolPlan, togglePatrolPlan, removePatrolPlan,
-  openPatrolCycleItemCreate, openPatrolCycleItemEdit, closePatrolCycleItemForm, savePatrolCycleItem, removePatrolCycleItem
+  openPatrolCycleItemCreate, openPatrolCycleItemEdit, closePatrolCycleItemForm, savePatrolCycleItem, removePatrolCycleItem, importPatrolCycleItemsFromExcel
 } = useAdminViewModel();
 
 const patrolActiveTab = ref<"instances" | "templates">("instances");

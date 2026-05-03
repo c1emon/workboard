@@ -97,7 +97,7 @@
           </div>
           <button type="button" aria-label="关闭巡视模板详情" @click="emit('close-detail')">×</button>
         </div>
-        <div class="table-shell">
+        <div class="table-shell patrol-detail-table">
           <table>
             <thead>
               <tr>
@@ -146,8 +146,24 @@
           >
             +
           </button>
+          <a
+            class="secondary-action toolbar-import-action toolbar-download-action"
+            href="/templates/patrol-cycle-items-import-template.xlsx"
+            download="patrol-cycle-items-import-template.xlsx"
+          >
+            导入模板下载
+          </a>
+          <button type="button" class="secondary-action toolbar-import-action" @click="excelInput?.click()">批量导入</button>
+          <input
+            ref="excelInput"
+            class="visually-hidden"
+            name="patrolCycleItemExcel"
+            type="file"
+            accept=".xlsx,.xls"
+            @change="handleExcelChange"
+          />
         </div>
-        <div class="table-shell">
+        <div class="table-shell patrol-item-manager-table">
           <table>
             <thead>
               <tr>
@@ -230,6 +246,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import type { PatrolCycleItemRecord, PatrolPlanDetail, PatrolPlanRecord } from "../../api/client";
 import type { PatrolCycleItemForm, PatrolPlanForm } from "../../composables/admin/usePatrolPlanAdmin";
 import ListHeader from "./ListHeader.vue";
@@ -263,13 +280,23 @@ const emit = defineEmits<{
   "delete-item": [item: PatrolCycleItemRecord];
   "close-item-form": [];
   "save-item": [];
+  "import-file": [file: File];
 }>();
+
+const excelInput = ref<HTMLInputElement | null>(null);
 
 function skipText(record: PatrolPlanRecord): string {
   const parts = [];
   if (record.skipWeekends) parts.push("周末");
   if (record.skipHolidays) parts.push("节假日");
   return parts.length > 0 ? parts.join("、") : "-";
+}
+
+function handleExcelChange(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (file) emit("import-file", file);
 }
 </script>
 
@@ -317,6 +344,36 @@ function skipText(record: PatrolPlanRecord): string {
   box-shadow: 0 8px 18px rgb(37 99 235 / 24%);
 }
 
+.toolbar-import-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+}
+
+.toolbar-download-action {
+  text-decoration: none;
+}
+
+.detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .plan-heading-row :deep(.list-heading) {
   min-width: 0;
 }
@@ -354,6 +411,25 @@ function skipText(record: PatrolPlanRecord): string {
 
 .patrol-detail-modal {
   width: min(960px, 100%);
+  max-height: calc(100vh - 36px);
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.patrol-item-manager-modal {
+  max-height: calc(100vh - 36px);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.patrol-item-manager-table {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.patrol-detail-table {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .patrol-cycle-item-modal {

@@ -52,6 +52,22 @@ const itemInputSchema = z.object({
   content: z.string().optional()
 });
 
+const itemImportSchema = z.object({
+  mode: z.literal("replace"),
+  items: z
+    .array(
+      z.object({
+        cycleDay: z.number().int().min(1),
+        timeTag: timeTagSchema,
+        target: z.string().min(1),
+        personnel: z.string().default(""),
+        vehicle: z.string().default(""),
+        other: z.string().default("")
+      })
+    )
+    .min(1)
+});
+
 const enabledInputSchema = z.object({ enabled: z.boolean() });
 const idParamSchema = z.object({ id: resourceIdSchema });
 const itemParamSchema = z.object({ id: resourceIdSchema, itemId: resourceIdSchema });
@@ -239,6 +255,41 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
 
     const row = getItem(db, params.data.id, id);
     return reply.code(201).send(row ? mapItemRow(row) : { id });
+  });
+
+  app.post("/api/admin/patrol-plans/:id/items/import", async (request, reply) => {
+    const params = validateAdminPayload(idParamSchema, request.params);
+    const validation = validateAdminPayload(itemImportSchema, request.body);
+    if (!params.success) return reply.code(400).send(params.error);
+    if (!validation.success) return reply.code(400).send(validation.error);
+
+    const plan = getPlan(db, params.data.id);
+    if (!plan) return reply.code(404).send({ error: "Not found" });
+
+    const importItems = db.transaction(() => {
+      db.prepare("delete from task_template_items where template_id = ?").run(params.data.id);
+      const sortOrders = new Map<string, number>();
+      const insertItem = db.prepare(
+        `insert into task_template_items
+         (id, template_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
+         values (?, ?, 0, 0, ?, ?, ?)`
+      );
+      for (const item of validation.data.items) {
+        const key = `${item.cycleDay}:${item.timeTag}`;
+        const sortOrder = sortOrders.get(key) ?? 0;
+        sortOrders.set(key, sortOrder + 1);
+        const payload = { ...item, sortOrder, content: item.target };
+        insertItem.run(nanoid(), params.data.id, item.target, JSON.stringify(itemMetadata(payload)), sortOrder);
+      }
+      refreshPatrolPlanDerivedEndAt(db, params.data.id);
+    });
+    importItems();
+    boardEvents.publish();
+
+    return {
+      imported: validation.data.items.length,
+      cycleLength: maxItemCycleDay(db, params.data.id)
+    };
   });
 
   app.put("/api/admin/patrol-plans/:id/items/:itemId", async (request, reply) => {

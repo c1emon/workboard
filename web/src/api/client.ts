@@ -207,6 +207,16 @@ export interface PatrolCycleItemInput {
   content?: string;
 }
 
+export interface PatrolCycleItemImportInput {
+  mode: "replace";
+  items: Array<Omit<PatrolCycleItemInput, "sortOrder" | "content">>;
+}
+
+export interface PatrolCycleItemImportResult {
+  imported: number;
+  cycleLength: number;
+}
+
 export interface BoardUpdateConnectionHandlers {
   onOpen: () => void;
   onError: () => void;
@@ -500,6 +510,10 @@ export async function updatePatrolPlanItem(planId: string, itemId: string, input
 
 export async function deletePatrolPlanItem(planId: string, itemId: string): Promise<void> {
   return deleteAdmin(`patrol-plans/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`);
+}
+
+export async function importPatrolPlanItems(planId: string, input: PatrolCycleItemImportInput): Promise<PatrolCycleItemImportResult> {
+  return postAdminFor<PatrolCycleItemImportInput, PatrolCycleItemImportResult>(`patrol-plans/${encodeURIComponent(planId)}/items/import`, input);
 }
 
 export function subscribeBoardUpdates(onUpdate: () => void, handlers?: BoardUpdateConnectionHandlers): EventSource {

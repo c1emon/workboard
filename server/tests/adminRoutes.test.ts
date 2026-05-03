@@ -1253,6 +1253,53 @@ describe("admin routes", () => {
     expect(detailResponse.json()).toMatchObject({ cycleLength: 4, endAt: "2026-05-04T23:59:59+08:00" });
   });
 
+  it("imports patrol cycle items by replacing current template items", async () => {
+    const db = createTestDatabase();
+    const boardEvents = createBoardEventBroadcaster();
+    const app = createApp(db, { boardEvents });
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/admin/patrol-plans",
+      payload: {
+        name: "导入巡检",
+        startAt: "2026-05-01T00:00:00+08:00"
+      }
+    });
+    const { id } = createResponse.json() as { id: string };
+    await app.inject({
+      method: "POST",
+      url: `/api/admin/patrol-plans/${id}/items`,
+      payload: { cycleDay: 9, timeTag: "上午", target: "旧周期项", sortOrder: 0 }
+    });
+
+    const importResponse = await app.inject({
+      method: "POST",
+      url: `/api/admin/patrol-plans/${id}/items/import`,
+      payload: {
+        mode: "replace",
+        items: [
+          { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "巡检车", other: "带记录仪" },
+          { cycleDay: 2, timeTag: "下午", target: "2号线", personnel: "李四" }
+        ]
+      }
+    });
+    const detailResponse = await app.inject({ method: "GET", url: `/api/admin/patrol-plans/${id}` });
+    await app.close();
+
+    expect(importResponse.statusCode).toBe(200);
+    expect(importResponse.json()).toEqual({ imported: 2, cycleLength: 2 });
+    expect(detailResponse.json()).toMatchObject({
+      cycleLength: 2,
+      endAt: "2026-05-02T23:59:59+08:00",
+      items: [
+        { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "巡检车", other: "带记录仪", sortOrder: 0 },
+        { cycleDay: 2, timeTag: "下午", target: "2号线", personnel: "李四", vehicle: "", other: "", sortOrder: 0 }
+      ]
+    });
+    expect(detailResponse.json().items.map((item: { target: string }) => item.target)).not.toContain("旧周期项");
+    expect(boardEvents.getVersion()).toBe(4);
+  });
+
   it("does not delete operation items through patrol plan item routes", async () => {
     const db = createTestDatabase();
     const app = createApp(db);

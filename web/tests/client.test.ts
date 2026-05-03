@@ -17,6 +17,7 @@ import {
   fetchTaskInstances,
   generateTaskInstances,
   importChineseDaysHolidays,
+  importPatrolPlanItems,
   updateOperationPlanItem,
   updatePatrolPlan,
   updatePatrolPlanEnabled,
@@ -157,6 +158,10 @@ describe("api client", () => {
     await createPatrolPlanItem("patrol plan", itemInput);
     await updatePatrolPlanItem("patrol plan", "item 1", itemInput);
     await deletePatrolPlanItem("patrol plan", "item 1");
+    await importPatrolPlanItems("patrol plan", {
+      mode: "replace",
+      items: [{ cycleDay: 2, timeTag: "下午", target: "B区", personnel: "", vehicle: "", other: "" }]
+    });
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, expect.stringContaining("/api/admin/patrol-plans"));
     expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining("/api/admin/patrol-plans/patrol%20plan"));
@@ -188,6 +193,14 @@ describe("api client", () => {
     });
     expect(fetchMock).toHaveBeenNthCalledWith(9, expect.stringContaining("/api/admin/patrol-plans/patrol%20plan/items/item%201"), {
       method: "DELETE"
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(10, expect.stringContaining("/api/admin/patrol-plans/patrol%20plan/items/import"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "replace",
+        items: [{ cycleDay: 2, timeTag: "下午", target: "B区", personnel: "", vehicle: "", other: "" }]
+      })
     });
   });
 
