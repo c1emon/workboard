@@ -191,7 +191,7 @@ function upsertGeneratedInstance(
     .prepare<[string], ExistingTaskInstanceRow>("select id, source_type, status from task_instances where generation_key = ?")
     .get(snapshot.generationKey);
   const now = new Date().toISOString();
-  const metadataJson = JSON.stringify(snapshot.metadata);
+  const extDataJson = JSON.stringify(snapshot.metadata);
 
   if (!existing) {
     db.prepare(
@@ -209,7 +209,7 @@ function upsertGeneratedInstance(
       snapshot.startAt,
       snapshot.endAt,
       snapshot.content,
-      metadataJson,
+      extDataJson,
       now,
       now
     );
@@ -231,7 +231,7 @@ function upsertGeneratedInstance(
       snapshot.startAt,
       snapshot.endAt,
       snapshot.content,
-      metadataJson,
+      extDataJson,
       now,
       now,
       existing.id

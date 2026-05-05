@@ -785,7 +785,7 @@ describe("AdminView", () => {
     );
   });
 
-  it("keeps the operation item modal open with an inline metadata error until JSON is an object", async () => {
+  it("keeps operation item metadata hidden and preserves it while saving", async () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
@@ -801,28 +801,9 @@ describe("AdminView", () => {
     });
     await wrapper.vm.$nextTick();
 
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue("{");
-    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
-    await wrapper.vm.$nextTick();
-
-    expect(updateOperationPlan).not.toHaveBeenCalled();
     expect(wrapper.find(".operation-item-modal").exists()).toBe(true);
-    expect(wrapper.find(".operation-item-metadata-error").text()).toContain("Metadata JSON 格式无效");
-    expect(wrapper.find(".admin-toolbar").text()).not.toContain("JSON 格式无效");
-
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue("[1]");
-    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
-    await wrapper.vm.$nextTick();
-
-    expect(updateOperationPlan).not.toHaveBeenCalled();
-    expect(wrapper.find(".operation-item-modal").exists()).toBe(true);
-    expect(wrapper.find(".operation-item-metadata-error").text()).toContain("Metadata JSON 必须是对象");
-    expect(wrapper.find(".admin-toolbar").text()).not.toContain("JSON 必须是对象");
-
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue('{"crew":"C"}');
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find(".operation-item-metadata-error").exists()).toBe(false);
+    expect(wrapper.find(".operation-item-modal").text()).not.toContain("Metadata JSON");
+    expect(wrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(false);
 
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
     await wrapper.vm.$nextTick();
@@ -830,7 +811,7 @@ describe("AdminView", () => {
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-1",
       expect.objectContaining({
-        item: expect.objectContaining({ id: "item-2", metadata: { crew: "C" } })
+        item: expect.objectContaining({ id: "item-2", metadata: { crew: "B" } })
       })
     );
     expect(wrapper.find(".operation-item-modal").exists()).toBe(false);
