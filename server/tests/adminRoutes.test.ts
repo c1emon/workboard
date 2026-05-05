@@ -47,7 +47,7 @@ describe("admin routes", () => {
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T12:00:00+08:00",
       content: "人工巡视",
-      metadata: { target: "A区" }
+      extData: { target: "A区" }
     });
     insertTaskInstance(db, {
       id: "generated-patrol",
@@ -88,7 +88,7 @@ describe("admin routes", () => {
         id: "manual-patrol",
         type: "patrol",
         sourceType: "manual",
-        metadata: { target: "A区" },
+        extData: { target: "A区" },
         content: "人工巡视"
       })
     ]);
@@ -136,7 +136,7 @@ describe("admin routes", () => {
         startAt: "2026-05-01T08:00:00+08:00",
         endAt: "2026-05-01T12:00:00+08:00",
         content: "人工巡视",
-        metadata: { target: "A区" }
+        extData: { target: "A区" }
       }
     });
     await app.close();
@@ -153,7 +153,7 @@ describe("admin routes", () => {
       startAt: "2026-05-01T08:00:00.000+08:00",
       endAt: "2026-05-01T12:00:00.000+08:00",
       content: "人工巡视",
-      metadata: { target: "A区" },
+      extData: { target: "A区" },
       status: "pending"
     }));
     expect(boardEvents.getVersion()).toBe(2);
@@ -171,7 +171,7 @@ describe("admin routes", () => {
         startAt: "2026-04-30T16:30:00.000Z",
         endAt: "2026-04-30T17:30:00.000Z",
         content: "UTC 输入巡视",
-        metadata: { target: "A区" }
+        extData: { target: "A区" }
       }
     });
     const { id } = response.json() as { id: string };
@@ -212,7 +212,7 @@ describe("admin routes", () => {
         startAt: "2026-05-02T09:00:00+08:00",
         endAt: "2026-05-02T10:00:00+08:00",
         content: "更新内容",
-        metadata: { note: "ok" }
+        extData: { note: "ok" }
       }
     });
     const generatedResponse = await app.inject({
@@ -223,7 +223,7 @@ describe("admin routes", () => {
         startAt: "2026-05-01T09:00:00+08:00",
         endAt: "2026-05-01T10:00:00+08:00",
         content: "拒绝更新",
-        metadata: {}
+        extData: {}
       }
     });
     const doneResponse = await app.inject({
@@ -234,7 +234,7 @@ describe("admin routes", () => {
         startAt: "2026-05-01T09:00:00+08:00",
         endAt: "2026-05-01T10:00:00+08:00",
         content: "拒绝更新",
-        metadata: {}
+        extData: {}
       }
     });
     await app.close();
@@ -245,7 +245,7 @@ describe("admin routes", () => {
       type: "other",
       occurrenceDate: "2026-05-02",
       content: "更新内容",
-      metadata: { note: "ok" }
+      extData: { note: "ok" }
     }));
     expect(generatedResponse.statusCode).toBe(409);
     expect(doneResponse.statusCode).toBe(409);
@@ -500,7 +500,7 @@ describe("admin routes", () => {
         offsetMinutes: 15,
         durationMinutes: 30,
         content: "检查闭锁状态",
-        metadata: { priority: "P1" },
+        extData: { priority: "P1" },
         sortOrder: 1
       }
     });
@@ -530,11 +530,11 @@ describe("admin routes", () => {
     expect(JSON.parse(item?.ext_data_json ?? "{}")).toEqual({ priority: "P1" });
     expect(detailResponse.json()).toMatchObject({
       id: planId,
-      items: [{ content: "检查闭锁状态", metadata: { priority: "P1" } }]
+      items: [{ content: "检查闭锁状态", extData: { priority: "P1" } }]
     });
   });
 
-  it("falls back to empty metadata for operation plan items with invalid metadata JSON", async () => {
+  it("falls back to empty extData for operation plan items with invalid extData JSON", async () => {
     const db = createTestDatabase();
     insertTaskTemplate(db, {
       id: "operation-template",
@@ -556,7 +556,7 @@ describe("admin routes", () => {
     expect(detailResponse.statusCode).toBe(200);
     expect(detailResponse.json()).toMatchObject({
       id: "operation-template",
-      items: [{ id: "operation-item", metadata: {} }]
+      items: [{ id: "operation-item", extData: {} }]
     });
   });
 
@@ -579,7 +579,7 @@ describe("admin routes", () => {
           offsetMinutes: 0,
           durationMinutes: 120,
           content: "A、B 操作",
-          metadata: { crew: "A" },
+          extData: { crew: "A" },
           sortOrder: 0
         }
       }
@@ -611,7 +611,7 @@ describe("admin routes", () => {
     expect(detailResponse.json()).toMatchObject({
       id,
       name: "倒闸操作",
-      items: [{ content: "A、B 操作", offsetMinutes: 0, durationMinutes: 120, metadata: { crew: "A" } }]
+      items: [{ content: "A、B 操作", offsetMinutes: 0, durationMinutes: 120, extData: { crew: "A" } }]
     });
   });
 
@@ -631,7 +631,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "循环项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "循环项", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -659,7 +659,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 90, durationMinutes: 60, content: "跨日子任务", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 90, durationMinutes: 60, content: "跨日子任务", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -686,7 +686,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "一次项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "一次项", extData: {}, sortOrder: 0 }
       }
     });
     const infiniteResponse = await app.inject({
@@ -701,7 +701,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "无限项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "无限项", extData: {}, sortOrder: 0 }
       }
     });
     const finiteMissingResponse = await app.inject({
@@ -716,7 +716,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "有限项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "有限项", extData: {}, sortOrder: 0 }
       }
     });
     const finiteEqualResponse = await app.inject({
@@ -731,7 +731,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "有限项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "有限项", extData: {}, sortOrder: 0 }
       }
     });
     const onceId = (onceResponse.json() as { id: string }).id;
@@ -798,7 +798,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 30, durationMinutes: 60, content: "检查闭锁", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 30, durationMinutes: 60, content: "检查闭锁", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -814,7 +814,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: true,
         skipHolidays: false,
-        item: { offsetMinutes: 15, durationMinutes: 45, content: "更新检查", metadata: { done: true }, sortOrder: 1 }
+        item: { offsetMinutes: 15, durationMinutes: 45, content: "更新检查", extData: { done: true }, sortOrder: 1 }
       }
     });
     const disableResponse = await app.inject({
@@ -851,7 +851,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -862,7 +862,7 @@ describe("admin routes", () => {
         offsetMinutes: 120,
         durationMinutes: 60,
         content: "第二项",
-        metadata: {},
+        extData: {},
         sortOrder: 1
       }
     });
@@ -875,7 +875,7 @@ describe("admin routes", () => {
         offsetMinutes: 150,
         durationMinutes: 45,
         content: "第二项更新",
-        metadata: {},
+        extData: {},
         sortOrder: 1
       }
     });
@@ -906,7 +906,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -917,7 +917,7 @@ describe("admin routes", () => {
         offsetMinutes: 120,
         durationMinutes: 60,
         content: "第二项",
-        metadata: {},
+        extData: {},
         sortOrder: 1
       }
     });
@@ -950,7 +950,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", extData: {}, sortOrder: 0 }
       }
     });
     const secondPlanResponse = await app.inject({
@@ -964,7 +964,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "第二项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第二项", extData: {}, sortOrder: 0 }
       }
     });
     const { id: firstPlanId } = firstPlanResponse.json() as { id: string };
@@ -975,7 +975,7 @@ describe("admin routes", () => {
     const updateResponse = await app.inject({
       method: "PUT",
       url: `/api/admin/operation-plans/${firstPlanId}/items/${secondItemId}`,
-      payload: { offsetMinutes: 30, durationMinutes: 60, content: "不该更新", metadata: {}, sortOrder: 0 }
+      payload: { offsetMinutes: 30, durationMinutes: 60, content: "不该更新", extData: {}, sortOrder: 0 }
     });
     const deleteResponse = await app.inject({
       method: "DELETE",
@@ -1002,7 +1002,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -1046,7 +1046,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 180, durationMinutes: 45, content: "末尾任务", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 180, durationMinutes: 45, content: "末尾任务", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = createResponse.json() as { id: string };
@@ -1315,7 +1315,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "操作项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "操作项", extData: {}, sortOrder: 0 }
       }
     });
     const { id: operationPlanId } = operationResponse.json() as { id: string };
@@ -1446,7 +1446,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "原任务", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "原任务", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = planResponse.json() as { id: string };
@@ -1463,7 +1463,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 180,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 90, durationMinutes: 90, content: "新增任务", metadata: {}, sortOrder: 1 }
+        item: { offsetMinutes: 90, durationMinutes: 90, content: "新增任务", extData: {}, sortOrder: 1 }
       }
     });
     const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
@@ -1495,14 +1495,14 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "第一项", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = planResponse.json() as { id: string };
     const secondItemResponse = await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${id}/items`,
-      payload: { offsetMinutes: 60, durationMinutes: 60, content: "第二项", metadata: {}, sortOrder: 1 }
+      payload: { offsetMinutes: 60, durationMinutes: 60, content: "第二项", extData: {}, sortOrder: 1 }
     });
     const detailBeforeResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
     const firstItemId = (detailBeforeResponse.json() as { items: Array<{ id: string }> }).items[0].id;
@@ -1520,7 +1520,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 180,
         skipWeekends: false,
         skipHolidays: false,
-        item: { id: secondItemId, offsetMinutes: 120, durationMinutes: 60, content: "第二项更新", metadata: { crew: "B" }, sortOrder: 1 }
+        item: { id: secondItemId, offsetMinutes: 120, durationMinutes: 60, content: "第二项更新", extData: { crew: "B" }, sortOrder: 1 }
       }
     });
     const detailAfterResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
@@ -1532,7 +1532,7 @@ describe("admin routes", () => {
       recurrenceIntervalMinutes: 180,
       items: [
         { id: firstItemId, content: "第一项", offsetMinutes: 0, durationMinutes: 60 },
-        { id: secondItemId, content: "第二项更新", offsetMinutes: 120, durationMinutes: 60, metadata: { crew: "B" } }
+        { id: secondItemId, content: "第二项更新", offsetMinutes: 120, durationMinutes: 60, extData: { crew: "B" } }
       ]
     });
   });
@@ -1552,7 +1552,7 @@ describe("admin routes", () => {
         recurrenceIntervalMinutes: 60,
         skipWeekends: false,
         skipHolidays: false,
-        item: { offsetMinutes: 0, durationMinutes: 60, content: "原任务", metadata: {}, sortOrder: 0 }
+        item: { offsetMinutes: 0, durationMinutes: 60, content: "原任务", extData: {}, sortOrder: 0 }
       }
     });
     const { id } = planResponse.json() as { id: string };
@@ -1568,7 +1568,7 @@ describe("admin routes", () => {
         recurrenceType: "once",
         skipWeekends: true,
         skipHolidays: true,
-        item: { id: "missing-item", offsetMinutes: 120, durationMinutes: 60, content: "不应保存", metadata: {}, sortOrder: 1 }
+        item: { id: "missing-item", offsetMinutes: 120, durationMinutes: 60, content: "不应保存", extData: {}, sortOrder: 1 }
       }
     });
     const detailResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
@@ -1610,7 +1610,7 @@ describe("admin routes", () => {
     const itemResponse = await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${id}/items`,
-      payload: { offsetMinutes: 0, durationMinutes: 180, content: "长任务", metadata: {}, sortOrder: 0 }
+      payload: { offsetMinutes: 0, durationMinutes: 180, content: "长任务", extData: {}, sortOrder: 0 }
     });
     const { id: itemId } = itemResponse.json() as { id: string };
     const afterCreateResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
@@ -1618,7 +1618,7 @@ describe("admin routes", () => {
     await app.inject({
       method: "PUT",
       url: `/api/admin/operation-plans/${id}/items/${itemId}`,
-      payload: { offsetMinutes: 0, durationMinutes: 240, content: "更长任务", metadata: {}, sortOrder: 0 }
+      payload: { offsetMinutes: 0, durationMinutes: 240, content: "更长任务", extData: {}, sortOrder: 0 }
     });
     const afterUpdateResponse = await app.inject({ method: "GET", url: `/api/admin/operation-plans/${id}` });
 
@@ -1815,7 +1815,7 @@ describe("admin routes", () => {
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T12:00:00+08:00",
       content: "生成许可",
-      metadata: { timeTag: "上午", target: "A区" }
+      extData: { timeTag: "上午", target: "A区" }
     });
     const app = createApp(db);
 
@@ -1843,7 +1843,7 @@ describe("admin routes", () => {
     });
   });
 
-  it("stores permit arrangements as manual task instances with permit metadata", async () => {
+  it("stores permit arrangements as manual task instances with permit extData", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
 
@@ -1895,7 +1895,7 @@ describe("admin routes", () => {
     expect(legacyTable).toBeUndefined();
   });
 
-  it("stores other arrangements as manual task instances with metadata reserved for common display fields", async () => {
+  it("stores other arrangements as manual task instances with extData reserved for common display fields", async () => {
     const db = createTestDatabase();
     const app = createApp(db);
 
@@ -2145,7 +2145,7 @@ function insertTaskInstance(
     startAt?: string;
     endAt?: string;
     content?: string;
-    metadata?: Record<string, unknown>;
+    extData?: Record<string, unknown>;
   }
 ): void {
   const now = "2026-05-01T00:00:00.000Z";
@@ -2163,7 +2163,7 @@ function insertTaskInstance(
     toChinaOffsetDateTime(input.startAt ?? "2026-05-01T08:00:00+08:00"),
     toChinaOffsetDateTime(input.endAt ?? "2026-05-01T09:00:00+08:00"),
     input.content ?? input.id,
-    JSON.stringify(input.metadata ?? {}),
+    JSON.stringify(input.extData ?? {}),
     input.status ?? "pending",
     now,
     now

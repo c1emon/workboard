@@ -85,7 +85,7 @@ describe("api client", () => {
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T12:00:00+08:00",
       content: "人工巡视",
-      metadata: { target: "A区" }
+      extData: { target: "A区" }
     };
 
     await fetchTaskInstances("2026-05-01", "patrol");
@@ -215,7 +215,7 @@ describe("api client", () => {
       offsetMinutes: 15,
       durationMinutes: 30,
       content: "检查闭锁",
-      metadata: { priority: "P1" },
+      extData: { priority: "P1" },
       sortOrder: 1
     };
 

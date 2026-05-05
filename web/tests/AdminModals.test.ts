@@ -11,9 +11,7 @@ import OperationPlanModal from "../src/components/admin/OperationPlanModal.vue";
 
 describe("admin modals", () => {
   function operationItemForm(overrides: Partial<{
-    metadataJson: string;
-    metadataError: string | null;
-    metadataExpanded: boolean;
+    extData: Record<string, unknown>;
   }> = {}) {
     return {
       id: "item-1",
@@ -23,9 +21,7 @@ describe("admin modals", () => {
       durationHours: 1,
       durationMinutes: 0,
       content: "复核记录",
-      metadataJson: "{}",
-      metadataError: null,
-      metadataExpanded: false,
+      extData: {},
       sortOrder: 0,
       ...overrides
     };
@@ -88,7 +84,7 @@ describe("admin modals", () => {
       skipWeekends: false,
       skipHolidays: false
     };
-    const item = { id: "item-1", offsetMinutes: 0, durationMinutes: 60, content: "A、B 操作", metadata: {}, sortOrder: 0 };
+    const item = { id: "item-1", offsetMinutes: 0, durationMinutes: 60, content: "A、B 操作", extData: {}, sortOrder: 0 };
     const wrapper = mount(OperationPlanModal, {
       props: {
         title: "修改计划",
@@ -170,35 +166,34 @@ describe("admin modals", () => {
     expect(finiteForm.endAt).toBe("2026-05-01T18:30");
   });
 
-  it("renders operation item modal and emits edit actions", async () => {
-    const form = operationItemForm({ metadataError: "Metadata JSON 必须是对象" });
+  it("renders operation item modal without exposing extension JSON and emits edit actions", async () => {
+    const form = operationItemForm({ extData: { crew: "B" } });
     const wrapper = mount(OperationItemModal, {
       props: {
         title: "编辑子任务",
         mode: "edit",
         form,
         readOnly: false,
-        baseOptions: [{ id: "base-1", offsetMinutes: 0, durationMinutes: 30, content: "前置任务", metadata: {}, sortOrder: 0 }]
+        baseOptions: [{ id: "base-1", offsetMinutes: 0, durationMinutes: 30, content: "前置任务", extData: {}, sortOrder: 0 }]
       }
     });
 
-    expect(wrapper.text()).toContain("Metadata JSON 必须是对象");
-    expect(wrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(true);
+    expect(wrapper.text().toLowerCase()).not.toContain("extdata json");
+    expect(wrapper.find(".operation-item-extData-toggle").exists()).toBe(false);
+    expect(wrapper.find('textarea[name="operationItemExtData"]').exists()).toBe(false);
 
     await wrapper.find('input[name="operationItemContent"]').setValue("复核记录2");
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue('{"crew":"B"}');
     await wrapper.find('input[name="operationItemOffsetMinutes"]').trigger("change");
     await wrapper.find(".operation-item-delete").trigger("click");
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
 
     expect(form.content).toBe("复核记录2");
-    expect(form.metadataJson).toBe('{"crew":"B"}');
     expect(wrapper.emitted("normalize-offset")).toEqual([[]]);
     expect(wrapper.emitted("delete")).toEqual([[]]);
     expect(wrapper.emitted("save")).toEqual([[]]);
   });
 
-  it("hides default metadata until advanced options are expanded", async () => {
+  it("never exposes operation item extData as editable JSON", async () => {
     const form = operationItemForm();
     const wrapper = mount(OperationItemModal, {
       props: {
@@ -210,21 +205,17 @@ describe("admin modals", () => {
       }
     });
 
-    expect(wrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(false);
-    expect(wrapper.find(".operation-item-metadata-toggle").exists()).toBe(true);
-
-    await wrapper.find(".operation-item-metadata-toggle").trigger("click");
-
-    expect(form.metadataExpanded).toBe(true);
-    expect(wrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(true);
+    expect(wrapper.find('textarea[name="operationItemExtData"]').exists()).toBe(false);
+    expect(wrapper.find(".operation-item-extData-toggle").exists()).toBe(false);
+    expect(wrapper.text().toLowerCase()).not.toContain("extdata json");
   });
 
-  it("shows non-default metadata but keeps readonly empty metadata collapsed", () => {
+  it("keeps non-default and readonly extData hidden from the item modal", () => {
     const nonDefaultWrapper = mount(OperationItemModal, {
       props: {
         title: "编辑子任务",
         mode: "edit",
-        form: operationItemForm({ metadataJson: '{\n  "crew": "B"\n}' }),
+        form: operationItemForm({ extData: { crew: "B" } }),
         readOnly: false,
         baseOptions: []
       }
@@ -239,8 +230,11 @@ describe("admin modals", () => {
       }
     });
 
-    expect(nonDefaultWrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(true);
-    expect(readonlyWrapper.find('textarea[name="operationItemMetadata"]').exists()).toBe(false);
+    expect(nonDefaultWrapper.find(".operation-item-extData-toggle").exists()).toBe(false);
+    expect(nonDefaultWrapper.find('textarea[name="operationItemExtData"]').exists()).toBe(false);
+    expect(nonDefaultWrapper.text().toLowerCase()).not.toContain("extdata json");
+    expect(readonlyWrapper.find('textarea[name="operationItemExtData"]').exists()).toBe(false);
+    expect(readonlyWrapper.text().toLowerCase()).not.toContain("extdata json");
     expect(readonlyWrapper.text()).not.toContain("{}");
   });
 

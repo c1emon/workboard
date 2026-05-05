@@ -20,15 +20,15 @@
 | 4 | Adopt | Patrol plan list has N+1 item queries through `mapPlanRow -> maxItemCycleDay -> listPlanItems`. |
 | 5 | Adopt | `validateAdminPayload` is duplicated in three route files. |
 | 6 | Defer until datetime canonicalization | Replacing `julianday()` with string comparison would break currently tested non-`+08:00` datetimes. |
-| 7 | Adopt, low priority | Metadata string/time-tag helpers are duplicated; split server and web utilities. |
+| 7 | Adopt, low priority | extData string/time-tag helpers are duplicated; split server and web utilities. |
 | 8 | Adopt, low priority | China-date/time formatting helpers are duplicated; split server and web utilities. |
 | 9 | Adopt with correction | `inLieuDays` is ignored, but it should be merged into holidays, not treated as adjusted workdays. `workdays` are adjusted workdays. |
 | 10 | Adopt | `task_template_items.template_id` is queried and joined frequently and lacks an index. |
 | 11 | Reject as stated | Operation child items define the cycle duration; importing `validateTaskItem(parentDurationMinutes, item)` would conflict with the current operation model. Keep offset/duration validation only, and validate finite window behavior separately if needed. |
-| 12 | Adopt | Frontend metadata JSON parse errors should be field-level validation errors instead of generic status failures. |
-| 13 | Adopt partially | Share the generic safe metadata parser. Preserve board snapshot warning behavior through an optional warning wrapper if still desired. |
+| 12 | Adopt | extData shape validation should stay at API/client boundaries; the frontend should not expose raw JSON editing. |
+| 13 | Adopt partially | Share the generic safe extData parser. Preserve board snapshot warning behavior through an optional warning wrapper if still desired. |
 | 14 | Adopt only if still useful after #1/#6 | The overlap helpers duplicate logic, but SQL filtering may make one or both unnecessary. |
-| 15 | Defer | Metadata shape validation is valuable but broad and should be a separate schema-design task. |
+| 15 | Defer | extData shape validation is valuable but broad and should be a separate schema-design task. |
 | 16 | Adopt partially | `dateQuerySchema` is unused. Form interfaces in `types.ts` are duplicate/unreferenced. `BoardUpdateConnectionHandlers` is used by `subscribeBoardUpdates`, so do not remove blindly. |
 | 17 | Reject | `PermitArrangementRecord` and `OtherArrangementRecord` are not identical; permit has `target` plus `task`, other does not. |
 | 18 | Defer | Removing the `FileReader` fallback is tiny cleanup with negligible value. |
@@ -36,14 +36,14 @@
 
 ## File Structure
 
-- Modify `server/src/domain/taskInstances.ts`: shared safe metadata parser, optional warning wrapper if needed.
+- Modify `server/src/domain/taskInstances.ts`: shared safe extData parser, optional warning wrapper if needed.
 - Modify `server/src/domain/boardSnapshot.ts`: SQL window filtering only after canonical datetime support, or leave exact `Date` overlap behavior intact.
 - Modify `server/src/routes/admin.ts`: safe operation item parsing, shared payload validation, holiday `inLieuDays` import fix, item endpoint parent-derived field updates if chosen, low-risk cleanup.
 - Modify `server/src/routes/taskInstances.ts`: shared payload validation; keep `julianday()` until datetime canonicalization exists.
 - Modify `server/src/routes/patrolPlans.ts`: shared payload validation and eager cycle-length calculation for list route.
 - Modify `server/src/db/schema.ts`: add `task_template_items(template_id)` index.
 - Modify `web/src/api/client.ts`: use `postAdminFor` for holiday import; keep `BoardUpdateConnectionHandlers`.
-- Modify `web/src/composables/admin/useOperationAdmin.ts`: remove double request by using transactional item endpoint behavior; add inline metadata JSON validation state.
+- Modify `web/src/composables/admin/useOperationAdmin.ts`: remove double request by using transactional item endpoint behavior; preserve extData without exposing a raw JSON editor.
 - Modify `web/src/composables/admin/useHolidayAdmin.ts`: keep normalized `inLieuDays` payload.
 - Add `server/src/routes/validation.ts`: shared `validateAdminPayload`.
 - Add `server/src/domain/dateTime.ts` and `web/src/composables/admin/dateTime.ts` only when doing the date helper cleanup batch.
@@ -68,8 +68,8 @@
 - Test: `server/tests/adminRoutes.test.ts`
 - Test: `server/tests/schema.test.ts`
 
-- [ ] Add a test that inserts an operation plan item with invalid `ext_data_json`, calls `GET /api/admin/operation-plans/:id`, and expects `200` with `metadata: {}`.
-- [ ] Replace `JSON.parse(row.ext_data_json)` in `mapOperationItemRow` with `parseTaskInstanceMetadata(row.ext_data_json)`.
+- [ ] Add a test that inserts an operation plan item with invalid `ext_data_json`, calls `GET /api/admin/operation-plans/:id`, and expects `200` with `extData: {}`.
+- [ ] Replace `JSON.parse(row.ext_data_json)` in `mapOperationItemRow` with `parseExtDataJson(row.ext_data_json)`.
 - [ ] Add a schema test asserting `pragma index_list('task_template_items')` contains `task_template_items_template_id_idx`.
 - [ ] Add `create index if not exists task_template_items_template_id_idx on task_template_items (template_id);` to `schemaSql`.
 - [ ] Run `npm --prefix server test -- adminRoutes.test.ts schema.test.ts`.
@@ -118,21 +118,21 @@
 - Test: `server/tests/adminRoutes.test.ts`
 - Test: `web/tests/AdminView.test.ts`
 
-- [ ] Add backend tests proving POST, PUT, and DELETE item endpoints update or preserve parent recurrence metadata consistently.
+- [ ] Add backend tests proving POST, PUT, and DELETE item endpoints update or preserve parent recurrence extData consistently.
 - [ ] Make item endpoints update parent derived fields in the same request, or add a dedicated transactional endpoint that saves parent fields and item mutation together.
 - [ ] Change `saveOperationItem` to use the chosen single-request contract for create/edit/delete.
 - [ ] Run `npm --prefix server test -- adminRoutes.test.ts` and `npm --prefix web test -- AdminView.test.ts`.
 
-## Task 6: Frontend Metadata Parse UX
+## Task 6: Frontend extData Preservation UX
 
 **Files:**
 - Modify: `web/src/composables/admin/useOperationAdmin.ts`
 - Modify if needed: `web/src/components/admin/OperationItemModal.vue`
 - Test: `web/tests/AdminView.test.ts` or `web/tests/AdminModals.test.ts`
 
-- [ ] Add reactive field state for metadata JSON errors.
-- [ ] Change `parseMetadata` into a result-returning helper.
-- [ ] On invalid JSON or non-object JSON, keep the modal open and display the field error.
+- [ ] Preserve existing item extData while saving without exposing a raw JSON editor.
+- [ ] Keep extData parse fallback behavior in the API/client boundary tests.
+- [ ] Assert the operation item modal does not render a raw extData editor or error state.
 - [ ] Run `npm --prefix web test -- AdminView.test.ts AdminModals.test.ts`.
 
 ## Task 7: Deferred Datetime Performance Batch
@@ -153,12 +153,12 @@
 - Modify: `web/src/api/client.ts`
 - Modify: `server/src/routes/admin.ts`
 - Modify: `web/src/composables/admin/types.ts`
-- Optional add: server/web date and metadata helper modules
+- Optional add: server/web date and extData helper modules
 
 - [ ] Replace raw holiday import `fetch` with `postAdminFor<ChineseDaysPayload, HolidayImportResult>("holidays/import", input)`.
 - [ ] Remove `dateQuerySchema`.
 - [ ] Remove unused duplicate form interfaces from `web/src/composables/admin/types.ts` only after confirming imports still compile.
-- [ ] Extract date/metadata helpers in small server-only and web-only modules.
+- [ ] Extract date/extData helpers in small server-only and web-only modules.
 - [ ] Run `npm run build` and `npm test`.
 
 ## Verification

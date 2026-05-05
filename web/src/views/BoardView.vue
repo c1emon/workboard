@@ -75,7 +75,7 @@ const otherColumns: DenseColumn[] = [
 ];
 
 const permitRows = computed(() => snapshot.value?.permits.map((row) => ({ ...row })) ?? []);
-const patrolRows = computed(() => snapshot.value?.patrols.map(({ metadata: _metadata, ...row }) => ({ ...row })) ?? []);
+const patrolRows = computed(() => snapshot.value?.patrols.map(({ extData: _extData, ...row }) => ({ ...row })) ?? []);
 const otherRows = computed(() => snapshot.value?.others.map((row) => ({ ...row })) ?? []);
 const isLeaveEmpty = computed(() => (snapshot.value?.leavePeople.length ?? 0) === 0);
 const leaveText = computed(() => (isLeaveEmpty.value ? "无" : snapshot.value?.leavePeople.join("、") ?? ""));

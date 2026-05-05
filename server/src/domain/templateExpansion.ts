@@ -14,7 +14,7 @@ export interface TaskTemplate {
   skipWeekends: boolean;
   skipHolidays: boolean;
   enabled: boolean;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 export interface TaskTemplateItemInput {
@@ -22,7 +22,7 @@ export interface TaskTemplateItemInput {
   offsetMinutes: number;
   durationMinutes: number;
   content?: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder?: number;
 }
 

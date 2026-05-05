@@ -12,7 +12,7 @@ interface OperationItem {
   content: string;
   startAt: string;
   endAt: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 const props = defineProps<{

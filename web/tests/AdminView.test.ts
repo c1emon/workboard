@@ -68,7 +68,7 @@ vi.mock("../src/api/client", () => ({
         offsetMinutes: 0,
         durationMinutes: 120,
         content: "A、B 操作",
-        metadata: {},
+        extData: {},
         sortOrder: 0
       },
       {
@@ -76,7 +76,7 @@ vi.mock("../src/api/client", () => ({
         offsetMinutes: 150,
         durationMinutes: 60,
         content: "复核记录",
-        metadata: { crew: "B" },
+        extData: { crew: "B" },
         sortOrder: 1
       }
     ]
@@ -111,7 +111,7 @@ vi.mock("../src/api/client", () => ({
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T12:00:00+08:00",
       content: "1号线",
-      metadata: { target: "1号线" },
+      extData: { target: "1号线" },
       status: "pending",
       generatedAt: "2026-05-01T00:00:00.000Z",
       updatedAt: "2026-05-01T00:00:00.000Z"
@@ -654,7 +654,7 @@ describe("AdminView", () => {
       offsetMinutes: 150,
       durationMinutes: 60,
       content: "复核记录",
-      metadata: { crew: "B" },
+      extData: { crew: "B" },
       sortOrder: 1
     });
     await wrapper.vm.$nextTick();
@@ -700,7 +700,7 @@ describe("AdminView", () => {
       enabled: true,
       childTaskCount: 1,
       firstItemContent: "A、B 操作",
-      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 }]
+      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: {}, sortOrder: 0 }]
     });
     await vi.advanceTimersByTimeAsync(300);
     await wrapper.vm.$nextTick();
@@ -745,7 +745,7 @@ describe("AdminView", () => {
       offsetMinutes: 150,
       durationMinutes: 60,
       content: "复核记录",
-      metadata: { crew: "B" },
+      extData: { crew: "B" },
       sortOrder: 1
     });
     await wrapper.vm.$nextTick();
@@ -785,7 +785,7 @@ describe("AdminView", () => {
     );
   });
 
-  it("keeps the operation item modal open with an inline metadata error until JSON is an object", async () => {
+  it("keeps operation item extData hidden and preserves it while saving", async () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
@@ -796,33 +796,14 @@ describe("AdminView", () => {
       offsetMinutes: 150,
       durationMinutes: 60,
       content: "复核记录",
-      metadata: { crew: "B" },
+      extData: { crew: "B" },
       sortOrder: 1
     });
     await wrapper.vm.$nextTick();
 
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue("{");
-    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
-    await wrapper.vm.$nextTick();
-
-    expect(updateOperationPlan).not.toHaveBeenCalled();
     expect(wrapper.find(".operation-item-modal").exists()).toBe(true);
-    expect(wrapper.find(".operation-item-metadata-error").text()).toContain("Metadata JSON 格式无效");
-    expect(wrapper.find(".admin-toolbar").text()).not.toContain("JSON 格式无效");
-
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue("[1]");
-    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
-    await wrapper.vm.$nextTick();
-
-    expect(updateOperationPlan).not.toHaveBeenCalled();
-    expect(wrapper.find(".operation-item-modal").exists()).toBe(true);
-    expect(wrapper.find(".operation-item-metadata-error").text()).toContain("Metadata JSON 必须是对象");
-    expect(wrapper.find(".admin-toolbar").text()).not.toContain("JSON 必须是对象");
-
-    await wrapper.find('textarea[name="operationItemMetadata"]').setValue('{"crew":"C"}');
-    await wrapper.vm.$nextTick();
-
-    expect(wrapper.find(".operation-item-metadata-error").exists()).toBe(false);
+    expect(wrapper.find(".operation-item-modal").text().toLowerCase()).not.toContain("extdata json");
+    expect(wrapper.find('textarea[name="operationItemExtData"]').exists()).toBe(false);
 
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
     await wrapper.vm.$nextTick();
@@ -830,7 +811,7 @@ describe("AdminView", () => {
     expect(updateOperationPlan).toHaveBeenCalledWith(
       "operation-1",
       expect.objectContaining({
-        item: expect.objectContaining({ id: "item-2", metadata: { crew: "C" } })
+        item: expect.objectContaining({ id: "item-2", extData: { crew: "B" } })
       })
     );
     expect(wrapper.find(".operation-item-modal").exists()).toBe(false);
@@ -840,12 +821,12 @@ describe("AdminView", () => {
       offsetMinutes: 0,
       durationMinutes: 120,
       content: "A、B 操作",
-      metadata: {},
+      extData: {},
       sortOrder: 0
     });
     await wrapper.vm.$nextTick();
 
-    expect(wrapper.find(".operation-item-metadata-error").exists()).toBe(false);
+    expect(wrapper.find(".operation-item-extData-error").exists()).toBe(false);
   });
 
   it("adds operation child tasks from the preview action while editing", async () => {
@@ -864,9 +845,9 @@ describe("AdminView", () => {
       childTaskCount: 3,
       firstItemContent: "A、B 操作",
       items: [
-        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 },
-        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", metadata: { crew: "B" }, sortOrder: 1 },
-        { id: "item-existing-duplicate", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", metadata: {}, sortOrder: 3 }
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", extData: { crew: "B" }, sortOrder: 1 },
+        { id: "item-existing-duplicate", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", extData: {}, sortOrder: 3 }
       ]
     });
     const wrapper = mountAdmin();
@@ -939,10 +920,10 @@ describe("AdminView", () => {
       childTaskCount: 3,
       firstItemContent: "A、B 操作",
       items: [
-        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 },
-        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", metadata: { crew: "B" }, sortOrder: 1 },
-        { id: "item-existing-duplicate", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", metadata: {}, sortOrder: 3 },
-        { id: "item-3", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", metadata: {}, sortOrder: 3 }
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", extData: { crew: "B" }, sortOrder: 1 },
+        { id: "item-existing-duplicate", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", extData: {}, sortOrder: 3 },
+        { id: "item-3", offsetMinutes: 195, durationMinutes: 75, content: "新增班次", extData: {}, sortOrder: 3 }
       ]
     });
     await wrapper.find(".operation-item-modal").trigger("submit.prevent");
@@ -956,7 +937,7 @@ describe("AdminView", () => {
 	        offsetMinutes: 195,
 	        durationMinutes: 75,
 	        content: "新增班次",
-	        metadata: {},
+	        extData: {},
 	        sortOrder: 3
 	      })
       })
@@ -999,7 +980,7 @@ describe("AdminView", () => {
       enabled: true,
       childTaskCount: 1,
       firstItemContent: "白班1",
-      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 510, content: "白班1", metadata: {}, sortOrder: 0 }]
+      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 510, content: "白班1", extData: {}, sortOrder: 0 }]
     });
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
@@ -1036,7 +1017,7 @@ describe("AdminView", () => {
       offsetMinutes: 150,
       durationMinutes: 60,
       content: "复核记录",
-      metadata: { crew: "B" },
+      extData: { crew: "B" },
       sortOrder: 1
     });
     await wrapper.vm.$nextTick();
@@ -1097,8 +1078,8 @@ describe("AdminView", () => {
       childTaskCount: 2,
       firstItemContent: "第一步",
       items: [
-        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "第一步", metadata: {}, sortOrder: 0 },
-        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "第二步", metadata: {}, sortOrder: 1 }
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "第一步", extData: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "第二步", extData: {}, sortOrder: 1 }
       ]
     });
 
@@ -1152,8 +1133,8 @@ describe("AdminView", () => {
       childTaskCount: 2,
       firstItemContent: "第一步",
       items: [
-        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "第一步", metadata: {}, sortOrder: 0 },
-        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "第二步", metadata: {}, sortOrder: 1 }
+        { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "第一步", extData: {}, sortOrder: 0 },
+        { id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "第二步", extData: {}, sortOrder: 1 }
       ]
     });
 
@@ -1190,7 +1171,7 @@ describe("AdminView", () => {
       enabled: true,
       childTaskCount: 1,
       firstItemContent: "巡检",
-      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "巡检", metadata: {}, sortOrder: 0 }]
+      items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "巡检", extData: {}, sortOrder: 0 }]
     });
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);

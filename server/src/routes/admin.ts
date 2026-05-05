@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 import { toChinaOffsetDateTime } from "../domain/dateTime.js";
-import { parseTaskInstanceMetadata } from "../domain/taskInstances.js";
+import { extDataString, extDataTimeTag, parseExtDataJson } from "../domain/taskInstances.js";
 import { timeRangeForDateTag } from "../domain/timeTags.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 import { validateAdminPayload } from "./validation.js";
@@ -64,7 +64,7 @@ const templateItemInputSchema = z.object({
   personnel: z.string().default(""),
   vehicle: z.string().default(""),
   other: z.string().default(""),
-  metadata: z.record(z.unknown()).default({}),
+  extData: z.record(z.unknown()).default({}),
   sortOrder: z.number().int().default(0)
 });
 
@@ -221,7 +221,7 @@ function mapOperationItemRow(row: OperationItemAdminRow) {
     offsetMinutes: row.offset_minutes,
     durationMinutes: row.duration_minutes,
     content: row.content,
-    metadata: parseTaskInstanceMetadata(row.ext_data_json),
+    extData: parseExtDataJson(row.ext_data_json),
     sortOrder: row.sort_order
   };
 }
@@ -243,7 +243,7 @@ function insertOperationItem(db: AppDatabase, templateId: string, input: z.infer
     input.offsetMinutes,
     input.durationMinutes,
     input.content,
-    JSON.stringify(input.metadata),
+    JSON.stringify(input.extData),
     input.sortOrder
   );
   return id;
@@ -260,7 +260,7 @@ function updateOperationItem(db: AppDatabase, templateId: string, itemId: string
       input.offsetMinutes,
       input.durationMinutes,
       input.content,
-      JSON.stringify(input.metadata),
+      JSON.stringify(input.extData),
       input.sortOrder,
       itemId,
       templateId
@@ -359,18 +359,8 @@ function listArrangementTaskRows(
     .map((row) => ({ ...row, date }));
 }
 
-function parseArrangementMetadata(raw: string): Record<string, unknown> {
-  return parseTaskInstanceMetadata(raw);
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string {
-  const value = metadata[key];
-  return typeof value === "string" ? value : "";
-}
-
-function metadataTimeTag(metadata: Record<string, unknown>): TimeTag {
-  const value = metadata.timeTag;
-  return value === "上午" || value === "下午" || value === "全天" ? value : "全天";
+function parseArrangementExtData(raw: string): Record<string, unknown> {
+  return parseExtDataJson(raw);
 }
 
 function overlapsDateWindow(startAt: string, endAt: string, window: { start: Date; end: Date }): boolean {
@@ -379,16 +369,16 @@ function overlapsDateWindow(startAt: string, endAt: string, window: { start: Dat
   return Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= window.end.getTime() && endMs >= window.start.getTime();
 }
 
-function arrangementMetadata(input: {
+function arrangementExtData(input: {
   timeTag: TimeTag;
   target: string;
   personnel: string;
   vehicle: string;
   other: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }): Record<string, unknown> {
   return {
-    ...input.metadata,
+    ...input.extData,
     timeTag: input.timeTag,
     target: input.target,
     personnel: input.personnel,
@@ -398,34 +388,34 @@ function arrangementMetadata(input: {
 }
 
 function mapPermitArrangementTaskRow(row: ArrangementTaskAdminRow) {
-  const metadata = parseArrangementMetadata(row.ext_data_json);
+  const extData = parseArrangementExtData(row.ext_data_json);
   return {
     id: row.id,
     date: row.date,
-    timeTag: metadataTimeTag(metadata),
+    timeTag: extDataTimeTag(extData),
     startAt: row.start_at,
     endAt: row.end_at,
-    target: metadataString(metadata, "target"),
+    target: extDataString(extData, "target"),
     task: row.content,
-    personnel: metadataString(metadata, "personnel"),
-    vehicle: metadataString(metadata, "vehicle"),
-    other: metadataString(metadata, "other"),
+    personnel: extDataString(extData, "personnel"),
+    vehicle: extDataString(extData, "vehicle"),
+    other: extDataString(extData, "other"),
     enabled: row.status !== "cancelled"
   };
 }
 
 function mapOtherArrangementTaskRow(row: ArrangementTaskAdminRow) {
-  const metadata = parseArrangementMetadata(row.ext_data_json);
+  const extData = parseArrangementExtData(row.ext_data_json);
   return {
     id: row.id,
     date: row.date,
-    timeTag: metadataTimeTag(metadata),
+    timeTag: extDataTimeTag(extData),
     startAt: row.start_at,
     endAt: row.end_at,
-    task: metadataString(metadata, "target") || row.content,
-    personnel: metadataString(metadata, "personnel"),
-    vehicle: metadataString(metadata, "vehicle"),
-    other: metadataString(metadata, "other"),
+    task: extDataString(extData, "target") || row.content,
+    personnel: extDataString(extData, "personnel"),
+    vehicle: extDataString(extData, "vehicle"),
+    other: extDataString(extData, "other"),
     enabled: row.status !== "cancelled"
   };
 }
@@ -441,7 +431,7 @@ function createManualArrangementInstance(
     personnel: string;
     vehicle: string;
     other: string;
-    metadata: Record<string, unknown>;
+    extData: Record<string, unknown>;
   }
 ): { id: string } {
   const id = nanoid();
@@ -462,7 +452,7 @@ function createManualArrangementInstance(
     startAt,
     endAt,
     input.content,
-    JSON.stringify(arrangementMetadata(input)),
+    JSON.stringify(arrangementExtData(input)),
     now,
     now
   );
@@ -482,7 +472,7 @@ function updateManualArrangementInstance(
     personnel: string;
     vehicle: string;
     other: string;
-    metadata: Record<string, unknown>;
+    extData: Record<string, unknown>;
   }
 ) {
   const now = new Date().toISOString();
@@ -499,7 +489,7 @@ function updateManualArrangementInstance(
          and source_template_item_id is null
          and generation_key is null`
     )
-    .run(input.date, startAt, endAt, input.content, JSON.stringify(arrangementMetadata(input)), now, id, input.type);
+    .run(input.date, startAt, endAt, input.content, JSON.stringify(arrangementExtData(input)), now, id, input.type);
 }
 
 function updateArrangementEnabled(db: AppDatabase, id: string, type: "permit" | "other", enabled: boolean) {
@@ -578,7 +568,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       personnel: input.personnel,
       vehicle: input.vehicle,
       other: input.other,
-      metadata: {}
+      extData: {}
     });
     boardEvents.publish();
 
@@ -601,7 +591,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       personnel: input.personnel,
       vehicle: input.vehicle,
       other: input.other,
-      metadata: {}
+      extData: {}
     });
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();
@@ -669,7 +659,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       personnel: input.personnel,
       vehicle: input.vehicle,
       other: input.other,
-      metadata: {}
+      extData: {}
     });
     boardEvents.publish();
 
@@ -692,7 +682,7 @@ export function registerAdminRoutes(app: FastifyInstance, db: AppDatabase, board
       personnel: input.personnel,
       vehicle: input.vehicle,
       other: input.other,
-      metadata: {}
+      extData: {}
     });
     if (result.changes === 0) return reply.code(404).send({ error: "Not found" });
     boardEvents.publish();

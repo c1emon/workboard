@@ -151,7 +151,7 @@ For patrol, `task_templates` represents the patrol plan:
 - `enabled = true`
 - `ext_data_json.cycleLength = 90` by default
 
-`task_template_items` represents the 90-day cycle content. `ext_data_json` stores patrol-specific template metadata:
+`task_template_items` represents the 90-day cycle content. `ext_data_json` stores patrol-specific template extData:
 
 ```json
 {
@@ -189,17 +189,17 @@ For each enabled template:
 5. For normal simple recurrence, expand `task_template_items` using the existing offset and duration semantics.
 6. For patrol cycle templates, calculate the effective patrol day index by counting eligible generated patrol dates from the template start date, excluding skipped holidays and skipped weekends.
 7. Resolve `cycleDay = ((effectiveDayIndex - 1) % cycleLength) + 1`.
-8. Generate instances only from patrol `task_template_items` whose metadata `cycleDay` matches the resolved cycle day.
+8. Generate instances only from patrol `task_template_items` whose extData `cycleDay` matches the resolved cycle day.
 9. For matched patrol items, resolve `start_at` and `end_at` from `timeTag` and the occurrence date using `timeRangeForDateTag`.
-10. Copy template content and metadata into `task_instances`.
+10. Copy template content and extData into `task_instances`.
 
 Holiday skipping happens during generation. The board does not apply holiday skipping itself.
 
 The generator loads holiday data internally from `holidays`. It should treat `type = holiday` and `type = adjusted_workday` differently as described above.
 
-## Instance Metadata Contract
+## Instance extData Contract
 
-`task_instances.ext_data_json` is the board-facing metadata snapshot.
+`task_instances.ext_data_json` is the board-facing extData snapshot.
 
 Patrol instances must include:
 
@@ -238,7 +238,7 @@ Other instances must include:
 }
 ```
 
-Operation instances keep their operation child metadata as an object and use `content`, `start_at`, and `end_at` for timeline display.
+Operation instances keep their operation child extData as an object and use `content`, `start_at`, and `end_at` for timeline display.
 
 ## Cross-Day And Multi-Day Items
 

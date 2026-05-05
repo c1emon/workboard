@@ -61,8 +61,8 @@ vi.mock("vis-timeline/standalone", () => ({
 }));
 
 const items = [
-  { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 },
-  { id: "item-2", offsetMinutes: 180, durationMinutes: 60, content: "复核记录", metadata: { crew: "B" }, sortOrder: 1 }
+  { id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: {}, sortOrder: 0 },
+  { id: "item-2", offsetMinutes: 180, durationMinutes: 60, content: "复核记录", extData: { crew: "B" }, sortOrder: 1 }
 ];
 
 async function waitForTimelineLoad() {

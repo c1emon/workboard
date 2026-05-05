@@ -2,8 +2,8 @@ import { nanoid } from "nanoid";
 import type { AppDatabase } from "../db/database.js";
 import { formatWithChinaOffset, toChinaDate } from "./dateTime.js";
 import { expandTemplate, type ExpandedTemplateItem, type TaskTemplate, type TaskTemplateItemInput } from "./templateExpansion.js";
-import { parseTaskInstanceMetadata, type TaskInstanceSource, type TaskInstanceStatus } from "./taskInstances.js";
-import { timeRangeForDateTag, type TimeTag } from "./timeTags.js";
+import { extDataString, extDataTimeTag, parseExtDataJson, type TaskInstanceSource, type TaskInstanceStatus } from "./taskInstances.js";
+import { timeRangeForDateTag } from "./timeTags.js";
 
 type TaskTemplateType = "operation" | "permit" | "patrol" | "other";
 
@@ -66,7 +66,7 @@ interface InstanceSnapshot {
   startAt: string;
   endAt: string;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 export function generateTaskInstances(db: AppDatabase, input: GenerateTaskInstancesInput): GenerateTaskInstancesOutput {
@@ -128,7 +128,7 @@ function snapshotFromExpandedItem(template: TaskTemplate, item: ExpandedTemplate
     startAt: item.startAt,
     endAt: item.endAt,
     content: item.content ?? "",
-    metadata: item.metadata
+    extData: item.extData
   };
 }
 
@@ -152,15 +152,15 @@ function patrolSnapshots(
     if (date < windowStartDate) continue;
 
     const cycleDay = ((eligibleDateCount - 1) % cycleLength) + 1;
-    for (const item of items.filter((candidate) => positiveInteger(candidate.metadata.cycleDay, 0) === cycleDay)) {
-      const timeTag = metadataTimeTag(item.metadata);
+    for (const item of items.filter((candidate) => positiveInteger(candidate.extData.cycleDay, 0) === cycleDay)) {
+      const timeTag = extDataTimeTag(item.extData);
       const { startAt, endAt } = timeRangeForDateTag(date, timeTag);
-      const metadata = {
+      const extData = {
         timeTag,
-        target: metadataString(item.metadata, "target") || (item.content ?? ""),
-        personnel: metadataString(item.metadata, "personnel"),
-        vehicle: metadataString(item.metadata, "vehicle"),
-        other: metadataString(item.metadata, "other"),
+        target: extDataString(item.extData, "target") || (item.content ?? ""),
+        personnel: extDataString(item.extData, "personnel"),
+        vehicle: extDataString(item.extData, "vehicle"),
+        other: extDataString(item.extData, "other"),
         cycleDay
       };
 
@@ -173,7 +173,7 @@ function patrolSnapshots(
         startAt: formatWithChinaOffset(new Date(startAt).getTime()),
         endAt: formatWithChinaOffset(new Date(endAt).getTime()),
         content: item.content ?? "",
-        metadata
+        extData
       });
     }
   }
@@ -191,7 +191,7 @@ function upsertGeneratedInstance(
     .prepare<[string], ExistingTaskInstanceRow>("select id, source_type, status from task_instances where generation_key = ?")
     .get(snapshot.generationKey);
   const now = new Date().toISOString();
-  const metadataJson = JSON.stringify(snapshot.metadata);
+  const extDataJson = JSON.stringify(snapshot.extData);
 
   if (!existing) {
     db.prepare(
@@ -209,7 +209,7 @@ function upsertGeneratedInstance(
       snapshot.startAt,
       snapshot.endAt,
       snapshot.content,
-      metadataJson,
+      extDataJson,
       now,
       now
     );
@@ -231,7 +231,7 @@ function upsertGeneratedInstance(
       snapshot.startAt,
       snapshot.endAt,
       snapshot.content,
-      metadataJson,
+      extDataJson,
       now,
       now,
       existing.id
@@ -272,7 +272,7 @@ function loadTaskTemplates(db: AppDatabase): TaskTemplate[] {
       skipWeekends: row.skip_weekends === 1,
       skipHolidays: row.skip_holidays === 1,
       enabled: row.enabled === 1,
-      metadata: parseTaskInstanceMetadata(row.ext_data_json)
+      extData: parseExtDataJson(row.ext_data_json)
     }));
 }
 
@@ -292,7 +292,7 @@ function loadTaskTemplateItems(db: AppDatabase): Map<string, TaskTemplateItemInp
       offsetMinutes: row.offset_minutes,
       durationMinutes: row.duration_minutes,
       content: row.content,
-      metadata: parseTaskInstanceMetadata(row.ext_data_json),
+      extData: parseExtDataJson(row.ext_data_json),
       sortOrder: row.sort_order
     };
     grouped.set(row.template_id, [...(grouped.get(row.template_id) ?? []), item]);
@@ -342,15 +342,5 @@ function positiveInteger(value: unknown, fallback: number): number {
 }
 
 function maxPatrolCycleDay(items: TaskTemplateItemInput[]): number {
-  return items.reduce((max, item) => Math.max(max, positiveInteger(item.metadata.cycleDay, 0)), 0);
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string {
-  const value = metadata[key];
-  return typeof value === "string" ? value : "";
-}
-
-function metadataTimeTag(metadata: Record<string, unknown>): TimeTag {
-  const value = metadata.timeTag;
-  return value === "上午" || value === "下午" || value === "全天" ? value : "全天";
+  return items.reduce((max, item) => Math.max(max, positiveInteger(item.extData.cycleDay, 0)), 0);
 }

@@ -212,7 +212,7 @@ Child task fields:
 - Offset minutes from the main task start time
 - Duration minutes
 - Content/personnel
-- Metadata JSON
+- Preserved extData object, not exposed as a raw JSON editor
 - Sort order
 
 Rules:
@@ -254,7 +254,7 @@ Patrol child tasks contain:
 - Personnel
 - Vehicle
 - Other
-- Metadata JSON
+- Preserved extData object, not exposed as a raw JSON editor
 - Sort order
 
 ### Permit Arrangement Management
@@ -346,7 +346,7 @@ Main task expansion skips these dates when the corresponding task container has 
 - `personnel`
 - `vehicle`, used by patrol child tasks
 - `other`, used by patrol child tasks
-- `metadata_json`, JSON text for dynamic extension fields
+- `ext_data_json`, JSON text for dynamic extension fields
 - `sort_order`
 
 `permit_arrangements`
@@ -392,7 +392,7 @@ Main task expansion skips these dates when the corresponding task container has 
 Operation and patrol plans use the same two-layer model.
 
 - Main task: the container that defines name, start time, end time, description, recurrence, and skip rules.
-- Child task: the concrete task metadata plus an offset from the main task start point and a duration.
+- Child task: the concrete task extData plus an offset from the main task start point and a duration.
 - Recurrence type can be once, finite, or infinite.
 - Optional weekend skipping.
 - Optional manually maintained holiday skipping.
@@ -405,8 +405,8 @@ Validation rules:
 - For each child task, `offset_minutes + duration_minutes` must be less than or equal to the main task occurrence duration.
 - Child tasks may overlap each other.
 - For finite recurrence, `recurrence_count` means the number of eligible displayed occurrences. Weekend or holiday skips do not consume the count.
-- `metadata_json` must be valid JSON when present. MVP treats it as an object and defaults it to `{}`.
-- Core board fields stay as explicit columns. `metadata_json` is for dynamic attributes that are not yet stable enough to become schema columns.
+- `ext_data_json` must be valid JSON when present. MVP treats it as an object and defaults it to `{}`.
+- Core board fields stay as explicit columns. `ext_data_json` is for dynamic attributes that are not yet stable enough to become schema columns.
 
 For a given current time:
 
@@ -443,7 +443,7 @@ Returns the complete board snapshot:
         "content": "A、B 操作",
         "startAt": "2026-05-01T08:00:00+08:00",
         "endAt": "2026-05-01T16:00:00+08:00",
-        "metadata": {}
+        "extData": {}
       }
     ]
   },
@@ -463,7 +463,7 @@ Returns the complete board snapshot:
       "personnel": "王五",
       "vehicle": "2 号车",
       "other": "携带记录表",
-      "metadata": {}
+      "extData": {}
     }
   ],
   "others": [],
@@ -523,7 +523,7 @@ Backend:
 - Validate time tags against `全天`, `上午`, `下午`.
 - Validate time strings.
 - Validate child task offset and duration against the parent main task window.
-- Validate child task metadata as JSON object data.
+- Validate child task extData as JSON object data.
 - Return structured error responses.
 
 ## Testing
@@ -536,7 +536,7 @@ Backend tests:
 - Cross-day operation child task handling.
 - Child task overlap is allowed.
 - Child task latest end cannot exceed main task occurrence end.
-- Child task metadata JSON accepts valid object data and rejects invalid JSON.
+- Child task extData accepts valid object data at the API boundary and rejects invalid JSON payloads.
 - Time-tag sorting order.
 
 Frontend tests:

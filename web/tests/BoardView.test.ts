@@ -23,7 +23,7 @@ function makeSnapshot(overrides: Partial<BoardSnapshot> = {}): BoardSnapshot {
           content: "A线停电操作",
           startAt: "2026-05-01T08:30:00.000Z",
           endAt: "2026-05-01T10:30:00.000Z",
-          metadata: {}
+          extData: {}
         }
       ]
     },
@@ -36,8 +36,8 @@ function makeSnapshot(overrides: Partial<BoardSnapshot> = {}): BoardSnapshot {
       { timeTag: "下午", target: "F区", task: "开挖许可", personnel: "孙八", vehicle: "6号车", other: "旁站" }
     ],
     patrols: [
-      { timeTag: "全天", target: "主厂房", personnel: "周九", vehicle: "1号车", other: "正常", metadata: {} },
-      { timeTag: "上午", target: "罐区", personnel: "吴十", vehicle: "2号车", other: "复查", metadata: {} }
+      { timeTag: "全天", target: "主厂房", personnel: "周九", vehicle: "1号车", other: "正常", extData: {} },
+      { timeTag: "上午", target: "罐区", personnel: "吴十", vehicle: "2号车", other: "复查", extData: {} }
     ],
     others: [
       { timeTag: "下午", task: "消防演练", personnel: "郑十一", vehicle: "3号车", other: "集合" }
@@ -153,7 +153,7 @@ describe("BoardView", () => {
     mockedFetchBoard.mockResolvedValue(
       makeSnapshot({
         permits: [{ timeTag: "上午", target: "", task: "动火许可", personnel: "", vehicle: "", other: "" }],
-        patrols: [{ timeTag: "下午", target: "罐区", personnel: "", vehicle: "", other: "", metadata: {} }],
+        patrols: [{ timeTag: "下午", target: "罐区", personnel: "", vehicle: "", other: "", extData: {} }],
         others: [{ timeTag: "全天", task: "值守", personnel: "", vehicle: "", other: "" }]
       })
     );

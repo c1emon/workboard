@@ -61,7 +61,7 @@ const items = [
     content: "A线停电操作",
     startAt: "2026-05-01T08:30:00+08:00",
     endAt: "2026-05-01T10:30:00+08:00",
-    metadata: {}
+    extData: {}
   }
 ];
 

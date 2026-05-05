@@ -10,6 +10,7 @@ import {
   updateTaskInstance,
   updateTaskInstanceStatus
 } from "../../api/client";
+import { extDataString, extDataTimeTag } from "../../utils/extData";
 import type { TaskInstanceAdminContext } from "./types";
 
 export interface TaskInstanceForm {
@@ -66,12 +67,12 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   function openTaskInstanceEdit(record: TaskInstanceRecord): void {
     taskInstanceEditingId.value = record.id;
     taskInstanceFormOpen.value = true;
-    taskInstanceForm.timeTag = metadataTimeTag(record.metadata) ?? timeTagFromRange(record.startAt, record.endAt);
+    taskInstanceForm.timeTag = extDataTimeTag(record.extData) ?? timeTagFromRange(record.startAt, record.endAt);
     taskInstanceForm.date = toChinaDate(record.startAt);
-    taskInstanceForm.target = metadataString(record.metadata, "target") || record.content;
-    taskInstanceForm.personnel = metadataString(record.metadata, "personnel");
-    taskInstanceForm.vehicle = metadataString(record.metadata, "vehicle");
-    taskInstanceForm.other = metadataString(record.metadata, "other");
+    taskInstanceForm.target = extDataString(record.extData, "target") || record.content;
+    taskInstanceForm.personnel = extDataString(record.extData, "personnel");
+    taskInstanceForm.vehicle = extDataString(record.extData, "vehicle");
+    taskInstanceForm.other = extDataString(record.extData, "other");
   }
 
   function closeTaskInstanceForm(): void {
@@ -157,7 +158,7 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
       startAt,
       endAt,
       content: taskInstanceForm.target,
-      metadata: {
+      extData: {
         timeTag: taskInstanceForm.timeTag,
         target: taskInstanceForm.target,
         personnel: taskInstanceForm.personnel,
@@ -219,16 +220,6 @@ function timeRangeForDateTag(date: string, timeTag: TaskInstanceForm["timeTag"])
   if (timeTag === "全天") return { startAt: `${date}T00:00:00+08:00`, endAt: `${date}T23:59:59+08:00` };
   if (timeTag === "下午") return { startAt: `${date}T12:00:00+08:00`, endAt: `${date}T17:00:00+08:00` };
   return { startAt: `${date}T08:00:00+08:00`, endAt: `${date}T12:00:00+08:00` };
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string {
-  const value = metadata[key];
-  return typeof value === "string" ? value : "";
-}
-
-function metadataTimeTag(metadata: Record<string, unknown>): TaskInstanceForm["timeTag"] | null {
-  const value = metadata.timeTag;
-  return value === "全天" || value === "上午" || value === "下午" ? value : null;
 }
 
 function timeTagFromRange(startAt: string, endAt: string): TaskInstanceForm["timeTag"] {

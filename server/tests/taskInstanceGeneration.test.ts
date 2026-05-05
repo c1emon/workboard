@@ -187,9 +187,9 @@ describe("task instance generation", () => {
       startAt: "2026-01-01T00:00:00+08:00",
       endAt: "2026-01-01T23:59:59+08:00"
     });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "一号点", metadata: { cycleDay: 1, timeTag: "上午" } });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "二号点", metadata: { cycleDay: 2, timeTag: "上午" } });
-    insertItem(db, { id: "day-90", templateId: "patrol-1", content: "九十号点", metadata: { cycleDay: 90, timeTag: "上午" } });
+    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "一号点", extData: { cycleDay: 1, timeTag: "上午" } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "二号点", extData: { cycleDay: 2, timeTag: "上午" } });
+    insertItem(db, { id: "day-90", templateId: "patrol-1", content: "九十号点", extData: { cycleDay: 90, timeTag: "上午" } });
 
     generateTaskInstances(db, {
       windowStartDate: "2026-01-01",
@@ -212,7 +212,7 @@ describe("task instance generation", () => {
       id: "item-1",
       templateId: "patrol-1",
       content: "下午巡视",
-      metadata: { cycleDay: 1, timeTag: "下午", target: "A区", personnel: "张三", vehicle: "工程车", other: "带钥匙" }
+      extData: { cycleDay: 1, timeTag: "下午", target: "A区", personnel: "张三", vehicle: "工程车", other: "带钥匙" }
     });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-01", types: ["patrol"] });
@@ -234,8 +234,8 @@ describe("task instance generation", () => {
     const db = createTestDatabase();
     insertTemplate(db, { id: "patrol-1", type: "patrol", startAt: "2026-05-01T00:00:00+08:00", endAt: "2026-05-01T23:59:59+08:00" });
     insertTemplate(db, { id: "patrol-2", type: "patrol", startAt: "2026-05-01T00:00:00+08:00", endAt: "2026-05-01T23:59:59+08:00" });
-    insertItem(db, { id: "item-1", templateId: "patrol-1", content: "一号模板", metadata: { cycleDay: 1 } });
-    insertItem(db, { id: "item-2", templateId: "patrol-2", content: "二号模板", metadata: { cycleDay: 1 } });
+    insertItem(db, { id: "item-1", templateId: "patrol-1", content: "一号模板", extData: { cycleDay: 1 } });
+    insertItem(db, { id: "item-2", templateId: "patrol-2", content: "二号模板", extData: { cycleDay: 1 } });
 
     const result = generateTaskInstances(db, {
       windowStartDate: "2026-05-01",
@@ -258,8 +258,8 @@ describe("task instance generation", () => {
       endAt: "2026-05-01T23:59:59+08:00",
       skipHolidays: true
     });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "第一天", metadata: { cycleDay: 1 } });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "第二天", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "第一天", extData: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "第二天", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-03", types: ["patrol"] });
 
@@ -278,8 +278,8 @@ describe("task instance generation", () => {
       endAt: "2026-05-01T23:59:59+08:00",
       skipWeekends: true
     });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "工作日一", metadata: { cycleDay: 1 } });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "工作日二", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "工作日一", extData: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "工作日二", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-04", types: ["patrol"] });
 
@@ -299,8 +299,8 @@ describe("task instance generation", () => {
       endAt: "2026-05-01T23:59:59+08:00",
       skipWeekends: true
     });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "周五", metadata: { cycleDay: 1 } });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "调休周六", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "周五", extData: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "调休周六", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-02", types: ["patrol"] });
 
@@ -380,7 +380,7 @@ describe("task instance generation", () => {
   it("updates generated pending instances only when refreshPending is true", () => {
     const db = createTestDatabase();
     insertTemplate(db, { id: "operation-1", startAt: "2026-05-01T08:00:00+08:00", endAt: "2026-05-01T09:00:00+08:00" });
-    insertItem(db, { id: "item-1", templateId: "operation-1", content: "new content", metadata: { priority: "P1" } });
+    insertItem(db, { id: "item-1", templateId: "operation-1", content: "new content", extData: { priority: "P1" } });
     insertExistingInstance(db, {
       id: "existing",
       templateId: "operation-1",
@@ -423,7 +423,7 @@ describe("task instance generation", () => {
   it("refreshes generated pending patrol instances when timeTag changes", () => {
     const db = createTestDatabase();
     insertTemplate(db, { id: "patrol-1", type: "patrol", startAt: "2026-05-01T00:00:00+08:00", endAt: "2026-05-01T23:59:59+08:00" });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "巡视", metadata: { cycleDay: 1, timeTag: "上午" } });
+    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "巡视", extData: { cycleDay: 1, timeTag: "上午" } });
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-01", types: ["patrol"] });
 
     db.prepare("update task_template_items set ext_data_json = ? where id = ?").run(JSON.stringify({ cycleDay: 1, timeTag: "下午" }), "day-1");
@@ -466,7 +466,7 @@ describe("task instance generation", () => {
   it("does not generate patrol dates with no matching cycleDay item", () => {
     const db = createTestDatabase();
     insertTemplate(db, { id: "patrol-1", type: "patrol", startAt: "2026-05-01T00:00:00+08:00", endAt: "2026-05-01T23:59:59+08:00" });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-01", types: ["patrol"] });
 
@@ -480,9 +480,9 @@ describe("task instance generation", () => {
       type: "patrol",
       startAt: "2026-05-01T00:00:00+08:00",
       endAt: "2026-05-01T23:59:59+08:00",
-      metadata: { cycleLength: "0" }
+      extData: { cycleLength: "0" }
     });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "第二天", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "第二天", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-03", types: ["patrol"] });
 
@@ -498,8 +498,8 @@ describe("task instance generation", () => {
       startAt: "2026-05-01T00:00:00+08:00",
       endAt: "2026-05-02T23:59:59+08:00"
     });
-    insertItem(db, { id: "day-1", templateId: "patrol-once", content: "首日", metadata: { cycleDay: 1 } });
-    insertItem(db, { id: "day-2", templateId: "patrol-once", content: "次日", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-1", templateId: "patrol-once", content: "首日", extData: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-once", content: "次日", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-05-01", windowEndDate: "2026-05-05", types: ["patrol"] });
 
@@ -522,8 +522,8 @@ describe("task instance generation", () => {
   it("generates across month and year boundaries", () => {
     const db = createTestDatabase();
     insertTemplate(db, { id: "patrol-1", type: "patrol", startAt: "2026-12-31T00:00:00+08:00", endAt: "2026-12-31T23:59:59+08:00" });
-    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "年末", metadata: { cycleDay: 1 } });
-    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "年初", metadata: { cycleDay: 2 } });
+    insertItem(db, { id: "day-1", templateId: "patrol-1", content: "年末", extData: { cycleDay: 1 } });
+    insertItem(db, { id: "day-2", templateId: "patrol-1", content: "年初", extData: { cycleDay: 2 } });
 
     generateTaskInstances(db, { windowStartDate: "2026-12-31", windowEndDate: "2027-01-01", types: ["patrol"] });
 
@@ -568,7 +568,7 @@ function insertTemplate(
     skipWeekends?: boolean;
     skipHolidays?: boolean;
     enabled?: boolean;
-    metadata?: Record<string, unknown>;
+    extData?: Record<string, unknown>;
   }
 ): void {
   const now = "2026-05-01T00:00:00.000Z";
@@ -589,7 +589,7 @@ function insertTemplate(
     input.skipWeekends ? 1 : 0,
     input.skipHolidays ? 1 : 0,
     input.enabled === false ? 0 : 1,
-    JSON.stringify(input.metadata ?? {}),
+    JSON.stringify(input.extData ?? {}),
     now,
     now
   );
@@ -603,7 +603,7 @@ function insertItem(
     offsetMinutes?: number;
     durationMinutes?: number;
     content?: string;
-    metadata?: Record<string, unknown>;
+    extData?: Record<string, unknown>;
     sortOrder?: number;
   }
 ): void {
@@ -617,7 +617,7 @@ function insertItem(
     input.offsetMinutes ?? 0,
     input.durationMinutes ?? 60,
     input.content ?? input.id,
-    JSON.stringify(input.metadata ?? {}),
+    JSON.stringify(input.extData ?? {}),
     input.sortOrder ?? 0
   );
 }

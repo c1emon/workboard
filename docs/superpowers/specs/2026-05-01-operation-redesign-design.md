@@ -83,7 +83,7 @@ The create and edit modal manages child-task fields:
 - Content
 - Offset minutes
 - Duration minutes
-- Metadata JSON
+- Preserved extData object, not exposed as a raw JSON editor
 - Sort order if needed by the implementation
 
 The modal validates inputs before save and displays backend validation errors.
@@ -178,7 +178,7 @@ Child task validation follows the existing task item validation:
 - `durationMinutes` must be positive.
 - `offsetMinutes + durationMinutes` must be less than or equal to the parent occurrence duration.
 - Child tasks may overlap.
-- Metadata must be a JSON object.
+- extData must be a JSON object at the API boundary.
 
 The update endpoint for a child task must verify that the item belongs to the operation plan in the URL.
 
@@ -193,7 +193,7 @@ No board API contract change is required. Existing `operation.items` continues t
 - `content`
 - `startAt`
 - `endAt`
-- `metadata`
+- `extData`
 
 The redesigned admin APIs should publish board events after successful writes so the board updates through the existing live-refresh path.
 

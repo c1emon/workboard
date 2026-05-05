@@ -20,7 +20,7 @@ vi.mock("../src/api/client", () => ({
       startAt: "2026-05-01T08:00:00+08:00",
       endAt: "2026-05-01T12:00:00+08:00",
       content: "人工巡视",
-      metadata: { target: "1号线", personnel: "张三" },
+      extData: { target: "1号线", personnel: "张三" },
       status: "pending",
       generatedAt: "2026-05-01T00:00:00.000Z",
       updatedAt: "2026-05-01T00:00:00.000Z"
@@ -145,7 +145,7 @@ describe("TaskInstanceManager", () => {
       startAt: "2026-05-02T12:00:00+08:00",
       endAt: "2026-05-02T17:00:00+08:00",
       content: "2号线",
-      metadata: {
+      extData: {
         timeTag: "下午",
         target: "2号线",
         personnel: "李四",

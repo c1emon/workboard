@@ -64,7 +64,7 @@ export interface OperationPlanItemRecord {
   offsetMinutes: number;
   durationMinutes: number;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder: number;
 }
 
@@ -103,7 +103,7 @@ export interface OperationPlanInput {
     offsetMinutes: number;
     durationMinutes: number;
     content: string;
-    metadata: Record<string, unknown>;
+    extData: Record<string, unknown>;
     sortOrder: number;
   };
 }
@@ -112,7 +112,7 @@ export interface OperationPlanItemInput {
   offsetMinutes: number;
   durationMinutes: number;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder: number;
 }
 
@@ -127,7 +127,7 @@ export interface TaskInstanceRecord {
   startAt: string;
   endAt: string;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   status: TaskInstanceStatus;
   generatedAt: string;
   updatedAt: string;
@@ -138,7 +138,7 @@ export interface TaskInstanceInput {
   startAt: string;
   endAt: string;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 export interface TaskInstanceGenerationInput {

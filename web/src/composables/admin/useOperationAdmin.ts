@@ -72,9 +72,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     durationHours: 1,
     durationMinutes: 60,
     content: "",
-    metadataJson: "{}",
-    metadataError: null as string | null,
-    metadataExpanded: false,
+    extData: {} as Record<string, unknown>,
     sortOrder: 0
   });
 
@@ -100,13 +98,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
   watch(selectedDate, (date) => {
     if (!operationRefreshOpen.value) resetOperationRefreshForm(date);
   });
-
-  watch(
-    () => operationItemForm.metadataJson,
-    () => {
-      if (operationItemForm.metadataError) operationItemForm.metadataError = null;
-    }
-  );
 
   async function loadOperationRows(): Promise<void> {
     operationRows.value = await fetchOperationPlans(selectedDate.value, operationShowAll.value ? "all" : "date");
@@ -251,19 +242,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
     };
   }
 
-  function parseMetadata(value: string): { metadata: Record<string, unknown> } | { error: string } {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(value || "{}");
-    } catch {
-      return { error: "Metadata JSON 格式无效" };
-    }
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { error: "Metadata JSON 必须是对象" };
-    }
-    return { metadata: parsed as Record<string, unknown> };
-  }
-
   function resetOperationForm(): void {
     operationForm.name = "操作";
     operationForm.description = "操作安排";
@@ -292,7 +270,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function resetOperationItemForm(): void {
-    operationItemForm.metadataError = null;
     operationItemModalOpen.value = false;
     operationItemModalMode.value = "edit";
     operationItemForm.id = "";
@@ -300,8 +277,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     setOperationItemOffset(0);
     setOperationItemDuration(60);
     operationItemForm.content = "";
-    operationItemForm.metadataJson = "{}";
-    operationItemForm.metadataExpanded = false;
+    operationItemForm.extData = {};
     operationItemForm.sortOrder = 0;
   }
 
@@ -342,7 +318,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function selectOperationItem(item: OperationPlanItemRecord): void {
-    operationItemForm.metadataError = null;
     operationSelectedItemId.value = item.id;
     operationItemModalMode.value = "edit";
     operationItemForm.id = item.id;
@@ -350,15 +325,13 @@ export function useOperationAdmin(context: OperationAdminContext) {
     setOperationItemOffset(item.offsetMinutes);
     setOperationItemDuration(item.durationMinutes);
     operationItemForm.content = item.content;
-    operationItemForm.metadataJson = JSON.stringify(item.metadata, null, 2);
-    operationItemForm.metadataExpanded = false;
+    operationItemForm.extData = { ...item.extData };
     operationItemForm.sortOrder = item.sortOrder;
     operationItemModalOpen.value = true;
   }
 
   function openOperationItemCreate(): void {
     if (operationReadOnly.value || !operationRecordId.value) return;
-    operationItemForm.metadataError = null;
     operationSelectedItemId.value = null;
     operationItemModalMode.value = "create";
     operationItemForm.id = "";
@@ -366,8 +339,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     setOperationItemOffset(0);
     setOperationItemDuration(60);
     operationItemForm.content = "";
-    operationItemForm.metadataJson = "{}";
-    operationItemForm.metadataExpanded = false;
+    operationItemForm.extData = {};
     operationItemForm.sortOrder = operationDetailItems.value.length;
     operationItemModalOpen.value = true;
   }
@@ -383,7 +355,6 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function closeOperationItemModal(): void {
-    operationItemForm.metadataError = null;
     operationItemModalOpen.value = false;
   }
 
@@ -421,18 +392,12 @@ export function useOperationAdmin(context: OperationAdminContext) {
   async function saveOperationItem(): Promise<void> {
     if (operationReadOnly.value || !operationRecordId.value) return;
     const recordId = operationRecordId.value;
-    const metadataResult = parseMetadata(operationItemForm.metadataJson);
-    if ("error" in metadataResult) {
-      operationItemForm.metadataError = metadataResult.error;
-      return;
-    }
-    operationItemForm.metadataError = null;
     await withStatus(async () => {
       const itemPayload = {
         offsetMinutes: operationItemAbsoluteOffsetMinutes(),
         durationMinutes: operationItemDurationTotalMinutes(),
         content: operationItemForm.content,
-        metadata: metadataResult.metadata,
+        extData: { ...operationItemForm.extData },
         sortOrder: operationItemForm.sortOrder
       };
       if (operationItemModalMode.value === "create") {
