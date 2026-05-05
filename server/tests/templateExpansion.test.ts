@@ -15,7 +15,7 @@ describe("template expansion", () => {
     skipWeekends: false,
     skipHolidays: false,
     enabled: true,
-    metadata: {}
+    extData: {}
   };
 
   const baseItem: TaskTemplateItemInput = {
@@ -23,15 +23,15 @@ describe("template expansion", () => {
     offsetMinutes: 0,
     durationMinutes: 60,
     content: "A",
-    metadata: {}
+    extData: {}
   };
 
   it("expands overlapping child tasks relative to an occurrence start", () => {
     const expanded = expandTemplate(
       baseTemplate,
       [
-        { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A", metadata: {} },
-        { id: "b", offsetMinutes: 60, durationMinutes: 120, content: "B", metadata: {} }
+        { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A", extData: {} },
+        { id: "b", offsetMinutes: 60, durationMinutes: 120, content: "B", extData: {} }
       ],
       {
         windowStart: "2026-05-01T07:00:00+08:00",

@@ -72,7 +72,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     durationHours: 1,
     durationMinutes: 60,
     content: "",
-    metadata: {} as Record<string, unknown>,
+    extData: {} as Record<string, unknown>,
     sortOrder: 0
   });
 
@@ -277,7 +277,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     setOperationItemOffset(0);
     setOperationItemDuration(60);
     operationItemForm.content = "";
-    operationItemForm.metadata = {};
+    operationItemForm.extData = {};
     operationItemForm.sortOrder = 0;
   }
 
@@ -325,7 +325,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     setOperationItemOffset(item.offsetMinutes);
     setOperationItemDuration(item.durationMinutes);
     operationItemForm.content = item.content;
-    operationItemForm.metadata = { ...item.metadata };
+    operationItemForm.extData = { ...item.extData };
     operationItemForm.sortOrder = item.sortOrder;
     operationItemModalOpen.value = true;
   }
@@ -339,7 +339,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     setOperationItemOffset(0);
     setOperationItemDuration(60);
     operationItemForm.content = "";
-    operationItemForm.metadata = {};
+    operationItemForm.extData = {};
     operationItemForm.sortOrder = operationDetailItems.value.length;
     operationItemModalOpen.value = true;
   }
@@ -397,7 +397,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
         offsetMinutes: operationItemAbsoluteOffsetMinutes(),
         durationMinutes: operationItemDurationTotalMinutes(),
         content: operationItemForm.content,
-        metadata: { ...operationItemForm.metadata },
+        extData: { ...operationItemForm.extData },
         sortOrder: operationItemForm.sortOrder
       };
       if (operationItemModalMode.value === "create") {

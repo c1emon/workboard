@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
-import { parseTaskInstanceMetadata } from "../domain/taskInstances.js";
+import { parseExtDataJson } from "../domain/taskInstances.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 import { validateAdminPayload } from "./validation.js";
 
@@ -93,7 +93,7 @@ interface PatrolItemRow {
   sort_order: number;
 }
 
-interface PatrolItemMetadata {
+interface PatrolItemExtData {
   cycleDay: number;
   timeTag: TimeTag;
   target: string;
@@ -249,7 +249,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
       `insert into task_template_items
        (id, template_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
        values (?, ?, 0, 0, ?, ?, ?)`
-    ).run(id, params.data.id, validation.data.content ?? validation.data.target, JSON.stringify(itemMetadata(validation.data)), validation.data.sortOrder);
+    ).run(id, params.data.id, validation.data.content ?? validation.data.target, JSON.stringify(itemExtData(validation.data)), validation.data.sortOrder);
     refreshPatrolPlanDerivedEndAt(db, params.data.id);
     boardEvents.publish();
 
@@ -279,7 +279,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
         const sortOrder = sortOrders.get(key) ?? 0;
         sortOrders.set(key, sortOrder + 1);
         const payload = { ...item, sortOrder, content: item.target };
-        insertItem.run(nanoid(), params.data.id, item.target, JSON.stringify(itemMetadata(payload)), sortOrder);
+        insertItem.run(nanoid(), params.data.id, item.target, JSON.stringify(itemExtData(payload)), sortOrder);
       }
       refreshPatrolPlanDerivedEndAt(db, params.data.id);
     });
@@ -313,7 +313,7 @@ export function registerPatrolPlanRoutes(app: FastifyInstance, db: AppDatabase, 
        where id = ? and template_id = ?`
     ).run(
       validation.data.content ?? validation.data.target,
-      JSON.stringify(itemMetadata(validation.data)),
+      JSON.stringify(itemExtData(validation.data)),
       validation.data.sortOrder,
       params.data.itemId,
       params.data.id
@@ -404,16 +404,16 @@ function mapPlanRowWithCycleLength(row: PatrolPlanRow, cycleLength: number) {
 }
 
 function mapItemRow(row: PatrolItemRow) {
-  const metadata = parseItemMetadata(row.ext_data_json);
+  const extData = parseItemExtData(row.ext_data_json);
   return {
     id: row.id,
     templateId: row.template_id,
-    cycleDay: metadata.cycleDay,
-    timeTag: metadata.timeTag,
-    target: metadata.target,
-    personnel: metadata.personnel,
-    vehicle: metadata.vehicle,
-    other: metadata.other,
+    cycleDay: extData.cycleDay,
+    timeTag: extData.timeTag,
+    target: extData.target,
+    personnel: extData.personnel,
+    vehicle: extData.vehicle,
+    other: extData.other,
     content: row.content,
     sortOrder: row.sort_order
   };
@@ -423,20 +423,20 @@ function compareCycleItems(left: ReturnType<typeof mapItemRow>, right: ReturnTyp
   return left.cycleDay - right.cycleDay || timeTagOrder(left.timeTag) - timeTagOrder(right.timeTag) || left.sortOrder - right.sortOrder || left.id.localeCompare(right.id);
 }
 
-function parseItemMetadata(raw: string): PatrolItemMetadata {
-  const metadata = parseObject(raw);
+function parseItemExtData(raw: string): PatrolItemExtData {
+  const extData = parseObject(raw);
   return {
-    cycleDay: positiveInteger(metadata.cycleDay, 1),
-    timeTag: metadata.timeTag === "上午" || metadata.timeTag === "下午" || metadata.timeTag === "全天" ? metadata.timeTag : "全天",
-    target: stringValue(metadata.target),
-    personnel: stringValue(metadata.personnel),
-    vehicle: stringValue(metadata.vehicle),
-    other: stringValue(metadata.other)
+    cycleDay: positiveInteger(extData.cycleDay, 1),
+    timeTag: extData.timeTag === "上午" || extData.timeTag === "下午" || extData.timeTag === "全天" ? extData.timeTag : "全天",
+    target: stringValue(extData.target),
+    personnel: stringValue(extData.personnel),
+    vehicle: stringValue(extData.vehicle),
+    other: stringValue(extData.other)
   };
 }
 
 function parseObject(raw: string): Record<string, unknown> {
-  return parseTaskInstanceMetadata(raw);
+  return parseExtDataJson(raw);
 }
 
 function stringValue(value: unknown): string {
@@ -447,7 +447,7 @@ function positiveInteger(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
-function itemMetadata(input: z.infer<typeof itemInputSchema>): PatrolItemMetadata {
+function itemExtData(input: z.infer<typeof itemInputSchema>): PatrolItemExtData {
   return {
     cycleDay: input.cycleDay,
     timeTag: input.timeTag,
@@ -461,8 +461,8 @@ function itemMetadata(input: z.infer<typeof itemInputSchema>): PatrolItemMetadat
 function hasDuplicateCycleItem(db: AppDatabase, planId: string, cycleDay: number, timeTag: TimeTag, sortOrder: number, excludeItemId?: string): boolean {
   return listPlanItems(db, planId).some((row) => {
     if (excludeItemId && row.id === excludeItemId) return false;
-    const metadata = parseItemMetadata(row.ext_data_json);
-    return metadata.cycleDay === cycleDay && metadata.timeTag === timeTag && row.sort_order === sortOrder;
+    const extData = parseItemExtData(row.ext_data_json);
+    return extData.cycleDay === cycleDay && extData.timeTag === timeTag && row.sort_order === sortOrder;
   });
 }
 
@@ -471,14 +471,14 @@ function timeTagOrder(timeTag: TimeTag): number {
 }
 
 function maxItemCycleDay(db: AppDatabase, planId: string): number {
-  return listPlanItems(db, planId).reduce((max, row) => Math.max(max, parseItemMetadata(row.ext_data_json).cycleDay), 0);
+  return listPlanItems(db, planId).reduce((max, row) => Math.max(max, parseItemExtData(row.ext_data_json).cycleDay), 0);
 }
 
 function cycleLengthsForPlanIds(db: AppDatabase, planIds: string[]): Map<string, number> {
   const cycleLengths = new Map<string, number>();
   for (const row of listPlanItemsForPlans(db, planIds)) {
     const current = cycleLengths.get(row.template_id) ?? 0;
-    cycleLengths.set(row.template_id, Math.max(current, parseItemMetadata(row.ext_data_json).cycleDay));
+    cycleLengths.set(row.template_id, Math.max(current, parseItemExtData(row.ext_data_json).cycleDay));
   }
   return cycleLengths;
 }

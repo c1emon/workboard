@@ -207,7 +207,7 @@ describe("board snapshot", () => {
       id: "item-1",
       templateId: "template-1",
       content: "模板旧内容",
-      metadata: { timeTag: "上午", target: "模板旧目标", personnel: "模板旧人员", vehicle: "模板旧车辆", other: "模板旧备注" }
+      extData: { timeTag: "上午", target: "模板旧目标", personnel: "模板旧人员", vehicle: "模板旧车辆", other: "模板旧备注" }
     });
     insertTaskInstance(db, {
       id: "generated-1",
@@ -223,7 +223,7 @@ describe("board snapshot", () => {
       personnel: "生成时人员",
       vehicle: "生成时车辆",
       other: "生成时备注",
-      metadata: { cycleDay: 7 }
+      extData: { cycleDay: 7 }
     });
     db.prepare("update task_template_items set content = ?, ext_data_json = ? where id = ?").run(
       "模板新内容",
@@ -241,7 +241,7 @@ describe("board snapshot", () => {
         vehicle: "生成时车辆",
         other: "生成时备注",
         status: "pending",
-        metadata: {
+        extData: {
           cycleDay: 7,
           timeTag: "下午",
           target: "生成时目标",
@@ -277,7 +277,7 @@ describe("board snapshot", () => {
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T15:42:18+08:00"));
 
     expect(snapshot.operation.items).toEqual([
-      { content: "跨日运行", startAt: "2026-04-30T23:00:00.000+08:00", endAt: "2026-05-01T02:00:00.000+08:00", status: "pending", metadata: {} }
+      { content: "跨日运行", startAt: "2026-04-30T23:00:00.000+08:00", endAt: "2026-05-01T02:00:00.000+08:00", status: "pending", extData: {} }
     ]);
     expect(snapshot.patrols).toMatchObject([{ target: "围界" }]);
   });
@@ -348,7 +348,7 @@ describe("board snapshot", () => {
     ]);
   });
 
-  it("warns and falls back when task metadata JSON is invalid", () => {
+  it("warns and falls back when task extData JSON is invalid", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const db = createTestDatabase();
     db.prepare(
@@ -369,8 +369,8 @@ describe("board snapshot", () => {
 
     const snapshot = getBoardSnapshot(db, new Date("2026-05-01T08:30:00+08:00"));
 
-    expect(snapshot.operation.items[0].metadata).toEqual({});
-    expect(warnSpy).toHaveBeenCalledWith("Failed to parse task metadata JSON", { raw: "{not-json" });
+    expect(snapshot.operation.items[0].extData).toEqual({});
+    expect(warnSpy).toHaveBeenCalledWith("Failed to parse task extData JSON", { raw: "{not-json" });
   });
 });
 
@@ -398,7 +398,7 @@ function insertTaskInstance(
     personnel?: string;
     vehicle?: string;
     other?: string;
-    metadata?: Record<string, unknown>;
+    extData?: Record<string, unknown>;
   }
 ): void {
   const rangeByTag = {
@@ -410,11 +410,11 @@ function insertTaskInstance(
   const [start, end] = rangeByTag[timeTag];
   const now = "2026-05-01T00:00:00.000Z";
 
-  const metadata =
-    input.type === "operation" && !input.metadata
+  const extData =
+    input.type === "operation" && !input.extData
       ? {}
       : {
-          ...(input.metadata ?? {}),
+          ...(input.extData ?? {}),
           timeTag,
           target: input.target ?? input.content,
           personnel: input.personnel ?? "",
@@ -438,7 +438,7 @@ function insertTaskInstance(
     toChinaOffsetDateTime(input.startAt ?? `${input.date}T${start}`),
     toChinaOffsetDateTime(input.endAt ?? `${input.date}T${end}`),
     input.content,
-    JSON.stringify(metadata),
+    JSON.stringify(extData),
     input.status ?? "pending",
     now,
     now
@@ -468,12 +468,12 @@ function insertTemplateItem(
     id: string;
     templateId: string;
     content: string;
-    metadata?: Record<string, unknown>;
+    extData?: Record<string, unknown>;
   }
 ): void {
   db.prepare(
     `insert into task_template_items
      (id, template_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
      values (?, ?, 0, 60, ?, ?, 0)`
-  ).run(input.id, input.templateId, input.content, JSON.stringify(input.metadata ?? {}));
+  ).run(input.id, input.templateId, input.content, JSON.stringify(input.extData ?? {}));
 }

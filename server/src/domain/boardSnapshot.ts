@@ -1,10 +1,11 @@
 import type { AppDatabase } from "../db/database.js";
 import { toChinaDate, toChinaOffsetDateTime } from "./dateTime.js";
+import { extDataString, extDataTimeTag, parseExtDataJson } from "./taskInstances.js";
 import { compareTimeTag, type TimeTag } from "./timeTags.js";
 
 export interface BoardSnapshot {
   serverTime: string;
-  operation: { items: Array<{ content: string; startAt: string; endAt: string; status: TaskInstanceStatus; metadata: Record<string, unknown> }> };
+  operation: { items: Array<{ content: string; startAt: string; endAt: string; status: TaskInstanceStatus; extData: Record<string, unknown> }> };
   permits: Array<{ timeTag: TimeTag; target: string; task: string; personnel: string; vehicle: string; other: string; status: TaskInstanceStatus }>;
   patrols: Array<{
     timeTag: TimeTag;
@@ -13,7 +14,7 @@ export interface BoardSnapshot {
     vehicle: string;
     other: string;
     status: TaskInstanceStatus;
-    metadata: Record<string, unknown>;
+    extData: Record<string, unknown>;
   }>;
   others: Array<{ timeTag: TimeTag; task: string; personnel: string; vehicle: string; other: string; status: TaskInstanceStatus }>;
   leavePeople: string[];
@@ -47,7 +48,7 @@ interface SnapshotTaskInstance {
   endAt: string;
   content: string;
   status: TaskInstanceStatus;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapshot {
@@ -67,41 +68,41 @@ export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapsh
       startAt: item.startAt,
       endAt: item.endAt,
       status: item.status,
-      metadata: item.metadata
+      extData: item.extData
     }));
   const patrols = loadTaskInstances(db, "patrol", dayWindow)
     .sort(
       (a, b) =>
-        compareTimeTag(metadataTimeTag(a.metadata), metadataTimeTag(b.metadata)) ||
+        compareTimeTag(extDataTimeTag(a.extData), extDataTimeTag(b.extData)) ||
         new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
     )
     .map((item) => ({
-      timeTag: metadataTimeTag(item.metadata),
-      target: metadataString(item.metadata, "target"),
-      personnel: metadataString(item.metadata, "personnel"),
-      vehicle: metadataString(item.metadata, "vehicle"),
-      other: metadataString(item.metadata, "other"),
+      timeTag: extDataTimeTag(item.extData),
+      target: extDataString(item.extData, "target"),
+      personnel: extDataString(item.extData, "personnel"),
+      vehicle: extDataString(item.extData, "vehicle"),
+      other: extDataString(item.extData, "other"),
       status: item.status,
-      metadata: item.metadata
+      extData: item.extData
     }));
   const permits = loadTaskInstances(db, "permit", dayWindow)
     .map((item) => ({
-      timeTag: metadataTimeTag(item.metadata),
-      target: metadataString(item.metadata, "target"),
+      timeTag: extDataTimeTag(item.extData),
+      target: extDataString(item.extData, "target"),
       task: item.content ?? "",
-      personnel: metadataString(item.metadata, "personnel"),
-      vehicle: metadataString(item.metadata, "vehicle"),
-      other: metadataString(item.metadata, "other"),
+      personnel: extDataString(item.extData, "personnel"),
+      vehicle: extDataString(item.extData, "vehicle"),
+      other: extDataString(item.extData, "other"),
       status: item.status
     }))
     .sort((a, b) => compareTimeTag(a.timeTag, b.timeTag));
   const others = loadTaskInstances(db, "other", dayWindow)
     .map((item) => ({
-      timeTag: metadataTimeTag(item.metadata),
-      task: metadataString(item.metadata, "target") || (item.content ?? ""),
-      personnel: metadataString(item.metadata, "personnel"),
-      vehicle: metadataString(item.metadata, "vehicle"),
-      other: metadataString(item.metadata, "other"),
+      timeTag: extDataTimeTag(item.extData),
+      task: extDataString(item.extData, "target") || (item.content ?? ""),
+      personnel: extDataString(item.extData, "personnel"),
+      vehicle: extDataString(item.extData, "vehicle"),
+      other: extDataString(item.extData, "other"),
       status: item.status
     }))
     .sort((a, b) => compareTimeTag(a.timeTag, b.timeTag));
@@ -147,27 +148,6 @@ function loadTaskInstances(
     endAt: row.end_at,
     content: row.content,
     status: row.status,
-    metadata: parseMetadata(row.ext_data_json)
+    extData: parseExtDataJson(row.ext_data_json, (raw) => console.warn("Failed to parse task extData JSON", { raw }))
   }));
-}
-
-function metadataString(metadata: Record<string, unknown>, key: string): string {
-  const value = metadata[key];
-  return typeof value === "string" ? value : "";
-}
-
-function metadataTimeTag(metadata: Record<string, unknown>): TimeTag {
-  const value = metadata.timeTag;
-  return value === "上午" || value === "下午" || value === "全天" ? value : "全天";
-}
-
-function parseMetadata(raw: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-  } catch {
-    console.warn("Failed to parse task metadata JSON", { raw });
-    return {};
-  }
-  return {};
 }

@@ -120,7 +120,7 @@ export interface OperationItemForm {
   durationHours: number;
   durationMinutes: number;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder: number;
 }
 

@@ -14,7 +14,7 @@
 
 - Modify `server/src/db/schema.ts`: replace `task_containers`/`task_items` with `task_templates`/`task_template_items`, then add `task_instances` and indexes.
 - Move/replace `server/src/domain/taskExpansion.ts` as `server/src/domain/templateExpansion.ts`: template recurrence expansion helpers with `TaskTemplate` and `TaskTemplateItemInput` naming.
-- Create `server/src/domain/taskInstances.ts`: shared instance row types, metadata parsing, source/status constants, and row mapping.
+- Create `server/src/domain/taskInstances.ts`: shared instance row types, extData parsing, source/status constants, and row mapping.
 - Create `server/src/domain/taskInstanceGeneration.ts`: idempotent generation for one-time, simple recurrence, and patrol cycle templates.
 - Modify `server/src/domain/boardSnapshot.ts`: read operation, permit, patrol, and other display data from `task_instances`; keep response shapes and board-facing sorting stable.
 - Modify `server/src/routes/admin.ts`: update operation plan routes to read/write `task_templates` and `task_template_items`; remove old patrol arrangement route handlers and old generic task container/item endpoints after replacement routes are wired.
@@ -179,7 +179,7 @@ export interface TaskTemplate {
   skipWeekends: boolean;
   skipHolidays: boolean;
   enabled: boolean;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 export interface TaskTemplateItemInput {
@@ -187,7 +187,7 @@ export interface TaskTemplateItemInput {
   offsetMinutes: number;
   durationMinutes: number;
   content?: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder?: number;
 }
 ```
@@ -243,7 +243,7 @@ export type TaskInstanceSource = (typeof taskInstanceSources)[number];
 export type TaskInstanceStatus = (typeof taskInstanceStatuses)[number];
 ```
 
-Include JSON metadata parsing that returns `{}` for invalid or non-object JSON.
+Include JSON extData parsing that returns `{}` for invalid or non-object JSON.
 
 - [x] **Step 6: Implement idempotent generation**
 
@@ -323,7 +323,7 @@ Map `ext_data_json` into the same API fields used today:
 
 - Patrol and permit: `timeTag`, `target`, `personnel`, `vehicle`, `other`.
 - Other: `timeTag`, `target` as display task fallback, `personnel`, `vehicle`, `other`.
-- Operation: `content`, `startAt`, `endAt`, `metadata`.
+- Operation: `content`, `startAt`, `endAt`, `extData`.
 
 Important constraint: do not change board frontend styles or board response field names.
 
@@ -398,7 +398,7 @@ Use Zod validation for:
 - valid `type`
 - `startAt < endAt`
 - source and status enums
-- metadata object
+- extData object
 - source type values `generated`, `manual`, and `override`
 
 Publish board events after successful create, update, status change, delete, and generation.
@@ -446,7 +446,7 @@ Update permit and other arrangement routes in `server/src/routes/admin.ts` so th
 - `DELETE /api/admin/permit-arrangements/:id`
 - Existing list helpers for permit/other arrangements
 
-Use `source_type = 'manual'`, `generation_key = null`, and map the existing time tag metadata into `task_instances.ext_data_json`. Treat disabled rows as `status = 'cancelled'` so the board can omit them without needing an `enabled` column on instances.
+Use `source_type = 'manual'`, `generation_key = null`, and map the existing time tag extData into `task_instances.ext_data_json`. Treat disabled rows as `status = 'cancelled'` so the board can omit them without needing an `enabled` column on instances.
 
 - [x] **Step 3: Verify permit/other routes**
 
@@ -565,7 +565,7 @@ DELETE /api/admin/patrol-plans/:id/items/:itemId
 
 Store patrol item fields in `task_template_items.content` and `ext_data_json`.
 
-Use this patrol item metadata shape:
+Use this patrol item extData shape:
 
 ```json
 {

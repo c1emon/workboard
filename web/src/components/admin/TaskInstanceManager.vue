@@ -184,13 +184,13 @@ function sourceText(source: TaskInstanceRecord["sourceType"]): string {
 }
 
 function displayPersonnel(record: TaskInstanceRecord): string {
-  const personnel = record.metadata.personnel;
+  const personnel = record.extData.personnel;
   return typeof personnel === "string" && personnel.trim() ? personnel : "-";
 }
 
 function displayTimeTag(record: TaskInstanceRecord): string {
-  const metadataTag = record.metadata.timeTag;
-  if (metadataTag === "全天" || metadataTag === "上午" || metadataTag === "下午") return metadataTag;
+  const extDataTag = record.extData.timeTag;
+  if (extDataTag === "全天" || extDataTag === "上午" || extDataTag === "下午") return extDataTag;
   if (record.startAt.includes("T00:00:00") && record.endAt.includes("T23:59:59")) return "全天";
   if (record.startAt.includes("T12:00:00") && record.endAt.includes("T17:00:00")) return "下午";
   return "上午";

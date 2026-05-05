@@ -21,7 +21,7 @@ describe("database schema", () => {
     ]);
   });
 
-  it("creates task templates with extensible metadata", () => {
+  it("creates task templates with extensible extData", () => {
     const db = createTestDatabase();
     const columns = db
       .prepare("pragma table_info(task_templates)")

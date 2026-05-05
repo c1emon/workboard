@@ -16,7 +16,7 @@ Each child task is defined by:
 
 - `offsetMinutes`: when the child starts relative to the cycle start.
 - `durationMinutes`: how long the child lasts.
-- `content`, `metadata`, and `sortOrder`: existing child-task display and ordering fields.
+- `content`, `extData`, and `sortOrder`: existing child-task display and ordering fields.
 
 The complete cycle duration is derived from the child task that ends latest:
 

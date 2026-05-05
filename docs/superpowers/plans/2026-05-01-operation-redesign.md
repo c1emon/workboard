@@ -57,12 +57,12 @@ Append these tests inside `describe("admin routes", () => { ... })`:
     await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${id}/items`,
-      payload: { offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: { crew: "A" }, sortOrder: 1 }
+      payload: { offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: { crew: "A" }, sortOrder: 1 }
     });
     await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${id}/items`,
-      payload: { offsetMinutes: 120, durationMinutes: 240, content: "C 操作", metadata: { crew: "B" }, sortOrder: 2 }
+      payload: { offsetMinutes: 120, durationMinutes: 240, content: "C 操作", extData: { crew: "B" }, sortOrder: 2 }
     });
 
     const listResponse = await app.inject({
@@ -88,8 +88,8 @@ Append these tests inside `describe("admin routes", () => { ... })`:
       id,
       name: "倒闸操作",
       items: [
-        { content: "A、B 操作", offsetMinutes: 0, durationMinutes: 120, metadata: { crew: "A" } },
-        { content: "C 操作", offsetMinutes: 120, durationMinutes: 240, metadata: { crew: "B" } }
+        { content: "A、B 操作", offsetMinutes: 0, durationMinutes: 120, extData: { crew: "A" } },
+        { content: "C 操作", offsetMinutes: 120, durationMinutes: 240, extData: { crew: "B" } }
       ]
     });
   });
@@ -139,25 +139,25 @@ Append this test:
     const itemResponse = await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${id}/items`,
-      payload: { offsetMinutes: 30, durationMinutes: 60, content: "检查闭锁", metadata: {}, sortOrder: 0 }
+      payload: { offsetMinutes: 30, durationMinutes: 60, content: "检查闭锁", extData: {}, sortOrder: 0 }
     });
     const { id: itemId } = itemResponse.json() as { id: string };
 
     const overflowResponse = await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${id}/items`,
-      payload: { offsetMinutes: 90, durationMinutes: 60, content: "越界", metadata: {}, sortOrder: 0 }
+      payload: { offsetMinutes: 90, durationMinutes: 60, content: "越界", extData: {}, sortOrder: 0 }
     });
     const wrongTypeResponse = await app.inject({
       method: "POST",
       url: `/api/admin/operation-plans/${patrolId}/items`,
-      payload: { offsetMinutes: 0, durationMinutes: 30, content: "错误", metadata: {}, sortOrder: 0 }
+      payload: { offsetMinutes: 0, durationMinutes: 30, content: "错误", extData: {}, sortOrder: 0 }
     });
 
     const updateItemResponse = await app.inject({
       method: "PUT",
       url: `/api/admin/operation-plans/${id}/items/${itemId}`,
-      payload: { offsetMinutes: 15, durationMinutes: 45, content: "更新检查", metadata: { done: true }, sortOrder: 3 }
+      payload: { offsetMinutes: 15, durationMinutes: 45, content: "更新检查", extData: { done: true }, sortOrder: 3 }
     });
     const disableResponse = await app.inject({
       method: "PATCH",
@@ -247,7 +247,7 @@ const operationItemInputSchema = z.object({
   offsetMinutes: z.number().int(),
   durationMinutes: z.number().int(),
   content: z.string().min(1),
-  metadata: z.record(z.unknown()).default({}),
+  extData: z.record(z.unknown()).default({}),
   sortOrder: z.number().int().default(0)
 });
 const idParamSchema = z.object({ id: z.string().min(1) });
@@ -275,7 +275,7 @@ interface OperationItemRow {
   offset_minutes: number;
   duration_minutes: number;
   content: string;
-  metadata_json: string;
+  ext_data_json: string;
   sort_order: number;
 }
 ```
@@ -411,7 +411,7 @@ Continue `registerOperationPlanRoutes` with child endpoints, then close the func
     const id = nanoid();
     db.prepare(
       `insert into task_items
-       (id, container_id, offset_minutes, duration_minutes, content, metadata_json, sort_order)
+       (id, container_id, offset_minutes, duration_minutes, content, ext_data_json, sort_order)
        values (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
@@ -419,7 +419,7 @@ Continue `registerOperationPlanRoutes` with child endpoints, then close the func
       validation.data.offsetMinutes,
       validation.data.durationMinutes,
       validation.data.content,
-      JSON.stringify(validation.data.metadata),
+      JSON.stringify(validation.data.extData),
       validation.data.sortOrder
     );
     boardEvents.publish();
@@ -438,14 +438,14 @@ Continue `registerOperationPlanRoutes` with child endpoints, then close the func
     const result = db
       .prepare(
         `update task_items
-         set offset_minutes = ?, duration_minutes = ?, content = ?, metadata_json = ?, sort_order = ?
+         set offset_minutes = ?, duration_minutes = ?, content = ?, ext_data_json = ?, sort_order = ?
          where id = ? and container_id = ?`
       )
       .run(
         validation.data.offsetMinutes,
         validation.data.durationMinutes,
         validation.data.content,
-        JSON.stringify(validation.data.metadata),
+        JSON.stringify(validation.data.extData),
         validation.data.sortOrder,
         params.data.itemId,
         params.data.id
@@ -502,7 +502,7 @@ function mapPlanRow(row: OperationPlanRow) {
 function loadItems(db: AppDatabase, containerId: string) {
   return db
     .prepare<[string], OperationItemRow>(
-      `select id, offset_minutes, duration_minutes, content, metadata_json, sort_order
+      `select id, offset_minutes, duration_minutes, content, ext_data_json, sort_order
        from task_items
        where container_id = ?
        order by sort_order, offset_minutes`
@@ -513,7 +513,7 @@ function loadItems(db: AppDatabase, containerId: string) {
       offsetMinutes: row.offset_minutes,
       durationMinutes: row.duration_minutes,
       content: row.content,
-      metadata: parseMetadata(row.metadata_json),
+      extData: parseExtDataJson(row.ext_data_json),
       sortOrder: row.sort_order
     }));
 }
@@ -526,7 +526,7 @@ function loadOperationParent(db: AppDatabase, id: string): { durationMinutes: nu
   return { durationMinutes: Math.floor((new Date(row.end_at).getTime() - new Date(row.start_at).getTime()) / 60_000) };
 }
 
-function parseMetadata(raw: string): Record<string, unknown> {
+function parseExtDataJson(raw: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
@@ -604,7 +604,7 @@ export interface OperationTaskItem {
   offsetMinutes: number;
   durationMinutes: number;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder: number;
 }
 
@@ -628,7 +628,7 @@ export interface OperationTaskInput {
   offsetMinutes: number;
   durationMinutes: number;
   content: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
   sortOrder: number;
 }
 ```
@@ -715,8 +715,8 @@ import { describe, expect, it } from "vitest";
 import OperationTaskTimeline from "../src/components/OperationTaskTimeline.vue";
 
 const items = [
-  { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 },
-  { id: "b", offsetMinutes: 240, durationMinutes: 120, content: "C 操作", metadata: {}, sortOrder: 1 }
+  { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: {}, sortOrder: 0 },
+  { id: "b", offsetMinutes: 240, durationMinutes: 120, content: "C 操作", extData: {}, sortOrder: 1 }
 ];
 
 describe("OperationTaskTimeline", () => {
@@ -1002,7 +1002,7 @@ vi.mock("../src/api/client", () => ({
     skipHolidays: false,
     enabled: true,
     childTaskCount: 1,
-    items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", metadata: {}, sortOrder: 0 }]
+    items: [{ id: "item-1", offsetMinutes: 0, durationMinutes: 120, content: "A、B 操作", extData: {}, sortOrder: 0 }]
   }),
   fetchOperationPlans: vi.fn().mockResolvedValue([
     {
@@ -1055,7 +1055,7 @@ describe("OperationPlanManager", () => {
       content: "C 操作",
       offsetMinutes: 120,
       durationMinutes: 60,
-      metadata: {},
+      extData: {},
       sortOrder: 0
     });
   });
@@ -1141,7 +1141,6 @@ Create `web/src/components/OperationPlanManager.vue` with a compact implementati
         <label>内容<input v-model="taskForm.content" name="content" required /></label>
         <label>Offset 分钟<input v-model.number="taskForm.offsetMinutes" name="offsetMinutes" min="0" required type="number" /></label>
         <label>时长分钟<input v-model.number="taskForm.durationMinutes" name="durationMinutes" min="1" required type="number" /></label>
-        <label>Metadata JSON<textarea v-model="taskForm.metadataJson" rows="4"></textarea></label>
         <div class="modal-actions">
           <button type="button" @click="closeTaskModal">取消</button>
           <button type="submit" class="primary-action">保存</button>
@@ -1188,7 +1187,7 @@ const planForm = reactive({
   skipWeekends: false,
   skipHolidays: false
 });
-const taskForm = reactive({ content: "", offsetMinutes: 0, durationMinutes: 60, metadataJson: "{}" });
+const taskForm = reactive({ content: "", offsetMinutes: 0, durationMinutes: 60, extData: {} as Record<string, unknown> });
 const durationMinutes = computed(() =>
   selectedPlan.value ? Math.max(1, Math.floor((new Date(selectedPlan.value.endAt).getTime() - new Date(selectedPlan.value.startAt).getTime()) / 60_000)) : 1
 );
@@ -1233,7 +1232,7 @@ function openTaskModal(item?: OperationTaskItem): void {
     content: item?.content ?? "",
     offsetMinutes: item?.offsetMinutes ?? 0,
     durationMinutes: item?.durationMinutes ?? 60,
-    metadataJson: JSON.stringify(item?.metadata ?? {}, null, 2)
+    extData: { ...(item?.extData ?? {}) }
   });
   taskModalOpen.value = true;
 }
@@ -1246,7 +1245,7 @@ async function saveTask(): Promise<void> {
     content: taskForm.content,
     offsetMinutes: Number(taskForm.offsetMinutes),
     durationMinutes: Number(taskForm.durationMinutes),
-    metadata: parseMetadata(taskForm.metadataJson),
+    extData: { ...taskForm.extData },
     sortOrder: 0
   };
   if (editingTaskId.value) await updateOperationTask(selectedPlan.value.id, editingTaskId.value, input);
@@ -1282,11 +1281,6 @@ function toLocalPlanForm(plan: OperationPlanDetail) {
 }
 function normalizeDateTime(value: string): string {
   return value.includes("+") || value.endsWith("Z") ? value : `${value}:00+08:00`;
-}
-function parseMetadata(raw: string): Record<string, unknown> {
-  const parsed = JSON.parse(raw) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("metadata must be an object");
-  return parsed as Record<string, unknown>;
 }
 function formatDateTime(value: string): string {
   return value.replace("T", " ").slice(0, 16);

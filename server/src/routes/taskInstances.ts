@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 import { toChinaDate, toChinaOffsetDateTime } from "../domain/dateTime.js";
 import { generateTaskInstances } from "../domain/taskInstanceGeneration.js";
-import { parseTaskInstanceMetadata, taskInstanceStatuses } from "../domain/taskInstances.js";
+import { parseExtDataJson, taskInstanceStatuses } from "../domain/taskInstances.js";
 import type { BoardEventBroadcaster } from "./boardEvents.js";
 import { validateAdminPayload } from "./validation.js";
 
@@ -17,7 +17,7 @@ const dateTimeSchema = z.string().refine((value) => !Number.isNaN(Date.parse(val
 const resourceIdSchema = z.string().min(1).max(64);
 const typeSchema = z.enum(taskInstanceTypes);
 const statusSchema = z.enum(taskInstanceStatuses);
-const metadataSchema = z.record(z.unknown());
+const extDataSchema = z.record(z.unknown());
 
 const listQuerySchema = z.object({
   date: dateSchema.optional(),
@@ -31,7 +31,7 @@ const instanceInputSchema = z
     startAt: dateTimeSchema,
     endAt: dateTimeSchema,
     content: z.string().default(""),
-    metadata: metadataSchema.default({})
+    extData: extDataSchema.default({})
   })
   .superRefine(validateDateTimeRange);
 
@@ -161,7 +161,7 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
       startAt,
       endAt,
       validation.data.content,
-      JSON.stringify(validation.data.metadata),
+      JSON.stringify(validation.data.extData),
       now,
       now
     );
@@ -196,7 +196,7 @@ export function registerTaskInstanceRoutes(app: FastifyInstance, db: AppDatabase
       startAt,
       endAt,
       validation.data.content,
-      JSON.stringify(validation.data.metadata),
+      JSON.stringify(validation.data.extData),
       now,
       params.data.id
     );
@@ -272,7 +272,7 @@ function mapTaskInstanceRow(row: TaskInstanceRow) {
     startAt: row.start_at,
     endAt: row.end_at,
     content: row.content,
-    metadata: parseTaskInstanceMetadata(row.ext_data_json),
+    extData: parseExtDataJson(row.ext_data_json),
     status: row.status,
     generatedAt: row.generated_at,
     updatedAt: row.updated_at

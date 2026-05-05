@@ -44,7 +44,7 @@
 - Create: `web/tsconfig.json`
 - Create: `web/vite.config.ts`
 
-- [ ] **Step 1: Create root workspace metadata**
+- [ ] **Step 1: Create root workspace package setup**
 
 Create `package.json`:
 
@@ -242,7 +242,7 @@ create table if not exists task_items (
   personnel text not null default '',
   vehicle text not null default '',
   other text not null default '',
-  metadata_json text not null default '{}',
+  ext_data_json text not null default '{}',
   sort_order integer not null default 0
 );
 
@@ -356,8 +356,8 @@ describe("task expansion", () => {
         enabled: true
       },
       [
-        { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A", metadata: {} },
-        { id: "b", offsetMinutes: 60, durationMinutes: 120, content: "B", metadata: {} }
+        { id: "a", offsetMinutes: 0, durationMinutes: 120, content: "A", extData: {} },
+        { id: "b", offsetMinutes: 60, durationMinutes: 120, content: "B", extData: {} }
       ],
       {
         windowStart: "2026-05-01T07:00:00+08:00",
@@ -438,7 +438,7 @@ export interface TaskItemInput {
   personnel?: string;
   vehicle?: string;
   other?: string;
-  metadata: Record<string, unknown>;
+  extData: Record<string, unknown>;
 }
 
 export interface ExpandedTaskItem extends TaskItemInput {
@@ -579,9 +579,9 @@ import { compareTimeTag, type TimeTag } from "./timeTags.js";
 
 export interface BoardSnapshot {
   serverTime: string;
-  operation: { items: Array<{ content: string; startAt: string; endAt: string; metadata: Record<string, unknown> }> };
+  operation: { items: Array<{ content: string; startAt: string; endAt: string; extData: Record<string, unknown> }> };
   permits: Array<{ timeTag: TimeTag; permit: string; personnel: string; area: string; other: string }>;
-  patrols: Array<{ timeTag: TimeTag; target: string; personnel: string; vehicle: string; other: string; metadata: Record<string, unknown> }>;
+  patrols: Array<{ timeTag: TimeTag; target: string; personnel: string; vehicle: string; other: string; extData: Record<string, unknown> }>;
   others: Array<{ timeTag: TimeTag; task: string; personnel: string; vehicle: string; other: string }>;
   leavePeople: string[];
 }
@@ -925,9 +925,9 @@ export type TimeTag = "全天" | "上午" | "下午";
 
 export interface BoardSnapshot {
   serverTime: string;
-  operation: { items: Array<{ content: string; startAt: string; endAt: string; metadata: Record<string, unknown> }> };
+  operation: { items: Array<{ content: string; startAt: string; endAt: string; extData: Record<string, unknown> }> };
   permits: Array<{ timeTag: TimeTag; permit: string; personnel: string; area: string; other: string }>;
-  patrols: Array<{ timeTag: TimeTag; target: string; personnel: string; vehicle: string; other: string; metadata: Record<string, unknown> }>;
+  patrols: Array<{ timeTag: TimeTag; target: string; personnel: string; vehicle: string; other: string; extData: Record<string, unknown> }>;
   others: Array<{ timeTag: TimeTag; task: string; personnel: string; vehicle: string; other: string }>;
   leavePeople: string[];
 }
@@ -995,9 +995,9 @@ import BoardView from "../src/views/BoardView.vue";
 vi.mock("../src/api/client", () => ({
   fetchBoard: vi.fn(async () => ({
     serverTime: "2026-05-01T15:42:18+08:00",
-    operation: { items: [{ content: "A、B 操作", startAt: "2026-05-01T08:00:00+08:00", endAt: "2026-05-01T16:00:00+08:00", metadata: {} }] },
+    operation: { items: [{ content: "A、B 操作", startAt: "2026-05-01T08:00:00+08:00", endAt: "2026-05-01T16:00:00+08:00", extData: {} }] },
     permits: Array.from({ length: 6 }, (_, index) => ({ timeTag: "全天", permit: `许可${index + 1}`, personnel: "张三", area: "A区", other: "已审批" })),
-    patrols: [{ timeTag: "上午", target: "目标一", personnel: "李四", vehicle: "1号车", other: "重点区域", metadata: {} }],
+    patrols: [{ timeTag: "上午", target: "目标一", personnel: "李四", vehicle: "1号车", other: "重点区域", extData: {} }],
     others: [{ timeTag: "下午", task: "材料交接", personnel: "孙八", vehicle: "-", other: "16:30 前完成" }],
     leavePeople: ["钱七", "孙八"]
   })),
@@ -1434,7 +1434,7 @@ Expected visual checks:
 
 ## Plan Self-Review
 
-- Spec coverage: operation timeline, permit module, patrol list, other list, leave row, SQLite schema, SSE, admin sections, JSON metadata, time-tag sorting, and task expansion are covered by tasks.
+- Spec coverage: operation timeline, permit module, patrol list, other list, leave row, SQLite schema, SSE, admin sections, JSON extData, time-tag sorting, and task expansion are covered by tasks.
 - Red-flag scan: no incomplete markers are present.
 - Type consistency: backend `BoardSnapshot` fields match frontend `BoardSnapshot` fields.
 - CRUD coverage: create routes exist for permit arrangements, other arrangements, leave people, and holidays; operation and patrol task-container data is covered by the schema, task expansion tests, and board snapshot integration path in this MVP plan.
