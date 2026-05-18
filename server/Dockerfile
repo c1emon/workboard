@@ -4,22 +4,27 @@ FROM node:22-bookworm-slim AS deps
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json ./server/package.json
 COPY web/package.json ./web/package.json
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile --filter ./server...
 
 FROM deps AS build
 
 COPY server ./server
 
-RUN npm run build --workspace server
+RUN pnpm --filter ./server build
 
-FROM deps AS prod-deps
+FROM build AS prod-deps
 
-RUN npm prune --omit=dev \
-  && npm cache clean --force
+RUN pnpm --filter ./server deploy --prod --legacy /prod/server \
+  && pnpm store prune
 
 FROM node:22-bookworm-slim AS runtime
 
@@ -33,15 +38,11 @@ WORKDIR /app
 RUN mkdir -p /data \
   && chown -R node:node /data /app
 
-COPY --from=prod-deps --chown=node:node /app/package.json ./package.json
-COPY --from=prod-deps --chown=node:node /app/package-lock.json ./package-lock.json
-COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
-COPY --from=prod-deps --chown=node:node /app/server/package.json ./server/package.json
-COPY --from=build --chown=node:node /app/server/dist ./server/dist
+COPY --from=prod-deps --chown=node:node /prod/server ./
 
 USER node
 
 EXPOSE 4000
 VOLUME ["/data"]
 
-CMD ["node", "server/dist/src/index.js"]
+CMD ["node", "dist/src/index.js"]

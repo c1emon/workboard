@@ -7,15 +7,17 @@ ENV VITE_API_BASE=${VITE_API_BASE}
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY server/package.json ./server/package.json
 COPY web/package.json ./web/package.json
 
-RUN npm ci
+RUN pnpm install --frozen-lockfile --filter ./web...
 
 COPY web ./web
 
-RUN npm run build --workspace web
+RUN pnpm --filter ./web build
 
 FROM nginx:1.27-alpine AS runtime
 
