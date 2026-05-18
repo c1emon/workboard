@@ -39,10 +39,11 @@ RUN mkdir -p /data \
   && chown -R node:node /data /app
 
 COPY --from=prod-deps --chown=node:node /prod/server ./
+COPY --from=build --chown=node:node /app/server/dist ./dist
 
 USER node
 
 EXPOSE 4000
 VOLUME ["/data"]
 
-CMD ["node", "dist/src/index.js"]
+CMD ["node", "dist/index.js"]
