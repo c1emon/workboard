@@ -114,7 +114,7 @@ function timelineOptions(): TimelineOptions {
     max: windowEnd.value,
     zoomMin: dayMs,
     zoomMax: dayMs,
-    margin: { item: 8, axis: 8 },
+    margin: { item: 4, axis: 2 },
     orientation: "top",
     format: {
       minorLabels: {
@@ -150,7 +150,6 @@ function syncServerTimeMarker(): void {
     return;
   }
   timeline.addCustomTime(centerTime.value, "server-time");
-  (timeline as TimelineWithCustomMarker).setCustomTimeMarker?.("现在", "server-time", false);
   hasServerTimeMarker = true;
 }
 
@@ -174,13 +173,21 @@ function parseItemDate(value: string, fallback: Date): Date {
 .timeline {
   min-width: 0;
   width: 100%;
-  padding: 12px 14px;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
 }
 
 .vis-operation-timeline {
-  height: 92px;
-  border: 1px solid rgba(125, 211, 252, 0.16);
-  background: linear-gradient(180deg, rgba(8, 47, 73, 0.52), rgba(15, 23, 42, 0.84));
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: 76px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
 }
 
 :deep(.vis-timeline) {
@@ -188,64 +195,75 @@ function parseItemDate(value: string, fallback: Date): Date {
 }
 
 :deep(.vis-time-axis .vis-text) {
-  color: rgba(226, 232, 240, 0.82);
-  font-size: 11px;
+  color: #475569;
+  font-size: 13px;
   font-weight: 700;
 }
 
 :deep(.vis-grid.vis-vertical) {
-  border-left-color: rgba(148, 163, 184, 0.14);
+  border-left-color: rgba(148, 163, 184, 0.22);
 }
 
 :deep(.vis-item.board-operation-item) {
+  display: flex;
+  align-items: center;
   height: 24px;
   overflow: hidden;
   border-radius: 4px;
   color: #ecfeff;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
 
+:deep(.vis-item.board-operation-item .vis-item-content) {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 :deep(.vis-item.board-operation-color-0) {
-  border-color: rgba(56, 189, 248, 0.62);
-  background: rgba(14, 165, 233, 0.88);
+  border-color: rgba(2, 132, 199, 0.46);
+  background: rgba(2, 132, 199, 0.82);
 }
 
 :deep(.vis-item.board-operation-color-1) {
-  border-color: rgba(45, 212, 191, 0.62);
-  background: rgba(20, 184, 166, 0.8);
+  border-color: rgba(13, 148, 136, 0.46);
+  background: rgba(13, 148, 136, 0.78);
 }
 
 :deep(.vis-item.board-operation-color-2) {
-  border-color: rgba(129, 140, 248, 0.62);
-  background: rgba(99, 102, 241, 0.82);
+  border-color: rgba(79, 70, 229, 0.44);
+  background: rgba(79, 70, 229, 0.78);
 }
 
 :deep(.vis-item.board-operation-color-3) {
-  border-color: rgba(74, 222, 128, 0.62);
-  background: rgba(22, 163, 74, 0.78);
+  border-color: rgba(22, 163, 74, 0.44);
+  background: rgba(22, 163, 74, 0.76);
 }
 
 :deep(.vis-item.board-operation-color-4) {
-  border-color: rgba(251, 146, 60, 0.68);
-  background: rgba(234, 88, 12, 0.78);
+  border-color: rgba(217, 119, 6, 0.44);
+  background: rgba(217, 119, 6, 0.76);
 }
 
 :deep(.vis-item.board-operation-color-5) {
-  border-color: rgba(244, 114, 182, 0.64);
-  background: rgba(219, 39, 119, 0.78);
+  border-color: rgba(219, 39, 119, 0.42);
+  background: rgba(219, 39, 119, 0.74);
 }
 
 :deep(.vis-custom-time.server-time) {
-  width: 2px;
+  width: 4px;
   cursor: default;
   pointer-events: none;
-  background: #f8fafc;
-  box-shadow: 0 0 14px rgba(125, 211, 252, 0.75);
+  background: #dc2626;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.35);
 }
 
 :deep(.vis-custom-time.server-time > .vis-custom-time-marker) {
   background: transparent;
+  color: #b91c1c;
   font-size: 14px;
 }
 </style>

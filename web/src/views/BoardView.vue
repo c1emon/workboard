@@ -1,7 +1,7 @@
 <template>
   <main class="board-page">
     <header class="board-header">
-      <h1>工作任务看板</h1>
+      <h1>变电运维工作日志</h1>
       <div class="header-time">{{ headerTime }}</div>
       <div class="status-pill" :class="statusClass">{{ statusText }}</div>
     </header>
@@ -11,9 +11,9 @@
       <OperationTimeline :items="snapshot?.operation.items ?? []" :server-time="snapshot?.serverTime ?? ''" />
     </section>
 
-    <section class="board-module">
+    <section class="board-module permit-module">
       <SideLabel text="许可" />
-      <DenseRows :columns="permitColumns" :rows="permitRows" :visible-rows="6" row-test-id="permit-row" />
+      <DenseRows :columns="permitColumns" :rows="permitRows" :visible-rows="6" fill-height row-test-id="permit-row" />
     </section>
 
     <section class="board-module">
@@ -23,7 +23,7 @@
 
     <section class="board-module compact-module">
       <SideLabel text="其他" />
-      <DenseRows :columns="otherColumns" :rows="otherRows" :visible-rows="3" />
+      <DenseRows :columns="otherColumns" :rows="otherRows" :visible-rows="4" fill-height />
     </section>
 
     <section class="board-module leave-module">
@@ -156,40 +156,98 @@ onUnmounted(() => {
 
 <style scoped>
 .board-page {
-  min-height: 100vh;
+  height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden;
+  --board-row-height: 44px;
+  --dense-row-height: var(--board-row-height);
+  --dense-head-height: 26px;
+  --board-header-height: 48px;
+  --operation-height: 94px;
+  --leave-height: 46px;
+  --board-vertical-padding: 24px;
+  --board-vertical-gaps: 40px;
+  --permit-min-height: calc(var(--dense-head-height) + var(--dense-row-height) * 6);
+  --permit-max-height: calc(var(--dense-head-height) + var(--dense-row-height) * 10);
+  --patrol-height: calc(var(--dense-head-height) + var(--dense-row-height) * 2);
+  --other-min-height: calc(var(--dense-head-height) + var(--dense-row-height) * 4);
+  --permit-preferred-height: calc(
+    100dvh - var(--board-vertical-padding) - var(--board-vertical-gaps) - var(--board-header-height) - var(--operation-height) -
+      var(--patrol-height) - var(--other-min-height) - var(--leave-height)
+  );
   display: grid;
-  grid-template-rows: auto auto auto auto auto auto;
-  gap: 10px;
-  padding: 14px;
+  grid-template-rows: var(--board-header-height) var(--operation-height) auto var(--patrol-height) minmax(var(--other-min-height), 1fr) var(--leave-height);
+  gap: 8px;
+  padding: 12px;
   background:
-    linear-gradient(180deg, rgba(14, 165, 233, 0.08), transparent 240px),
-    #07111f;
-  color: #e2e8f0;
+    linear-gradient(180deg, rgba(219, 234, 254, 0.74), rgba(248, 250, 252, 0.35) 240px),
+    #f6f8fb;
+  color: #1e293b;
+}
+
+@media (max-height: 860px) {
+  .board-page {
+    --board-row-height: 38px;
+    --dense-head-height: 24px;
+    --board-header-height: 44px;
+    --operation-height: 84px;
+    --leave-height: 42px;
+    --board-vertical-padding: 16px;
+    --board-vertical-gaps: 30px;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .board-header {
+    height: 44px;
+    min-height: 44px;
+    padding-block: 5px;
+  }
+
+  .header-time {
+    font-size: 21px;
+  }
+
+  .operation-module {
+    height: 84px;
+  }
+
+  .leave-module {
+    min-height: 42px;
+  }
+
+  .leave-line {
+    line-height: 40px;
+  }
 }
 
 .board-header {
-  min-height: 62px;
+  height: var(--board-header-height);
+  min-height: var(--board-header-height);
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   column-gap: 16px;
-  padding: 10px 16px;
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  background: rgba(8, 20, 38, 0.86);
+  padding: 7px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 .board-header h1 {
   margin: 0;
-  color: #f8fafc;
-  font-size: 22px;
+  color: #0f172a;
+  font-size: 21px;
   line-height: 1.2;
   letter-spacing: 0;
 }
 
 .header-time {
   justify-self: center;
-  color: #e0f2fe;
-  font-size: 26px;
+  color: #075985;
+  font-size: 23px;
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
@@ -199,51 +257,58 @@ onUnmounted(() => {
 .status-pill {
   justify-self: end;
   flex: 0 0 auto;
-  padding: 5px 10px;
-  border: 1px solid rgba(34, 197, 94, 0.38);
-  border-radius: 4px;
-  background: rgba(22, 101, 52, 0.28);
-  color: #bbf7d0;
+  padding: 4px 10px;
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
   font-size: 12px;
   font-weight: 700;
 }
 
 .status-connected {
-  border-color: rgba(34, 197, 94, 0.38);
-  background: rgba(22, 101, 52, 0.28);
-  color: #bbf7d0;
+  border-color: rgba(16, 185, 129, 0.34);
+  background: #ecfdf5;
+  color: #047857;
 }
 
 .status-polling {
-  border-color: rgba(250, 204, 21, 0.38);
-  background: rgba(113, 63, 18, 0.28);
-  color: #fef08a;
+  border-color: rgba(245, 158, 11, 0.34);
+  background: #fffbeb;
+  color: #b45309;
 }
 
 .status-error {
-  border-color: rgba(248, 113, 113, 0.42);
-  background: rgba(127, 29, 29, 0.32);
-  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.34);
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .board-module {
   min-width: 0;
+  min-height: 0;
   display: flex;
   overflow: hidden;
-  border: 1px solid rgba(125, 211, 252, 0.18);
-  background: rgba(2, 6, 23, 0.58);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 }
 
 .operation-module {
-  min-height: 104px;
+  height: var(--operation-height);
+}
+
+.permit-module {
+  height: clamp(var(--permit-min-height), var(--permit-preferred-height), var(--permit-max-height));
 }
 
 .compact-module {
-  max-height: 132px;
+  min-height: var(--other-min-height);
 }
 
 .leave-module {
-  min-height: 52px;
+  min-height: var(--leave-height);
 }
 
 .leave-line {
@@ -253,17 +318,17 @@ onUnmounted(() => {
   align-self: center;
   padding: 0 14px;
   overflow: hidden;
-  color: #e0f2fe;
+  color: #1e3a8a;
   font-size: 15px;
   font-weight: 700;
-  line-height: 50px;
+  line-height: 44px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .leave-line.empty-plan {
   justify-content: center;
-  color: rgba(148, 163, 184, 0.46);
+  color: #94a3b8;
   font-size: 13px;
   font-weight: 500;
   text-align: center;

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { flushPromises, mount } from "@vue/test-utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BoardView from "../src/views/BoardView.vue";
 import { fetchBoard, subscribeBoardUpdates } from "../src/api/client";
@@ -82,6 +84,7 @@ describe("BoardView", () => {
 
     expect(mockedFetchBoard).toHaveBeenCalledTimes(1);
     expect(mockedSubscribeBoardUpdates).toHaveBeenCalledTimes(1);
+    expect(wrapper.find(".board-header h1").text()).toBe("变电运维工作日志");
     expect(wrapper.text()).toContain("操作");
     expect(wrapper.text()).toContain("许可");
     expect(wrapper.text()).toContain("巡视");
@@ -115,6 +118,11 @@ describe("BoardView", () => {
     const headerTime = wrapper.find(".header-time");
     expect(headerTime.text()).toBe("2026年5月1日 20时16分");
     expect(headerTime.element.parentElement?.className).toBe("board-header");
+
+    const source = readFileSync(resolve(__dirname, "../src/views/BoardView.vue"), "utf8");
+    expect(source).toMatch(/--board-header-height: 48px;/);
+    expect(source).toMatch(/\.board-header \{[\s\S]*height: var\(--board-header-height\);[\s\S]*min-height: var\(--board-header-height\);/);
+    expect(source).toMatch(/\.header-time \{[\s\S]*justify-self: center;/);
   });
 
   it("shows the real backend update connection status", async () => {
