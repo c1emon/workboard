@@ -119,6 +119,6 @@ describe("OperationTimeline", () => {
       new Date("2026-05-01T12:00:00+08:00"),
       "server-time"
     );
-    expect(visMocks.timelineInstances[0].setCustomTimeMarker).toHaveBeenCalledWith("现在", "server-time", false);
+    expect(visMocks.timelineInstances[0].setCustomTimeMarker).not.toHaveBeenCalled();
   });
 });

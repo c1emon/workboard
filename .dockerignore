@@ -4,6 +4,8 @@
 .claude
 .superpowers
 .worktrees
+.gitnexus
+.opencode
 
 node_modules
 **/node_modules
