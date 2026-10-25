@@ -43,5 +43,6 @@ pnpm build
 
 ## Project Notes
 
+- Requirements and changes: [OpenSpec](openspec/README.md)
 - Server notes: [server/README.md](server/README.md)
 - Web notes: [web/README.md](web/README.md)
