@@ -46,7 +46,7 @@
         />
 
         <div v-else-if="activeKey === 'patrol'" class="patrol-admin-stack">
-          <div class="patrol-tabs" role="tablist" aria-label="巡视管理类型">
+          <div class="management-tabs patrol-tabs" role="tablist" aria-label="巡视管理类型">
             <button type="button" role="tab" :aria-selected="patrolActiveTab === 'instances'" :class="{ active: patrolActiveTab === 'instances' }" @click="patrolActiveTab = 'instances'">任务实例</button>
             <button type="button" role="tab" :aria-selected="patrolActiveTab === 'templates'" :class="{ active: patrolActiveTab === 'templates' }" @click="patrolActiveTab = 'templates'">巡视模板</button>
           </div>
@@ -111,26 +111,41 @@
           @delete="removeOther"
         />
 
-        <OperationManager
-          v-else-if="activeKey === 'operation'"
-          v-model:selected-date="selectedDate"
-          v-model:show-all="operationShowAll"
-          :today="today"
-          :yesterday="yesterday"
-          :rows="operationRows"
-          :generation-summary="operationGenerationSummary" :selection="boardSelection" :selection-loading="boardSelectionLoading"
-          :selection-saving-id="boardSelectionSavingId" :selection-message="boardSelectionMessage" :busy="operationWriteBusy || generationBusy || importBusy"
-          :file-summary="fileSummary" :exporting-id="exportingId" @select-board="selectBoardPlan"
-          @import="openOperationImport" @export="record => exportPlan('operation', record.id)"
-          @add="openOperationModal()"
-          @today="jumpToToday"
-          @yesterday="jumpToYesterday"
-          @detail="(record) => openOperationModal(record, 'detail')"
-          @toggle="toggleOperation"
-          @edit="(record) => openOperationModal(record, 'edit')"
-          @delete="removeOperation"
-          @open-refresh="openOperationRefresh"
-        />
+        <div v-else-if="activeKey === 'operation'" class="patrol-admin-stack operation-admin-stack">
+          <div class="management-tabs operation-tabs" role="tablist" aria-label="操作管理类型">
+            <button type="button" role="tab" :aria-selected="operationActiveTab === 'instances'" :class="{ active: operationActiveTab === 'instances' }" @click="operationActiveTab = 'instances'">任务实例</button>
+            <button type="button" role="tab" :aria-selected="operationActiveTab === 'plans'" :class="{ active: operationActiveTab === 'plans' }" @click="operationActiveTab = 'plans'">操作计划</button>
+          </div>
+          <TaskInstanceManager v-if="operationActiveTab === 'instances'" instance-type="operation"
+            v-model:selected-date="selectedDate" v-model:show-all="operationInstances.taskInstanceShowAll"
+            :today="today" :yesterday="yesterday" :rows="operationInstances.taskInstanceRows" :patrol-plans="[]"
+            :form="operationInstances.taskInstanceForm" :form-open="operationInstances.taskInstanceFormOpen"
+            :refresh-form="operationInstances.taskInstanceRefreshForm" :refresh-open="false"
+            :editing-id="operationInstances.taskInstanceEditingId" :generation-summary="operationGenerationSummary"
+            @add="operationInstances.openTaskInstanceCreate" @today="jumpToToday" @yesterday="jumpToYesterday"
+            @edit="operationInstances.openTaskInstanceEdit" @cancel="operationInstances.cancelTaskInstance" @delete="operationInstances.removeTaskInstance"
+            @open-refresh="openOperationRefresh()" @save="operationInstances.saveTaskInstance" @close="operationInstances.closeTaskInstanceForm" />
+          <OperationManager
+            v-else
+            v-model:selected-date="selectedDate"
+            v-model:show-all="operationShowAll"
+            :today="today"
+            :yesterday="yesterday"
+            :rows="operationRows"
+            :generation-summary="operationGenerationSummary" :selection="boardSelection" :selection-loading="boardSelectionLoading"
+            :selection-saving-id="boardSelectionSavingId" :selection-message="boardSelectionMessage" :busy="operationWriteBusy || generationBusy || importBusy"
+            :file-summary="fileSummary" :exporting-id="exportingId" @select-board="selectBoardPlan"
+            @import="openOperationImport" @export="record => exportPlan('operation', record.id)"
+            @add="openOperationModal()"
+            @today="jumpToToday"
+            @yesterday="jumpToYesterday"
+            @detail="(record) => openOperationModal(record, 'detail')"
+            @toggle="toggleOperation"
+            @edit="(record) => openOperationModal(record, 'edit')"
+            @delete="removeOperation"
+            @open-refresh="openOperationRefresh"
+          />
+        </div>
 
         <LeaveManager
           v-else-if="activeKey === 'leave'"
@@ -250,6 +265,7 @@ const {
   generationPlans, generationPlan, generationLocked, generationLoading, generationBusy, generationStep, generationError, generationValidation,
   selectGenerationPlan, confirmOperationGeneration, boardSelection, boardSelectionLoading, boardSelectionSavingId, boardSelectionMessage, selectBoardPlan, operationWriteBusy,
   importTarget, importFileName, importItems, importError, importBusy, importReading, fileSummary, exportingId, closeImport, selectImportFile, submitImport, exportPlan, openOperationImport, openPatrolImport,
+  operationInstances,
   sections, today, yesterday, activeKey, selectedDate, statusText, activeSection,
   permitRows, otherRows, leaveRows, permitShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
   taskInstanceRows, taskInstanceShowAll, taskInstanceForm, taskInstanceFormOpen, taskInstanceRefreshForm, taskInstanceRefreshOpen, taskInstanceEditingId, taskInstanceGenerationSummary,
@@ -273,6 +289,7 @@ const {
 } = useAdminViewModel();
 
 const patrolActiveTab = ref<"instances" | "templates">("instances");
+const operationActiveTab = ref<"instances" | "plans">("instances");
 </script>
 
 <style scoped>
@@ -393,14 +410,14 @@ const patrolActiveTab = ref<"instances" | "templates">("instances");
   display: grid;
 }
 
-.patrol-tabs {
+.management-tabs {
   display: flex;
   gap: 8px;
   padding: 16px 22px 0;
   border-bottom: 1px solid #d8dee8;
 }
 
-.patrol-tabs button {
+.management-tabs button {
   min-height: 38px;
   padding: 0 16px;
   border: 1px solid transparent;
@@ -413,7 +430,7 @@ const patrolActiveTab = ref<"instances" | "templates">("instances");
   color: #475569;
 }
 
-.patrol-tabs button.active {
+.management-tabs button.active {
   border-color: #d8dee8;
   background: #fff;
   color: #0f172a;

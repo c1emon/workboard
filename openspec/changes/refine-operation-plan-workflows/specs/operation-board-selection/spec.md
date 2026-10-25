@@ -83,3 +83,16 @@ The board SHALL display only the selected operation plan's timeline without addi
 - **WHEN** the manager switches the displayed operation plan
 - **THEN** the board continues to use one operation timeline area
 - **AND** the permit, patrol, other, and leave modules retain their existing layout and scrolling behavior
+
+### Requirement: Align operation and patrol management tabs
+The management interface SHALL organize operation and patrol management into matching instance and plan tabs, defaulting to task instances. Operation SHALL offer `任务实例` and `操作计划`; patrol SHALL retain `任务实例` and `巡视模板`. Each instance list SHALL query its own task type and keep its show-all state separate from other lists. Operation instances SHALL display exact start and end times in Beijing time.
+
+#### Scenario: Open operation management
+- **WHEN** the manager opens the operation module
+- **THEN** task instances are initially active with only operation instances and their exact start/end times
+- **AND** switching to operation plans exposes the existing plan and board selection controls
+
+#### Scenario: Generate from the operation instance tab
+- **WHEN** the manager chooses to regenerate from the operation instance tab
+- **THEN** the existing single-plan generation and replacement confirmation workflow opens
+- **AND** it does not call the patrol generation workflow

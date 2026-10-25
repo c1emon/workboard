@@ -12,7 +12,6 @@
     </div>
     <DateToolbar :model-value="selectedDate" :show-all="showAll" :allow-show-all="true" :disabled="showAll" :today="today" :yesterday="yesterday" add-label="新增计划"
       @add="emit('add')" @today="emit('today')" @yesterday="emit('yesterday')" @update:model-value="emit('update:selectedDate', $event)" @update:show-all="emit('update:showAll', $event)" />
-    <div class="manager-actions"><button type="button" class="secondary-action" :disabled="busy" @click="emit('open-refresh')">重新生成实例</button></div>
     <p v-if="generationSummary" role="status">{{ generationSummary }}</p>
     <p v-if="fileSummary" role="status">{{ fileSummary }}</p>
     <div class="table-shell"><table aria-label="操作计划与大屏展示计划">
@@ -55,7 +54,6 @@ function action(key: string, record: OperationPlanRecord) {
 <style scoped>
 .operation-panel, .table-shell { min-width: 0; }
 :deep(.date-shortcuts) { flex-wrap: wrap; }
-.manager-actions { display: flex; justify-content: flex-end; }
 .description { margin: 4px 0 0; white-space: normal; max-width: 240px; overflow-wrap: anywhere; }
 .muted-text { color: #64748b; }
 .selection-summary { overflow-wrap: anywhere; }

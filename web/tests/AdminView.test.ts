@@ -193,6 +193,7 @@ function mountAdmin() {
 
 async function openOperationSection(wrapper: ReturnType<typeof mountAdmin>): Promise<void> {
   await wrapper.findAll(".section-nav button")[4].trigger("click");
+  await wrapper.findAll(".operation-tabs button")[1].trigger("click");
   await new Promise((resolve) => setTimeout(resolve));
 }
 
@@ -211,6 +212,23 @@ async function waitForAssertion(assertion: () => void): Promise<void> {
 }
 
 describe("AdminView", () => {
+  it("aligns operation and patrol tabs with independent instance filters", async () => {
+    const wrapper = mountAdmin();
+    await wrapper.findAll(".section-nav button")[4].trigger("click"); await new Promise(resolve => setTimeout(resolve));
+    expect(wrapper.findAll(".operation-tabs [role='tab']").map(tab => tab.text())).toEqual(["任务实例", "操作计划"]);
+    expect(wrapper.find(".operation-tabs [aria-selected='true']").text()).toBe("任务实例");
+    expect(fetchTaskInstances).toHaveBeenLastCalledWith(expect.any(String), "operation", "date");
+    await wrapper.find('input[name="operationShowAll"]').setValue(true); await new Promise(resolve => setTimeout(resolve));
+    expect(fetchTaskInstances).toHaveBeenLastCalledWith(expect.any(String), "operation", "all");
+    await wrapper.findAll(".operation-tabs button")[1].trigger("click");
+    expect(wrapper.find(".operation-panel").exists()).toBe(true);
+    expect(wrapper.find('input[name="operationShowAll"]').element).toHaveProperty("checked", false);
+    await wrapper.findAll(".section-nav button")[3].trigger("click"); await new Promise(resolve => setTimeout(resolve));
+    expect(wrapper.findAll(".patrol-tabs [role='tab']").map(tab => tab.text())).toEqual(["任务实例", "巡视模板"]);
+    expect(fetchTaskInstances).toHaveBeenLastCalledWith(expect.any(String), "patrol", "date");
+    expect(wrapper.find('input[name="operationShowAll"]').element).toHaveProperty("checked", false);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -457,7 +475,8 @@ describe("AdminView", () => {
   it("regenerates one operation plan after a single confirmation step", async () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
-    await wrapper.find(".operation-panel .manager-actions .secondary-action").trigger("click");
+    await wrapper.findAll(".operation-tabs button")[0].trigger("click");
+    await wrapper.find(".task-instance-panel .manager-actions .secondary-action").trigger("click");
     await new Promise(resolve => setTimeout(resolve));
     const dialog = () => document.querySelector<HTMLElement>('.workflow-dialog')!;
     expect(dialog().textContent).toContain('重新生成实例');

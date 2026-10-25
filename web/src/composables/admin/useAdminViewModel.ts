@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useArrangementAdmin } from "./useArrangementAdmin";
 import { useConfirmation } from "./useConfirmation";
 import { useHolidayAdmin } from "./useHolidayAdmin";
@@ -39,7 +39,9 @@ export function useAdminViewModel() {
 
   async function loadActiveList(): Promise<void> {
     if (activeKey.value === "operation") {
-      await withStatus(operationAdmin.loadOperationRows);
+      await withStatus(async () => {
+        await Promise.all([operationAdmin.loadOperationRows(), operationInstanceAdmin.loadTaskInstanceRows()]);
+      });
     } else if (activeKey.value === "permit") {
       await withStatus(arrangementAdmin.loadPermitRows);
     } else if (activeKey.value === "patrol") {
@@ -81,6 +83,7 @@ export function useAdminViewModel() {
   });
   const operationAdmin = useOperationAdmin(sharedContext);
   const taskInstanceAdmin = useTaskInstanceAdmin(sharedContext);
+  const operationInstanceAdmin = useTaskInstanceAdmin(sharedContext, "operation");
   const patrolPlanAdmin = usePatrolPlanAdmin(sharedContext);
   const holidayAdmin = useHolidayAdmin({
     today,
@@ -96,6 +99,7 @@ export function useAdminViewModel() {
       selectedDate,
       operationAdmin.operationShowAll,
       taskInstanceAdmin.taskInstanceShowAll,
+      operationInstanceAdmin.taskInstanceShowAll,
       arrangementAdmin.permitShowAll,
       arrangementAdmin.otherShowAll,
       arrangementAdmin.leaveShowAll
@@ -124,6 +128,7 @@ export function useAdminViewModel() {
     activeSection,
     ...arrangementAdmin,
     ...operationAdmin,
+    operationInstances: reactive(operationInstanceAdmin),
     ...taskInstanceAdmin,
     ...patrolPlanAdmin,
     ...holidayAdmin,

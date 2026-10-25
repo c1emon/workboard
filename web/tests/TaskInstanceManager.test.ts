@@ -5,7 +5,7 @@ import { defineComponent, onMounted, ref, watch } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import TaskInstanceManager from "../src/components/admin/TaskInstanceManager.vue";
 import { useTaskInstanceAdmin } from "../src/composables/admin/useTaskInstanceAdmin";
-import { createTaskInstance, fetchTaskInstances, generateTaskInstances } from "../src/api/client";
+import { createTaskInstance, fetchTaskInstances, generateTaskInstances, updateTaskInstance } from "../src/api/client";
 
 vi.mock("../src/api/client", () => ({
   fetchTaskInstances: vi.fn().mockResolvedValue([
@@ -33,7 +33,7 @@ vi.mock("../src/api/client", () => ({
   generateTaskInstances: vi.fn().mockResolvedValue({ inserted: 1, updated: 2, skipped: 3 })
 }));
 
-function mountHarness() {
+function mountHarness(instanceType: "patrol" | "operation" = "patrol") {
   const requestConfirmation = vi.fn().mockResolvedValue(true);
   const refresh = vi.fn();
   const Harness = defineComponent({
@@ -46,13 +46,14 @@ function mountHarness() {
         withStatus: async (action) => { await action(); },
         refresh,
         requestConfirmation
-      });
+      }, instanceType);
       onMounted(admin.loadTaskInstanceRows);
       watch(admin.taskInstanceShowAll, admin.loadTaskInstanceRows);
-      return { selectedDate, admin };
+      return { selectedDate, admin, instanceType };
     },
     template: `
       <TaskInstanceManager
+        :instance-type="instanceType"
         v-model:selected-date="selectedDate"
         today="2026-05-01"
         yesterday="2026-04-30"
@@ -87,6 +88,35 @@ async function flush(): Promise<void> {
 }
 
 describe("TaskInstanceManager", () => {
+  it("shows operation start/end times and loads only operation instances", async () => {
+    vi.mocked(fetchTaskInstances).mockResolvedValueOnce([{
+      id: "operation-manual", type: "operation", templateId: null, sourceTemplateItemId: null, sourceType: "manual", generationKey: null,
+      occurrenceDate: "2026-05-01", startAt: "2026-05-01T10:30:00+08:00", endAt: "2026-05-01T12:15:00+08:00",
+      content: "倒闸复核", extData: { zone: "北区", personnel: "甲" }, status: "pending", generatedAt: "", updatedAt: ""
+    }]);
+    const { wrapper } = mountHarness("operation"); await flush();
+    expect(fetchTaskInstances).toHaveBeenLastCalledWith("2026-05-01", "operation", "date");
+    expect(wrapper.find("thead").text()).toContain("开始时间（北京时间）");
+    expect(wrapper.text()).toContain("2026-05-01 10:30");expect(wrapper.text()).toContain("2026-05-01 12:15");
+    expect(wrapper.find(".refresh-action").text()).toBe("重新生成实例");
+    await wrapper.find("tbody .row-actions button").trigger("click");
+    expect(wrapper.find('select[name="taskInstanceTimeTag"]').exists()).toBe(false);
+    await wrapper.find('input[name="taskInstanceEndAt"]').setValue("2026-05-01T13:00");
+    await wrapper.find(".task-instance-modal").trigger("submit.prevent");
+    expect(updateTaskInstance).toHaveBeenCalledWith("operation-manual", expect.objectContaining({type:"operation",startAt:"2026-05-01T10:30:00+08:00",endAt:"2026-05-01T13:00:00+08:00",extData:expect.objectContaining({zone:"北区"})}));
+  });
+
+  it("creates manual operation instances with exact Beijing datetimes", async () => {
+    const { wrapper } = mountHarness("operation"); await flush();
+    await wrapper.find('[aria-label="新增实例"]').trigger("click");
+    await wrapper.find('input[name="taskInstanceStartAt"]').setValue("2026-05-01T10:30");
+    await wrapper.find('input[name="taskInstanceEndAt"]').setValue("2026-05-01T12:00");
+    await wrapper.find('input[name="taskInstanceTarget"]').setValue("操作 B");
+    await wrapper.find(".task-instance-modal").trigger("submit.prevent");
+    expect(createTaskInstance).toHaveBeenCalledWith(expect.objectContaining({type:"operation",content:"操作 B",startAt:"2026-05-01T10:30:00+08:00",endAt:"2026-05-01T12:00:00+08:00"}));
+    wrapper.unmount();
+  });
+
   it("lists selected-date instances", async () => {
     const { wrapper } = mountHarness();
     await flush();

@@ -127,13 +127,13 @@ describe("admin managers", () => {
     const menu = wrapper.findComponent({ name: 'PlanActionsMenu' });
     menu.vm.$emit('action', 'toggle');
     menu.vm.$emit('action', 'delete');
-    await wrapper.find(".manager-actions .secondary-action").trigger("click");
+    menu.vm.$emit("action", "generate");
 
     expect(wrapper.emitted("detail")?.[0][0]).toMatchObject({ id: "operation-1" });
     expect(wrapper.emitted("toggle")?.[0][0]).toMatchObject({ id: "operation-1" });
     expect(wrapper.emitted("edit")?.[0][0]).toMatchObject({ id: "operation-1" });
     expect(wrapper.emitted("delete")).toEqual([["operation-1"]]);
-    expect(wrapper.emitted("open-refresh")).toEqual([[]]);
+    expect(wrapper.emitted("open-refresh")?.[0][0]).toMatchObject({ id: "operation-1" });
   });
 
   it("renders holiday and adjusted workday rows", async () => {

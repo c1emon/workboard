@@ -20,6 +20,9 @@ export interface TaskInstanceForm {
   personnel: string;
   vehicle: string;
   other: string;
+  startAt?: string;
+  endAt?: string;
+  extData?: Record<string, unknown>;
 }
 
 export interface TaskInstanceRefreshForm {
@@ -28,8 +31,9 @@ export interface TaskInstanceRefreshForm {
   windowEndDate: string;
 }
 
-export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
+export function useTaskInstanceAdmin(context: TaskInstanceAdminContext, instanceType: "patrol" | "operation" = "patrol") {
   const { selectedDate, today, withStatus, refresh, requestConfirmation } = context;
+  let listVersion = 0;
   const taskInstanceRows = ref<TaskInstanceRecord[]>([]);
   const taskInstanceShowAll = ref(false);
   const taskInstanceFormOpen = ref(false);
@@ -42,7 +46,10 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     target: "",
     personnel: "",
     vehicle: "",
-    other: ""
+    other: "",
+    startAt: `${today}T08:00`,
+    endAt: `${today}T09:00`,
+    extData: {}
   });
   const taskInstanceRefreshForm = reactive<TaskInstanceRefreshForm>({
     templateId: "",
@@ -55,7 +62,9 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   });
 
   async function loadTaskInstanceRows(): Promise<void> {
-    taskInstanceRows.value = await fetchTaskInstances(selectedDate.value, "patrol", taskInstanceShowAll.value ? "all" : "date");
+    const version = ++listVersion;
+    const rows = await fetchTaskInstances(selectedDate.value, instanceType, taskInstanceShowAll.value ? "all" : "date");
+    if (version === listVersion) taskInstanceRows.value = rows;
   }
 
   function openTaskInstanceCreate(): void {
@@ -69,7 +78,10 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     taskInstanceFormOpen.value = true;
     taskInstanceForm.timeTag = extDataTimeTag(record.extData) ?? timeTagFromRange(record.startAt, record.endAt);
     taskInstanceForm.date = toChinaDate(record.startAt);
-    taskInstanceForm.target = extDataString(record.extData, "target") || record.content;
+    taskInstanceForm.target = instanceType === "operation" ? record.content : extDataString(record.extData, "target") || record.content;
+    taskInstanceForm.startAt = record.startAt.slice(0, 16);
+    taskInstanceForm.endAt = record.endAt.slice(0, 16);
+    taskInstanceForm.extData = { ...record.extData };
     taskInstanceForm.personnel = extDataString(record.extData, "personnel");
     taskInstanceForm.vehicle = extDataString(record.extData, "vehicle");
     taskInstanceForm.other = extDataString(record.extData, "other");
@@ -127,6 +139,7 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   }
 
   async function refreshTaskInstances(plans: PatrolPlanRecord[]): Promise<void> {
+    if (instanceType !== "patrol") return;
     const windowEndDate = refreshWindowEndDate();
     const plan = plans.find((row) => row.id === taskInstanceRefreshForm.templateId);
     const scopeText = plan ? `模板「${plan.name}」` : "全部巡视模板";
@@ -152,6 +165,13 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
   }
 
   function taskInstancePayload(): TaskInstanceInput {
+    if (instanceType === "operation") return {
+      type: "operation",
+      startAt: beijingDateTime(taskInstanceForm.startAt ?? ""),
+      endAt: beijingDateTime(taskInstanceForm.endAt ?? ""),
+      content: taskInstanceForm.target,
+      extData: { ...taskInstanceForm.extData, personnel: taskInstanceForm.personnel, vehicle: taskInstanceForm.vehicle, other: taskInstanceForm.other }
+    };
     const { startAt, endAt } = timeRangeForDateTag(taskInstanceForm.date || selectedDate.value || today, taskInstanceForm.timeTag);
     return {
       type: "patrol",
@@ -175,6 +195,9 @@ export function useTaskInstanceAdmin(context: TaskInstanceAdminContext) {
     taskInstanceForm.personnel = "";
     taskInstanceForm.vehicle = "";
     taskInstanceForm.other = "";
+    taskInstanceForm.startAt = `${taskInstanceForm.date}T08:00`;
+    taskInstanceForm.endAt = `${taskInstanceForm.date}T09:00`;
+    taskInstanceForm.extData = {};
   }
 
   function resetRefreshForm(date: string): void {
@@ -226,4 +249,8 @@ function timeTagFromRange(startAt: string, endAt: string): TaskInstanceForm["tim
   if (startAt.includes("T00:00:00") && endAt.includes("T23:59:59")) return "全天";
   if (startAt.includes("T12:00:00") && endAt.includes("T17:00:00")) return "下午";
   return "上午";
+}
+
+function beijingDateTime(value: string): string {
+  return value.length === 16 ? `${value}:00+08:00` : value;
 }

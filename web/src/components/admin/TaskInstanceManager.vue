@@ -1,5 +1,5 @@
 <template>
-  <section class="list-panel task-instance-panel">
+  <section class="list-panel task-instance-panel" :class="{ 'operation-instance-panel': instanceType === 'operation' }">
     <ListHeader title="任务实例" />
     <DateToolbar
       :model-value="selectedDate"
@@ -16,15 +16,15 @@
       @update:show-all="emit('update:showAll', $event)"
     />
     <div class="manager-actions">
-      <button type="button" class="secondary-action refresh-action" @click="emit('open-refresh')">刷新实例</button>
+      <button type="button" class="secondary-action refresh-action" @click="emit('open-refresh')">{{ instanceType === 'operation' ? '重新生成实例' : '刷新实例' }}</button>
       <span v-if="generationSummary">{{ generationSummary }}</span>
     </div>
     <div class="table-shell">
       <table>
         <thead>
           <tr>
-            <th>日期</th>
-            <th>时间</th>
+            <template v-if="instanceType === 'operation'"><th>开始时间（北京时间）</th><th>结束时间（北京时间）</th></template>
+            <template v-else><th>日期</th><th>时间</th></template>
             <th>内容</th>
             <th>人员</th>
             <th>来源</th>
@@ -33,8 +33,8 @@
         </thead>
         <tbody>
           <tr v-for="record in rows" :key="record.id" :class="{ disabled: record.status === 'cancelled' }">
-            <td>{{ record.occurrenceDate }}</td>
-            <td>{{ displayTimeTag(record) }}</td>
+            <template v-if="instanceType === 'operation'"><td>{{ displayDateTime(record.startAt) }}</td><td>{{ displayDateTime(record.endAt) }}</td></template>
+            <template v-else><td>{{ record.occurrenceDate }}</td><td>{{ displayTimeTag(record) }}</td></template>
             <td>{{ record.content || "-" }}</td>
             <td>{{ displayPersonnel(record) }}</td>
             <td>{{ sourceText(record.sourceType) }}</td>
@@ -52,7 +52,7 @@
     </div>
 
     <div v-if="formOpen" class="modal-backdrop" role="presentation" @click.self="emit('close')">
-      <form class="modal-form task-instance-modal" @submit.prevent="emit('save')">
+      <form v-modal-focus="{ close: () => emit('close') }" :aria-label="editingId ? '编辑实例' : '新增实例'" class="modal-form task-instance-modal" @submit.prevent="emit('save')">
         <div class="modal-heading">
           <div>
             <h2>{{ editingId ? "编辑实例" : "新增实例" }}</h2>
@@ -60,7 +60,11 @@
           <button type="button" aria-label="关闭实例表单" @click="emit('close')">×</button>
         </div>
         <div class="form-grid">
-          <div class="task-instance-date-time-row wide-field">
+          <template v-if="instanceType === 'operation'">
+            <label>开始时间（北京时间）<input v-model="form.startAt" name="taskInstanceStartAt" type="datetime-local" required /></label>
+            <label>结束时间（北京时间）<input v-model="form.endAt" name="taskInstanceEndAt" type="datetime-local" required /></label>
+          </template>
+          <div v-else class="task-instance-date-time-row wide-field">
             <label>
               日期
               <input v-model="form.date" name="taskInstanceDate" type="date" required />
@@ -75,7 +79,7 @@
             </label>
           </div>
           <label>
-            目标
+            {{ instanceType === 'operation' ? '任务内容' : '目标' }}
             <input v-model="form.target" name="taskInstanceTarget" required />
           </label>
           <label>
@@ -98,7 +102,7 @@
       </form>
     </div>
 
-    <div v-if="refreshOpen" class="modal-backdrop" role="presentation" @click.self="emit('close-refresh')">
+    <div v-if="refreshOpen && instanceType === 'patrol'" class="modal-backdrop" role="presentation" @click.self="emit('close-refresh')">
       <form class="modal-form task-instance-modal" @submit.prevent="emit('refresh')">
         <div class="modal-heading">
           <div>
@@ -139,12 +143,14 @@
 </template>
 
 <script setup lang="ts">
+import { vModalFocus } from "../../utils/modalFocus";
 import type { PatrolPlanRecord, TaskInstanceRecord } from "../../api/client";
 import type { TaskInstanceForm, TaskInstanceRefreshForm } from "../../composables/admin/useTaskInstanceAdmin";
 import DateToolbar from "./DateToolbar.vue";
 import ListHeader from "./ListHeader.vue";
 
-defineProps<{
+withDefaults(defineProps<{
+  instanceType?: "patrol" | "operation";
   selectedDate: string;
   today: string;
   yesterday: string;
@@ -157,7 +163,7 @@ defineProps<{
   refreshOpen: boolean;
   editingId: string | null;
   generationSummary: string;
-}>();
+}>(), { instanceType: "patrol" });
 
 const emit = defineEmits<{
   "update:selectedDate": [value: string];
@@ -188,6 +194,10 @@ function displayPersonnel(record: TaskInstanceRecord): string {
   return typeof personnel === "string" && personnel.trim() ? personnel : "-";
 }
 
+function displayDateTime(value: string): string {
+  return value.slice(0, 16).replace("T", " ");
+}
+
 function displayTimeTag(record: TaskInstanceRecord): string {
   const extDataTag = record.extData.timeTag;
   if (extDataTag === "全天" || extDataTag === "上午" || extDataTag === "下午") return extDataTag;
@@ -200,6 +210,12 @@ function displayTimeTag(record: TaskInstanceRecord): string {
 <style scoped src="./managerStyles.css"></style>
 <style scoped src="./modalStyles.css"></style>
 <style scoped>
+.task-instance-panel, .table-shell { min-width: 0; }
+.operation-instance-panel td:nth-child(-n+2),
+.operation-instance-panel th:nth-child(4), .operation-instance-panel td:nth-child(4),
+.operation-instance-panel th:nth-child(5), .operation-instance-panel td:nth-child(5) { white-space: nowrap; }
+:deep(.date-shortcuts) { flex-wrap: wrap; }
+
 .manager-actions {
   display: flex;
   align-items: center;

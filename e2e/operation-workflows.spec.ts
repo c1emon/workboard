@@ -18,6 +18,7 @@ test('single-plan generation, keyboard confirmation, global selection and comple
   const id=await seed(request,'流程验收计划');
   await page.setViewportSize({width:1440,height:1000});await page.goto('/admin');
   await page.locator('.section-nav button',{hasText:'操作'}).click();
+  await page.getByRole('tab',{name:'操作计划',exact:true}).click();
   const row=page.getByRole('row').filter({hasText:'流程验收计划'});
   await row.getByRole('button',{name:'流程验收计划 更多操作'}).focus();await page.keyboard.press('ArrowDown');
   await expect(page.getByRole('menuitem',{name:'重新生成实例'})).toBeFocused();await page.keyboard.press('Enter');
@@ -54,6 +55,7 @@ test('single-plan generation, keyboard confirmation, global selection and comple
 test('menus and workflow dialogs fit desktop, breakpoint and narrow screens with keyboard focus restoration',async({page,request})=>{
   await seed(request,'窄屏验收计划','once');
   await page.goto('/admin');await page.locator('.section-nav button',{hasText:'操作'}).click();
+  await page.getByRole('tab',{name:'操作计划',exact:true}).click();
   for(const width of [1440,900,375]) {
     await page.setViewportSize({width,height:800});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
@@ -81,4 +83,24 @@ test('patrol imports use one active preview dialog and refresh the saved detail 
   const downloadPromise=page.waitForEvent('download');await manager.getByRole('button',{name:'导出计划 XLSX'}).click();const download=await downloadPromise;
   const exported=XLSX.read(readFileSync((await download.path())!),{type:'buffer'});expect(exported.SheetNames).toEqual(['计划信息','周期项']);
   expect(XLSX.utils.sheet_to_json(exported.Sheets['周期项'])).toMatchObject([{目标:'新目标',周期第几天:3}]);
+});
+
+test('operation and patrol tabs keep task types and show-all filters separate',async({page,request})=>{
+  const date=new Date(Date.now()+8*3600_000).toISOString().slice(0,10);
+  for(const [type,content] of [['operation','TAB 操作专属实例'],['patrol','TAB 巡视专属实例']]){
+    const result=await request.post(`${api}/task-instances`,{data:{type,content,startAt:date+'T10:30:00+08:00',endAt:date+'T11:45:00+08:00',extData:{personnel:'测试'}}});expect(result.ok()).toBeTruthy();
+  }
+  await page.goto('/admin');await page.locator('.section-nav button',{hasText:'操作'}).click();
+  await expect(page.getByRole('tab',{name:'任务实例',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByRole('tab',{name:'操作计划',exact:true})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'TAB 操作专属实例',exact:true})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'TAB 巡视专属实例',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('columnheader',{name:'开始时间（北京时间）'})).toBeVisible();
+  await page.getByRole('checkbox',{name:'显示全部'}).check();
+  await page.getByRole('tab',{name:'操作计划',exact:true}).click();await expect(page.getByRole('checkbox',{name:'显示全部'})).not.toBeChecked();
+  await page.getByRole('tab',{name:'任务实例',exact:true}).click();await expect(page.getByRole('checkbox',{name:'显示全部'})).toBeChecked();
+  await page.getByRole('button',{name:'重新生成实例',exact:true}).click();await expect(page.getByRole('dialog',{name:'重新生成实例'})).toContainText('操作计划');await page.keyboard.press('Escape');
+  await page.locator('.section-nav button',{hasText:'巡视'}).click();await expect(page.getByRole('tab',{name:'巡视模板',exact:true})).toBeVisible();
+  await expect(page.getByRole('checkbox',{name:'显示全部'})).not.toBeChecked();
+  await expect(page.getByRole('cell',{name:'TAB 巡视专属实例',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'TAB 操作专属实例',exact:true})).toHaveCount(0);
 });
