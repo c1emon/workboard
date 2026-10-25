@@ -227,6 +227,7 @@
       @delete="removeOperationItem"
       @normalize-duration="normalizeOperationItemDuration"
       @normalize-offset="normalizeOperationItemOffset"
+      @change-base="changeOperationItemBase"
       @save="saveOperationItem"
     />
 
@@ -282,7 +283,7 @@ const {
   closeOperationItemModal, saveModal, togglePermit, toggleOther, toggleOperation,
   confirmConfirmation, cancelConfirmation, removePermit, removeOther, removeLeave,
   removeOperation, saveOperation, saveOperationItem, removeOperationItem, submitHolidayImport,
-  normalizeOperationItemOffset, normalizeOperationItemDuration, openTaskInstanceCreate, openTaskInstanceEdit,
+  normalizeOperationItemOffset, changeOperationItemBase, normalizeOperationItemDuration, openTaskInstanceCreate, openTaskInstanceEdit,
   closeTaskInstanceForm, saveTaskInstance, cancelTaskInstance, removeTaskInstance, openTaskInstanceRefresh, closeTaskInstanceRefresh, refreshTaskInstances,
   selectPatrolPlan, openPatrolCycleItemManager, closePatrolPlanDetail, closePatrolCycleItemManager, openPatrolPlanCreate, openPatrolPlanEdit, closePatrolPlanForm, savePatrolPlan, togglePatrolPlan, removePatrolPlan,
   openPatrolCycleItemCreate, openPatrolCycleItemEdit, closePatrolCycleItemForm, savePatrolCycleItem, removePatrolCycleItem

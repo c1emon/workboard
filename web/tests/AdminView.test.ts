@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -750,6 +750,50 @@ describe("AdminView", () => {
 
     expect(wrapper.find(".operation-modal-loading").exists()).toBe(false);
     expect(wrapper.find(".operation-modal").exists()).toBe(true);
+  });
+
+  it("recalculates the relative offset when changing a base without moving the saved task", async () => {
+    const wrapper = mountAdmin(); await openOperationSection(wrapper);
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
+    await new Promise(resolve => setTimeout(resolve, 310));
+    wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
+      id: "item-2", offsetMinutes: 150, durationMinutes: 60, content: "复核记录", extData: {crew:"B"}, sortOrder: 1
+    });
+    await wrapper.vm.$nextTick();
+    const base = wrapper.find('select[name="operationItemBaseItem"]');
+    const hours = () => Number((wrapper.find('input[name="operationItemOffsetHours"]').element as HTMLInputElement).value);
+    const minutes = () => Number((wrapper.find('input[name="operationItemOffsetMinutes"]').element as HTMLInputElement).value);
+    expect([hours(), minutes()]).toEqual([2, 30]);
+    await base.setValue("item-1"); expect([hours(), minutes()]).toEqual([0, 30]);
+    await base.setValue(""); expect([hours(), minutes()]).toEqual([2, 30]);
+    // Use the edited draft position, rather than the originally saved 150-minute position.
+    await wrapper.find('input[name="operationItemOffsetHours"]').setValue("3");
+    await wrapper.find('input[name="operationItemOffsetMinutes"]').setValue("45");
+    await base.setValue("item-1"); expect([hours(), minutes()]).toEqual([1, 45]);
+    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
+    expect(updateOperationPlan).toHaveBeenCalledWith("operation-1", expect.objectContaining({
+      item: expect.objectContaining({id:"item-2",offsetMinutes:225,durationMinutes:60,extData:{crew:"B"}})
+    }));
+  });
+
+  it("supports a later base with negative relative time and resets when another item opens", async () => {
+    const wrapper = mountAdmin(); await openOperationSection(wrapper);
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
+    await new Promise(resolve => setTimeout(resolve, 310));
+    wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
+      id:"item-1",offsetMinutes:0,durationMinutes:120,content:"A、B 操作",extData:{},sortOrder:0
+    });
+    await wrapper.vm.$nextTick();
+    await wrapper.find('select[name="operationItemBaseItem"]').setValue("item-2");
+    expect((wrapper.find('input[name="operationItemOffsetHours"]').element as HTMLInputElement).value).toBe("-3");
+    expect((wrapper.find('input[name="operationItemOffsetMinutes"]').element as HTMLInputElement).value).toBe("-30");
+    await wrapper.find(".operation-item-modal").trigger("submit.prevent");
+    expect(updateOperationPlan).toHaveBeenCalledWith("operation-1", expect.objectContaining({item:expect.objectContaining({id:"item-1",offsetMinutes:0})}));
+    await waitForAssertion(() => expect(wrapper.find(".operation-item-modal").exists()).toBe(false));
+    await flushPromises();
+    await wrapper.find('[aria-label="新增子任务"]').trigger("click");
+    expect((wrapper.find('select[name="operationItemBaseItem"]').element as HTMLSelectElement).value).toBe("");
+    expect((wrapper.find('input[name="operationItemOffsetHours"]').element as HTMLInputElement).value).toBe("0");
   });
 
   it("selects operation child tasks from the timeline while editing", async () => {

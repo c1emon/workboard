@@ -291,6 +291,14 @@ export function useOperationAdmin(context: OperationAdminContext) {
     return operationItemBaseEndMinutes() + operationItemOffsetTotalMinutes();
   }
 
+  function changeOperationItemBase(baseItemId: string): void {
+    if (operationReadOnly.value || operationWriteBusy.value) return;
+    if (baseItemId && !operationItemBaseOptions.value.some((item) => item.id === baseItemId)) return;
+    const absoluteOffset = operationItemAbsoluteOffsetMinutes();
+    operationItemForm.baseItemId = baseItemId;
+    setOperationItemOffset(absoluteOffset - operationItemBaseEndMinutes());
+  }
+
   function addMinutesToDateTimeLocal(value: string, minutes: number): string {
     const start = new Date(normalizeDateTime(value)).getTime();
     if (Number.isNaN(start)) return value;
@@ -593,6 +601,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
     saveOperationItem,
     removeOperationItem,
     normalizeOperationItemOffset,
+    changeOperationItemBase,
     normalizeOperationItemDuration
   };
 }

@@ -229,6 +229,7 @@
 | `OperationGenerationModal.vue`（新增） | 承载填写/确认/提交三个阶段，仅一层活动弹窗 |
 | `PlanDetailImportModal.vue`（新增） | 操作/巡视共用的文件选择、校验、预览与覆盖确认展示 |
 | `PatrolPlanManager.vue` | 导出入口、收拢更多菜单、接入统一导入步骤，保留原详情和周期项编辑结构 |
+| `OperationItemModal.vue` | 开始基准切换时按当前草稿的绝对开始位置重算相对偏移；允许相对较晚基准的负偏移，切回计划起点恢复对应绝对偏移；时长与扩展字段保持不变 |
 | `OperationPlanModal.vue` | 只读详情的导出入口；不改变计划编辑和子任务时间轴模型 |
 | `useOperationAdmin.ts` | 生成流程与大屏选择状态；两类请求独立，不在组件内散写 API 调用 |
 | `usePatrolPlanAdmin.ts` | 接入导入校验和导出状态，不引入大屏选择逻辑 |

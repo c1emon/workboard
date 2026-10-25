@@ -104,3 +104,24 @@ test('operation and patrol tabs keep task types and show-all filters separate',a
   await expect(page.getByRole('checkbox',{name:'显示全部'})).not.toBeChecked();
   await expect(page.getByRole('cell',{name:'TAB 巡视专属实例',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'TAB 操作专属实例',exact:true})).toHaveCount(0);
 });
+
+test('switching a child start reference recalculates the offset and preserves the stored position',async({page,request})=>{
+  const id=await seed(request,'基准换算验收');
+  const original=await (await request.get(`${api}/operation-plans/${id}`)).json();
+  const a=original.items.find((item:any)=>item.content==='A 操作');const b=original.items.find((item:any)=>item.content==='B 操作');
+  for(const [item,offsetMinutes,durationMinutes] of [[a,0,1440],[b,1440,510]] as const){
+    const result=await request.put(`${api}/operation-plans/${id}/items/${item.id}`,{data:{...item,offsetMinutes,durationMinutes}});expect(result.ok()).toBeTruthy();
+  }
+  await page.goto('/admin');await page.locator('.section-nav button',{hasText:'操作'}).click();await page.getByRole('tab',{name:'操作计划',exact:true}).click();
+  await page.getByRole('row').filter({hasText:'基准换算验收'}).getByRole('button',{name:'修改',exact:true}).click();
+  await page.locator('.operation-modal .vis-item-content').filter({hasText:'B 操作'}).click();
+  const dialog=page.locator('.operation-item-modal');await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[name="operationItemOffsetHours"]')).toHaveValue('24');
+  await dialog.locator('[name="operationItemBaseItem"]').selectOption(a.id);
+  await expect(dialog.locator('[name="operationItemOffsetHours"]')).toHaveValue('0');await expect(dialog.locator('[name="operationItemOffsetMinutes"]')).toHaveValue('0');
+  await dialog.locator('[name="operationItemBaseItem"]').selectOption('');await expect(dialog.locator('[name="operationItemOffsetHours"]')).toHaveValue('24');
+  await dialog.locator('[name="operationItemBaseItem"]').selectOption(a.id);
+  await dialog.getByRole('button',{name:'保存',exact:true}).click();await expect(dialog).toHaveCount(0);
+  const saved=await (await request.get(`${api}/operation-plans/${id}`)).json();
+  expect(saved.items.find((item:any)=>item.id===b.id)).toMatchObject({offsetMinutes:1440,durationMinutes:510,extData:{zone:'北区'}});
+});

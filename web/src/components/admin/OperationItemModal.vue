@@ -9,7 +9,7 @@
         <div class="operation-item-start-row wide-field">
           <label>
             开始基准
-            <select v-model="form.baseItemId" name="operationItemBaseItem" :disabled="readOnly">
+            <select :value="form.baseItemId" name="operationItemBaseItem" :disabled="readOnly" @change="emit('change-base', ($event.target as HTMLSelectElement).value)">
               <option value="">计划开始时间点</option>
               <option v-for="item in baseOptions" :key="item.id" :value="item.id">
                 {{ formatBaseOption(item) }}
@@ -139,6 +139,7 @@ const emit = defineEmits<{
   save: [];
   delete: [];
   "normalize-offset": [];
+  "change-base": [id: string];
   "normalize-duration": [];
 }>();
 
