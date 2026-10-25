@@ -1,6 +1,6 @@
 # Proposal
 
-状态：本轮产品规则已确认，尚未实施。完整需求及说明见 [requirements.md](requirements.md)，可验证要求见本 change 的 delta specs。
+状态：已在 `codex/refine-operation-plan-workflows` 实施，验证结果见 [tasks.md](tasks.md)。完整需求及说明见 [requirements.md](requirements.md)，可验证要求见本 change 的 delta specs。
 
 ## Why
 
@@ -33,4 +33,4 @@
 - 预计涉及后端生成规则、计划文件接口、看板操作数据筛选及展示选择存储。
 - 预计涉及管理端生成表单、展示选择和计划导入导出入口，以及相应测试。
 - 产品规则已明确；接口、存储及文件工作表布局等实现设计留给后续 design，不在本轮编写业务代码。
-- 当前只整理需求与规范，不运行 apply、不切换实现分支，也不实施功能。
+- 实施已完成；本 change 尚未归档，未部署至共享环境。

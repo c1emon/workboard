@@ -124,8 +124,9 @@ describe("admin managers", () => {
 
     await wrapper.findAll("tbody .row-actions button")[0].trigger("click");
     await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
-    await wrapper.findAll("tbody .row-actions button")[2].trigger("click");
-    await wrapper.find("tbody .row-actions .danger").trigger("click");
+    const menu = wrapper.findComponent({ name: 'PlanActionsMenu' });
+    menu.vm.$emit('action', 'toggle');
+    menu.vm.$emit('action', 'delete');
     await wrapper.find(".manager-actions .secondary-action").trigger("click");
 
     expect(wrapper.emitted("detail")?.[0][0]).toMatchObject({ id: "operation-1" });

@@ -14,7 +14,7 @@ For a separately hosted API, set `VITE_API_BASE` to its browser-accessible origi
 
 ## Patrol Excel Import
 
-The first worksheet must start with these headers: `周期第几天`, `时间`, `目标`, `人员`, `车辆`, `其他`. Columns may be reordered, surrounding header whitespace is ignored, and extra columns are ignored. Missing or duplicate required headers are rejected. Empty optional values are preserved as empty strings, blank rows are skipped, and validation errors use the worksheet's original row numbers.
+The `周期项` worksheet (or the only detail worksheet) must start with these headers: `周期第几天`, `时间`, `目标`, `人员`, `车辆`, `其他`. Columns may be reordered, surrounding header whitespace is ignored, and extra columns are ignored. Missing required headers or duplicate named headers are rejected. Empty optional values are preserved as empty strings, blank rows are skipped, and validation errors use the worksheet's original row numbers.
 
 ## Main Areas
 
@@ -32,3 +32,15 @@ Keep UI state in composables when it is shared across controls or modals. Keep p
 pnpm --filter ./web test
 pnpm --filter ./web build
 ```
+
+## Operation and Plan Workflows
+
+The operation list shows the globally saved board plan above its date filter. Choosing a disabled plan keeps that selection and displays `无可展示计划` on the board. Disabling or deleting the selected plan never selects another plan automatically.
+
+Use **更多 → 重新生成实例** for a row, or the top-level button to choose from all saved plans. Recurring plans require a child task and its actual start time; one-time plans start at cycle zero. All times are Beijing time. The cutoff is exclusive on task start, and eligible tasks keep their full duration. Confirmation replaces all of that plan's unstarted generated pending instances, including old arrangements outside the new range. In-progress, completed, cancelled, manual and adjusted instances are protected. A network failure can leave the write outcome unknown; inspect the saved result before retrying.
+
+**导入子任务 / 导入周期项** validates the entire XLSX before showing a preview of at most five rows. Confirm once to replace the selected existing plan's details. Basic plan information and generated instance content/status are preserved; regenerate separately if needed. Existing foreign-key links to removed template items are cleared by SQLite, while generation keys and instance snapshots remain intact.
+
+Operation imports require `任务内容`, `开始偏移（分钟）`, `持续时间（分钟）`; optional `序号` controls ordering, otherwise file order is used. Offsets are nonnegative integer minutes and durations are positive integer minutes. Additional uniquely named columns preserve scalar extension values. Patrol imports retain the six business columns described above. A named `子任务` or `周期项` sheet takes precedence; a single detail sheet is also accepted. `计划信息` is never interpreted as details. Duplicate headers, including optional or extension columns, are rejected.
+
+**导出计划 XLSX** downloads one saved plan definition with `计划信息` and all `子任务` or `周期项`, including an empty detail sheet for empty plans. Extension fields follow fixed columns; colliding names receive an `扩展：` prefix. Generated instances and their execution states are excluded. Downloadable import templates contain headers only.

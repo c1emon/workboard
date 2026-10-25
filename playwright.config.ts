@@ -23,7 +23,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "npm run dev:e2e --workspace server",
+      command: "pnpm --filter ./server dev:e2e",
       url: `http://127.0.0.1:${serverPort}/api/board`,
       env: {
         NODE_ENV: "test",
@@ -35,7 +35,7 @@ export default defineConfig({
       timeout: 30_000
     },
     {
-      command: `npm run dev --workspace web -- --host 127.0.0.1 --port ${webPort}`,
+      command: `pnpm --filter ./web dev --host 127.0.0.1 --port ${webPort}`,
       url: `http://127.0.0.1:${webPort}/admin`,
       env: {
         VITE_API_BASE: `http://127.0.0.1:${serverPort}`

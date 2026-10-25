@@ -4,6 +4,8 @@ import { useConfirmation } from "./useConfirmation";
 import { useHolidayAdmin } from "./useHolidayAdmin";
 import { useOperationAdmin } from "./useOperationAdmin";
 import { usePatrolPlanAdmin } from "./usePatrolPlanAdmin";
+import { usePlanFileExchange } from "./usePlanFileExchange";
+import type { OperationPlanRecord, PatrolPlanDetail } from "../../api/client";
 import { useTaskInstanceAdmin } from "./useTaskInstanceAdmin";
 import type { AdminSection, SectionKey } from "./types";
 
@@ -52,6 +54,18 @@ export function useAdminViewModel() {
     } else {
       await withStatus(holidayAdmin.loadHolidayRows);
     }
+  }
+
+  const planFiles = usePlanFileExchange(async () => {
+    await loadActiveList();
+  });
+  function openOperationImport(record: OperationPlanRecord) {
+    if (operationAdmin.operationWriteBusy.value || operationAdmin.generationBusy.value || operationAdmin.operationModalOpen.value) return;
+    planFiles.openImport({ kind: 'operation', id: record.id, name: record.name, count: record.childTaskCount });
+  }
+  function openPatrolImport(record: PatrolPlanDetail) {
+    if (patrolPlanAdmin.patrolPlanFormOpen.value || patrolPlanAdmin.patrolCycleItemFormOpen.value) return;
+    planFiles.openImport({ kind: 'patrol', id: record.id, name: record.name, count: record.items.length });
   }
 
   const sharedContext = {
@@ -113,6 +127,7 @@ export function useAdminViewModel() {
     ...taskInstanceAdmin,
     ...patrolPlanAdmin,
     ...holidayAdmin,
+    ...planFiles, openOperationImport, openPatrolImport,
     confirmation: confirmationModel.confirmation,
     confirmConfirmation: confirmationModel.confirmConfirmation,
     cancelConfirmation: confirmationModel.cancelConfirmation,

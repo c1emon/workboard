@@ -197,10 +197,8 @@ describe("PatrolPlanManager", () => {
     expect(wrapper.find(".patrol-item-manager-modal").exists()).toBe(true);
     expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("修改");
     expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("删除");
-    expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("批量导入");
-    const templateDownload = wrapper.find('[download="patrol-cycle-items-import-template.xlsx"]');
-    expect(templateDownload.exists()).toBe(true);
-    expect(templateDownload.attributes("href")).toBe("/templates/patrol-cycle-items-import-template.xlsx");
+    expect(wrapper.find(".patrol-item-manager-modal").text()).toContain("导入周期项");
+    expect(wrapper.find('.detail-toolbar').text()).toContain('导入模板下载');
 
     await wrapper.find('[aria-label="新增周期项"]').trigger("click");
     expect(wrapper.find(".patrol-cycle-item-modal").exists()).toBe(true);
@@ -216,35 +214,16 @@ describe("PatrolPlanManager", () => {
     expect(updatePatrolPlanItem).toHaveBeenCalledWith("plan-1", "item-1", expect.objectContaining({ target: "3号线" }));
   });
 
-  it("imports patrol cycle items from Excel after confirmation", async () => {
-    const { wrapper, requestConfirmation, refresh } = mountHarness();
+  it("opens the shared import step with an explicit target", async () => {
+    const { wrapper } = mountHarness();
     await flush();
-
-    await wrapper.findAll("tbody .row-actions button")[1].trigger("click");
+    await wrapper.findAll('tbody .row-actions button')[1].trigger('click');
     await flush();
-
-    const input = wrapper.find('input[name="patrolCycleItemExcel"]');
-    expect(input.exists()).toBe(true);
-    Object.defineProperty(input.element, "files", {
-      value: [new File(["excel"], "patrol.xlsx", { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })]
-    });
-    await input.trigger("change");
-    await flush();
-
-    expect(parsePatrolCycleItemExcel).toHaveBeenCalled();
-    expect(requestConfirmation).toHaveBeenCalledWith(expect.objectContaining({
-      title: "导入周期项",
-      message: expect.stringContaining("覆盖当前模板全部 1 项")
-    }));
-    expect(importPatrolPlanItems).toHaveBeenCalledWith("plan-1", {
-      mode: "replace",
-      items: [
-        { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "巡检车", other: "带记录仪" },
-        { cycleDay: 2, timeTag: "下午", target: "2号线", personnel: "李四", vehicle: "", other: "" }
-      ]
-    });
-    expect(fetchPatrolPlan).toHaveBeenLastCalledWith("plan-1");
-    expect(refresh).toHaveBeenCalled();
+    const manager = wrapper.findComponent(PatrolPlanManager);
+    const button = manager.findAll('.detail-toolbar button').find(button => button.text() === '导入周期项')!;
+    await button.trigger('click');
+    expect(manager.emitted('open-import')?.[0][0]).toMatchObject({ id: 'plan-1', name: '日常巡检' });
+    expect(importPatrolPlanItems).not.toHaveBeenCalled();
   });
 
   it("keeps long patrol cycle item lists scrollable inside the manager modal", () => {

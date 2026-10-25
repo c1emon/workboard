@@ -77,7 +77,7 @@
           />
           <PatrolPlanManager
             v-else
-            :rows="patrolPlanRows"
+            :rows="patrolPlanRows" :file-summary="fileSummary" :exporting-id="exportingId" :import-open="!!importTarget"
             :detail="patrolPlanDetail"
             :detail-open="patrolPlanDetailOpen" :item-manager-open="patrolCycleItemManagerOpen"
             :plan-form="patrolPlanForm"
@@ -92,7 +92,7 @@
             @delete-plan="removePatrolPlan"
             @close-plan="closePatrolPlanForm"
             @save-plan="savePatrolPlan"
-            @add-item="openPatrolCycleItemCreate" @edit-item="openPatrolCycleItemEdit" @delete-item="removePatrolCycleItem" @close-item-form="closePatrolCycleItemForm" @save-item="savePatrolCycleItem" @import-file="importPatrolCycleItemsFromExcel"
+            @add-item="openPatrolCycleItemCreate" @edit-item="openPatrolCycleItemEdit" @delete-item="removePatrolCycleItem" @close-item-form="closePatrolCycleItemForm" @save-item="savePatrolCycleItem" @open-import="openPatrolImport" @export-plan="record => exportPlan('patrol', record.id)"
           />
         </div>
 
@@ -118,7 +118,10 @@
           :today="today"
           :yesterday="yesterday"
           :rows="operationRows"
-          :refresh-form="operationRefreshForm" :refresh-open="operationRefreshOpen" :generation-summary="operationGenerationSummary"
+          :generation-summary="operationGenerationSummary" :selection="boardSelection" :selection-loading="boardSelectionLoading"
+          :selection-saving-id="boardSelectionSavingId" :selection-message="boardSelectionMessage" :busy="operationWriteBusy || generationBusy || importBusy"
+          :file-summary="fileSummary" :exporting-id="exportingId" @select-board="selectBoardPlan"
+          @import="openOperationImport" @export="record => exportPlan('operation', record.id)"
           @add="openOperationModal()"
           @today="jumpToToday"
           @yesterday="jumpToYesterday"
@@ -126,7 +129,7 @@
           @toggle="toggleOperation"
           @edit="(record) => openOperationModal(record, 'edit')"
           @delete="removeOperation"
-          @open-refresh="openOperationRefresh" @close-refresh="closeOperationRefresh" @refresh="refreshOperationInstances"
+          @open-refresh="openOperationRefresh"
         />
 
         <LeaveManager
@@ -171,7 +174,7 @@
 
     <OperationPlanModal
       v-if="operationModalOpen"
-      :title="operationModalTitle"
+      :title="operationModalTitle" :exporting="exportingId === operationRecordId" :export-message="fileSummary" :busy="operationWriteBusy" @export="operationRecordId && exportPlan('operation', operationRecordId)"
       :mode="operationModalMode"
       :form="operationForm"
       :read-only="operationReadOnly"
@@ -189,11 +192,18 @@
       @select-item="selectOperationItem"
     />
 
+    <OperationGenerationModal v-if="operationRefreshOpen"
+      :plans="generationPlans" :plan="generationPlan" :locked="generationLocked" :form="operationRefreshForm"
+      :step="generationStep" :busy="generationBusy" :loading="generationLoading" :error="generationError" :validation="generationValidation"
+      @close="closeOperationRefresh" @plan="selectGenerationPlan" @confirm="confirmOperationGeneration" @back="generationStep = 'form'" @submit="refreshOperationInstances" />
+    <PlanDetailImportModal v-if="importTarget" :target="importTarget" :file-name="importFileName" :items="importItems"
+      :error="importError" :busy="importBusy" :reading="importReading" @close="closeImport" @file="selectImportFile" @submit="submitImport" />
+
     <OperationLoadingOverlay v-if="operationDetailLoading" />
 
     <OperationItemModal
       v-if="operationItemModalOpen"
-      :title="operationItemModalTitle"
+      :title="operationItemModalTitle" :busy="operationWriteBusy"
       :mode="operationItemModalMode"
       :form="operationItemForm"
       :read-only="operationReadOnly"
@@ -227,6 +237,8 @@ import HolidayManager from "../components/admin/HolidayManager.vue";
 import LeaveManager from "../components/admin/LeaveManager.vue";
 import OperationItemModal from "../components/admin/OperationItemModal.vue";
 import OperationLoadingOverlay from "../components/admin/OperationLoadingOverlay.vue";
+import OperationGenerationModal from "../components/admin/OperationGenerationModal.vue";
+import PlanDetailImportModal from "../components/admin/PlanDetailImportModal.vue";
 import OperationManager from "../components/admin/OperationManager.vue";
 import OperationPlanModal from "../components/admin/OperationPlanModal.vue";
 import OtherManager from "../components/admin/OtherManager.vue";
@@ -235,6 +247,9 @@ import PermitManager from "../components/admin/PermitManager.vue";
 import TaskInstanceManager from "../components/admin/TaskInstanceManager.vue";
 import { useAdminViewModel } from "../composables/admin/useAdminViewModel";
 const {
+  generationPlans, generationPlan, generationLocked, generationLoading, generationBusy, generationStep, generationError, generationValidation,
+  selectGenerationPlan, confirmOperationGeneration, boardSelection, boardSelectionLoading, boardSelectionSavingId, boardSelectionMessage, selectBoardPlan, operationWriteBusy,
+  importTarget, importFileName, importItems, importError, importBusy, importReading, fileSummary, exportingId, closeImport, selectImportFile, submitImport, exportPlan, openOperationImport, openPatrolImport,
   sections, today, yesterday, activeKey, selectedDate, statusText, activeSection,
   permitRows, otherRows, leaveRows, permitShowAll, otherShowAll, leaveShowAll, operationRows, operationShowAll,
   taskInstanceRows, taskInstanceShowAll, taskInstanceForm, taskInstanceFormOpen, taskInstanceRefreshForm, taskInstanceRefreshOpen, taskInstanceEditingId, taskInstanceGenerationSummary,
@@ -254,7 +269,7 @@ const {
   normalizeOperationItemOffset, normalizeOperationItemDuration, openTaskInstanceCreate, openTaskInstanceEdit,
   closeTaskInstanceForm, saveTaskInstance, cancelTaskInstance, removeTaskInstance, openTaskInstanceRefresh, closeTaskInstanceRefresh, refreshTaskInstances,
   selectPatrolPlan, openPatrolCycleItemManager, closePatrolPlanDetail, closePatrolCycleItemManager, openPatrolPlanCreate, openPatrolPlanEdit, closePatrolPlanForm, savePatrolPlan, togglePatrolPlan, removePatrolPlan,
-  openPatrolCycleItemCreate, openPatrolCycleItemEdit, closePatrolCycleItemForm, savePatrolCycleItem, removePatrolCycleItem, importPatrolCycleItemsFromExcel
+  openPatrolCycleItemCreate, openPatrolCycleItemEdit, closePatrolCycleItemForm, savePatrolCycleItem, removePatrolCycleItem
 } = useAdminViewModel();
 
 const patrolActiveTab = ref<"instances" | "templates">("instances");
@@ -368,6 +383,7 @@ const patrolActiveTab = ref<"instances" | "templates">("instances");
 }
 
 .editor-panel {
+  min-width: 0;
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #fff;

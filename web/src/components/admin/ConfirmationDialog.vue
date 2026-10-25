@@ -1,6 +1,6 @@
 <template>
   <div class="modal-backdrop confirmation-backdrop" role="presentation" @click.self="emit('cancel')">
-    <section class="modal-form confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+    <section v-modal-focus="{ close: () => emit('cancel') }" class="modal-form confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
       <div class="modal-heading">
         <h2 id="confirmation-title">{{ title }}</h2>
         <button type="button" aria-label="关闭确认弹窗" @click="emit('cancel')">×</button>
@@ -10,7 +10,7 @@
         <p v-if="detail" class="confirmation-detail">{{ detail }}</p>
       </div>
       <div class="modal-actions">
-        <button type="button" class="secondary-action confirmation-cancel" @click="emit('cancel')">取消</button>
+        <button type="button" class="secondary-action confirmation-cancel" data-initial-focus @click="emit('cancel')">取消</button>
         <button type="button" class="danger-action confirmation-confirm" @click="emit('confirm')">
           {{ confirmLabel }}
         </button>
@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import { vModalFocus } from "../../utils/modalFocus";
 defineProps<{
   title: string;
   message: string;

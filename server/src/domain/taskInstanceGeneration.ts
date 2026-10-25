@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import type { AppDatabase } from "../db/database.js";
 import { formatWithChinaOffset, toChinaDate } from "./dateTime.js";
-import { expandTemplate, type ExpandedTemplateItem, type TaskTemplate, type TaskTemplateItemInput } from "./templateExpansion.js";
+import { expandOperationSchedule, expandTemplate, type ExpandedTemplateItem, type TaskTemplate, type TaskTemplateItemInput } from "./templateExpansion.js";
 import { extDataString, extDataTimeTag, parseExtDataJson, type TaskInstanceSource, type TaskInstanceStatus } from "./taskInstances.js";
 import { timeRangeForDateTag } from "./timeTags.js";
 
@@ -100,6 +100,26 @@ export function generateTaskInstances(db: AppDatabase, input: GenerateTaskInstan
 
   run();
   return stats;
+}
+
+export function regenerateOperationInstances(
+  db: AppDatabase,
+  planId: string,
+  input: { startAt: string; cutoffAt: string; startItemId?: string },
+  now = new Date()
+): { removed: number; inserted: number; skipped: number } {
+  return db.transaction(() => {
+    const template = loadTaskTemplates(db).find((item) => item.id === planId && item.type === "operation");
+    if (!template) throw new Error("操作计划不存在");
+    const items = loadTaskTemplateItems(db).get(planId) ?? [];
+    const expanded = expandOperationSchedule(template, items, { ...input, ...loadHolidaySets(db) });
+    const removed = db.prepare(`delete from task_instances where template_id = ? and type = 'operation'
+      and source_type = 'generated' and status = 'pending' and julianday(start_at) >= julianday(?)`)
+      .run(planId, now.toISOString()).changes;
+    const stats: GenerateTaskInstancesOutput = { inserted: 0, updated: 0, skipped: 0 };
+    for (const item of expanded) upsertGeneratedInstance(db, snapshotFromExpandedItem(template, item), false, stats);
+    return { removed, inserted: stats.inserted, skipped: stats.skipped };
+  })();
 }
 
 function simpleSnapshots(

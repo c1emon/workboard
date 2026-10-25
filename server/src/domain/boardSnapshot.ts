@@ -2,6 +2,7 @@ import type { AppDatabase } from "../db/database.js";
 import { toChinaDate, toChinaOffsetDateTime } from "./dateTime.js";
 import { extDataString, extDataTimeTag, parseExtDataJson } from "./taskInstances.js";
 import { compareTimeTag, type TimeTag } from "./timeTags.js";
+import { getOperationBoardSelection } from "./operationBoardSelection.js";
 
 export interface BoardSnapshot {
   serverTime: string;
@@ -43,6 +44,7 @@ type TaskInstanceStatus = TaskInstanceRow["status"];
 
 interface SnapshotTaskInstance {
   id: string;
+  templateId: string | null;
   type: TaskInstanceRow["type"];
   startAt: string;
   endAt: string;
@@ -53,6 +55,7 @@ interface SnapshotTaskInstance {
 
 export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapshot {
   const date = toChinaDate(now);
+  const selection = getOperationBoardSelection(db);
   const operationInstances = loadTaskInstances(db, "operation", {
     start: new Date(now.getTime() - 24 * 60 * 60_000),
     end: new Date(now.getTime() + 24 * 60 * 60_000)
@@ -62,6 +65,7 @@ export function getBoardSnapshot(db: AppDatabase, now = new Date()): BoardSnapsh
     end: new Date(`${date}T23:59:59.999+08:00`)
   };
   const operationItems = operationInstances
+    .filter((item) => selection.exists && selection.enabled && item.templateId === selection.planId)
     .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime())
     .map((item) => ({
       content: item.content ?? "",
@@ -143,6 +147,7 @@ function loadTaskInstances(
 
   return rows.map((row) => ({
     id: row.id,
+    templateId: row.template_id,
     type: row.type,
     startAt: row.start_at,
     endAt: row.end_at,

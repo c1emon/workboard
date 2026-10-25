@@ -351,11 +351,12 @@ describe("board snapshot", () => {
   it("warns and falls back when task extData JSON is invalid", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const db = createTestDatabase();
+    insertTemplate(db, { id: "operation-invalid", type: "operation" });
     db.prepare(
       `insert into task_instances
        (id, type, template_id, source_template_item_id, source_type, generation_key, occurrence_date,
         start_at, end_at, content, ext_data_json, status, generated_at, updated_at)
-       values (?, 'operation', null, null, 'manual', null, ?, ?, ?, ?, ?, 'pending', ?, ?)`
+       values (?, 'operation', 'operation-invalid', null, 'manual', null, ?, ?, ?, ?, ?, 'pending', ?, ?)`
     ).run(
       "operation-1",
       "2026-05-01",
@@ -401,6 +402,10 @@ function insertTaskInstance(
     extData?: Record<string, unknown>;
   }
 ): void {
+  if (input.type === 'operation' && input.templateId === undefined) {
+    if (!db.prepare("select id from task_templates where id = 'operation-test'").get()) insertTemplate(db, { id: 'operation-test', type: 'operation' });
+    input.templateId = 'operation-test';
+  }
   const rangeByTag = {
     全天: ["00:00:00+08:00", "23:59:59+08:00", 1439],
     上午: ["08:00:00+08:00", "12:00:00+08:00", 240],

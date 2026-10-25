@@ -1,6 +1,6 @@
 <template>
   <div class="modal-backdrop" role="presentation" @click.self="emit('close')">
-    <form class="modal-form operation-modal" @submit.prevent="emit('save')">
+    <form v-modal-focus="{ close: () => emit('close'), busy }" :aria-label="title" :inert="busy" class="modal-form operation-modal" @submit.prevent="emit('save')">
       <div class="modal-heading">
         <h2>{{ title }}</h2>
         <button type="button" aria-label="关闭弹窗" @click="emit('close')">×</button>
@@ -45,8 +45,10 @@
           @add="emit('add-item')"
           @select="emit('select-item', $event)"
         />
+        <p v-if="readOnly && exportMessage" role="status">{{ exportMessage }}</p>
       </div>
       <div class="modal-actions">
+        <button v-if="readOnly" type="button" :disabled="exporting" @click="emit('export')">{{ exporting ? '导出中…' : '导出计划 XLSX' }}</button>
         <button type="button" class="secondary-action" @click="emit('close')">{{ readOnly ? "关闭" : "取消" }}</button>
         <button v-if="!readOnly" type="submit" class="primary-action">保存</button>
       </div>
@@ -55,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { vModalFocus } from "../../utils/modalFocus";
 import type { OperationPlanItemRecord } from "../../api/client";
 import OperationTaskTimeline from "../OperationTaskTimeline.vue";
 
@@ -75,6 +78,9 @@ export interface OperationPlanForm {
 
 defineProps<{
   title: string;
+  exporting?: boolean;
+  exportMessage?: string;
+  busy?: boolean;
   mode: OperationModalMode;
   form: OperationPlanForm;
   readOnly: boolean;
@@ -90,6 +96,7 @@ defineProps<{
 
 const emit = defineEmits<{
   close: [];
+  export: [];
   save: [];
   "add-item": [];
   "select-item": [item: OperationPlanItemRecord];

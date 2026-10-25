@@ -106,6 +106,36 @@ function operationCycleDurationMs(items: TaskTemplateItemInput[]): number {
   return 0;
 }
 
+export function expandOperationSchedule(
+  template: TaskTemplate,
+  items: TaskTemplateItemInput[],
+  options: { startAt: string; cutoffAt: string; startItemId?: string; holidays: Set<string>; adjustedWorkdays: Set<string> }
+): ExpandedTemplateItem[] {
+  const selected = items.find((item) => item.id === options.startItemId);
+  if (template.recurrenceType === "once" && options.startItemId) throw new Error("一次性计划只能从周期零点生成");
+  if (template.recurrenceType !== "once" && !selected) throw new Error("请选择有效的起始子任务");
+  const start = Date.parse(options.startAt);
+  const cutoff = Date.parse(options.cutoffAt);
+  if (!Number.isFinite(start) || !Number.isFinite(cutoff) || cutoff <= start) throw new Error("生成截止时间必须晚于开始时间");
+  const duration = operationCycleDurationMs(items);
+  if (!template.enabled) throw new Error("计划已禁用，请先启用");
+  if (!duration) throw new Error("请先添加子任务");
+  const zero = start - (selected?.offsetMinutes ?? 0) * 60_000;
+  const result: ExpandedTemplateItem[] = [];
+  for (let occurrence = zero; occurrence < cutoff; occurrence += duration) {
+    if (!shouldSkipOccurrence(template, occurrence, options.holidays, options.adjustedWorkdays)) {
+      for (const item of items) {
+        const childStart = occurrence + item.offsetMinutes * 60_000;
+        if (childStart < start || childStart >= cutoff) continue;
+        result.push({ ...item, templateId: template.id, startAt: formatWithChinaOffset(childStart),
+          endAt: formatWithChinaOffset(childStart + item.durationMinutes * 60_000) });
+      }
+    }
+    if (template.recurrenceType === "once") break;
+  }
+  return result;
+}
+
 function occurrenceStarts(
   template: TaskTemplate,
   windowStart: number,

@@ -166,6 +166,51 @@ export interface PatrolCycleItemRecord {
   other: string;
   content: string;
   sortOrder: number;
+  extData?: Record<string, unknown>;
+}
+
+export interface OperationBoardSelection {
+  planId: string | null;
+  name: string | null;
+  exists: boolean;
+  enabled: boolean;
+}
+
+export class PlanWriteError extends Error {
+  constructor(message: string, public readonly confirmedFailure: boolean) { super(message); }
+}
+
+// These writes need an explicit failure outcome; a transport failure may follow a successful commit.
+async function planWrite<T>(path: string, method: "POST" | "PUT", input: object): Promise<T> {
+  const response = await fetch(`${apiBase}/api/admin/${path}`, {
+    method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const confirmed = body?.rolledBack === true || response.status === 400 || response.status === 404;
+    throw new PlanWriteError(body?.error ?? `请求失败：${response.status}`, confirmed);
+  }
+  return response.json();
+}
+
+export function fetchOperationBoardSelection(): Promise<OperationBoardSelection> {
+  return fetchAdmin("operation-board-selection");
+}
+
+export function saveOperationBoardSelection(planId: string): Promise<OperationBoardSelection> {
+  return planWrite("operation-board-selection", "PUT", { planId });
+}
+
+export function regenerateOperationPlan(planId: string, input: { startAt: string; cutoffAt: string; startItemId?: string }): Promise<{ removed: number; inserted: number; skipped: number }> {
+  return planWrite(`operation-plans/${encodeURIComponent(planId)}/generate`, "POST", input);
+}
+
+export function importOperationPlanItems(planId: string, items: OperationPlanItemInput[]): Promise<{ imported: number }> {
+  return planWrite(`operation-plans/${encodeURIComponent(planId)}/items/import`, "POST", { mode: "replace", items });
+}
+
+export function replacePatrolPlanItems(planId: string, input: PatrolCycleItemImportInput): Promise<PatrolCycleItemImportResult> {
+  return planWrite(`patrol-plans/${encodeURIComponent(planId)}/items/import`, "POST", input);
 }
 
 export interface PatrolPlanRecord {

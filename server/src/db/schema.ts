@@ -1,4 +1,9 @@
 export const schemaSql = `
+create table if not exists board_settings (
+  key text primary key,
+  value text
+);
+
 drop table if exists task_items;
 drop table if exists task_containers;
 

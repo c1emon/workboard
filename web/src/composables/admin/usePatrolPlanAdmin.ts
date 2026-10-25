@@ -6,7 +6,6 @@ import {
   deletePatrolPlanItem,
   fetchPatrolPlan,
   fetchPatrolPlans,
-  importPatrolPlanItems,
   type PatrolCycleItemInput,
   type PatrolCycleItemRecord,
   type PatrolPlanDetail,
@@ -17,7 +16,6 @@ import {
   updatePatrolPlanItem
 } from "../../api/client";
 import type { TimeTag } from "../../api/types";
-import { parsePatrolCycleItemExcel } from "../../utils/patrolCycleItemExcel";
 import type { PatrolPlanAdminContext } from "./types";
 
 export interface PatrolPlanForm {
@@ -41,6 +39,7 @@ export interface PatrolCycleItemForm {
 
 export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
   const { withStatus, refresh, requestConfirmation } = context;
+  let listVersion = 0, detailVersion = 0;
   const patrolPlanRows = ref<PatrolPlanRecord[]>([]);
   const patrolPlanDetail = ref<PatrolPlanDetail | null>(null);
   const patrolPlanDetailOpen = ref(false);
@@ -69,9 +68,15 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
   });
 
   async function loadPatrolPlans(): Promise<void> {
-    patrolPlanRows.value = await fetchPatrolPlans();
+    const version = ++listVersion;
+    const rows = await fetchPatrolPlans();
+    if (version !== listVersion) return;
+    patrolPlanRows.value = rows;
     if (patrolPlanDetail.value && patrolPlanRows.value.some((row) => row.id === patrolPlanDetail.value?.id)) {
-      patrolPlanDetail.value = await fetchPatrolPlan(patrolPlanDetail.value.id);
+      const id = patrolPlanDetail.value.id;
+      const detailRequest = detailVersion;
+      const detail = await fetchPatrolPlan(id);
+      if (version === listVersion && detailRequest === detailVersion && patrolPlanDetail.value?.id === id) patrolPlanDetail.value = detail;
     } else if (patrolPlanDetail.value) {
       patrolPlanDetail.value = null;
       patrolPlanDetailOpen.value = false;
@@ -79,24 +84,32 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
   }
 
   async function selectPatrolPlan(record: PatrolPlanRecord): Promise<void> {
+    const version = ++detailVersion;
     await withStatus(async () => {
-      patrolPlanDetail.value = await fetchPatrolPlan(record.id);
+      const detail = await fetchPatrolPlan(record.id);
+      if (version !== detailVersion) return;
+      patrolPlanDetail.value = detail;
       patrolPlanDetailOpen.value = true;
     });
   }
 
   async function openPatrolCycleItemManager(record: PatrolPlanRecord): Promise<void> {
+    const version = ++detailVersion;
     await withStatus(async () => {
-      patrolPlanDetail.value = await fetchPatrolPlan(record.id);
+      const detail = await fetchPatrolPlan(record.id);
+      if (version !== detailVersion) return;
+      patrolPlanDetail.value = detail;
       patrolCycleItemManagerOpen.value = true;
     });
   }
 
   function closePatrolPlanDetail(): void {
+    ++detailVersion;
     patrolPlanDetailOpen.value = false;
   }
 
   function closePatrolCycleItemManager(): void {
+    ++detailVersion;
     patrolCycleItemManagerOpen.value = false;
     closePatrolCycleItemForm();
   }
@@ -231,24 +244,6 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     });
   }
 
-  async function importPatrolCycleItemsFromExcel(file: File): Promise<void> {
-    if (!patrolPlanDetail.value) return;
-    const planId = patrolPlanDetail.value.id;
-    const currentCount = patrolPlanDetail.value.items.length;
-    await withStatus(async () => {
-      const items = await parsePatrolCycleItemExcel(file);
-      const confirmed = await requestConfirmation({
-        title: "导入周期项",
-        message: `将从「${file.name}」导入 ${items.length} 项，并覆盖当前模板全部 ${currentCount} 项。`,
-        confirmLabel: "覆盖导入"
-      });
-      if (!confirmed) return;
-      await importPatrolPlanItems(planId, { mode: "replace", items });
-      patrolPlanDetail.value = await fetchPatrolPlan(planId);
-      await refresh();
-    });
-  }
-
   function patrolPlanPayload(): PatrolPlanInput {
     return {
       name: patrolPlanForm.name,
@@ -308,8 +303,7 @@ export function usePatrolPlanAdmin(context: PatrolPlanAdminContext) {
     openPatrolCycleItemEdit,
     closePatrolCycleItemForm,
     savePatrolCycleItem,
-    removePatrolCycleItem,
-    importPatrolCycleItemsFromExcel
+    removePatrolCycleItem
   };
 }
 

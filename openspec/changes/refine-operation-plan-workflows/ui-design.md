@@ -1,6 +1,6 @@
 # Web UI 设计细化
 
-状态：实施前的 UI 设计稿。仅新增设计文档，不代表已实现页面。业务规则以本 change 的 delta specs 为准。
+状态：本 UI 合同已实施，本地验证范围见 [tasks.md](tasks.md)。业务规则以本 change 的 delta specs 为准。
 
 ## 1. 整体布局和样式
 

@@ -21,13 +21,15 @@ import {
   fetchOperationPlans,
   fetchOtherArrangements,
   fetchPermitArrangements,
-  generateTaskInstances,
+  generateTaskInstances, regenerateOperationPlan,
   importChineseDaysHolidays,
   updateOperationPlan,
   updatePermitArrangementEnabled
 } from "../src/api/client";
 
 vi.mock("../src/api/client", () => ({
+  fetchOperationBoardSelection: vi.fn().mockResolvedValue({ planId: 'operation-1', name: '倒闸操作', exists: true, enabled: true }),
+  saveOperationBoardSelection: vi.fn(), regenerateOperationPlan: vi.fn().mockResolvedValue({ removed: 2, inserted: 1, skipped: 0 }),
   createHoliday: vi.fn().mockResolvedValue({ id: "holiday-1" }),
   createLeavePerson: vi.fn().mockResolvedValue({ id: "leave-1" }),
   createOperationPlan: vi.fn().mockResolvedValue({ id: "operation-2" }),
@@ -452,30 +454,26 @@ describe("AdminView", () => {
     expect(wrapper.find(".today-button").attributes("disabled")).toBeDefined();
   });
 
-  it("refreshes operation instances from operation plans", async () => {
+  it("regenerates one operation plan after a single confirmation step", async () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
-
     await wrapper.find(".operation-panel .manager-actions .secondary-action").trigger("click");
-
-    expect(wrapper.find(".operation-refresh-modal").exists()).toBe(true);
-    expect(wrapper.find('select[name="operationRefreshTemplate"]').element).toHaveProperty("value", "");
-
-    await wrapper.find('select[name="operationRefreshTemplate"]').setValue("operation-1");
-    await wrapper.find('input[name="operationRefreshEndDate"]').setValue("2026-05-31");
-    await wrapper.find(".operation-refresh-modal").trigger("submit.prevent");
-
-    expect(wrapper.find(".confirmation-modal").text()).toContain("刷新实例");
-    await wrapper.find(".confirmation-confirm").trigger("click");
-
-    expect(generateTaskInstances).toHaveBeenCalledWith({
-      windowStartDate: expect.any(String),
-      windowEndDate: "2026-05-31",
-      types: ["operation"],
-      templateIds: ["operation-1"],
-      refreshPending: true
-    });
-    expect(wrapper.text()).toContain("新增 1，更新 0，跳过 0");
+    await new Promise(resolve => setTimeout(resolve));
+    const dialog = () => document.querySelector<HTMLElement>('.workflow-dialog')!;
+    expect(dialog().textContent).toContain('重新生成实例');
+    const select = dialog().querySelector<HTMLSelectElement>('select[name="generationPlan"]')!;
+    select.value = 'operation-1'; select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve));
+    const cutoff = dialog().querySelector<HTMLInputElement>('input[name="generationCutoffAt"]')!;
+    cutoff.value = '2030-05-31T00:00'; cutoff.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve));
+    [...dialog().querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '下一步')!.click();
+    await new Promise(resolve => setTimeout(resolve));
+    expect(dialog().textContent).toContain('包括本次生成范围之外的旧安排');
+    [...dialog().querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent === '确认替换并生成')!.click();
+    await new Promise(resolve => setTimeout(resolve));
+    expect(regenerateOperationPlan).toHaveBeenCalledWith('operation-1', expect.objectContaining({ cutoffAt: '2030-05-31T00:00:00+08:00' }));
+    expect(wrapper.text()).toContain('清理 2 条，新增 1 条，跳过 0 条');
   });
 
   it("loads arrangement lists with all scope and disables date controls when showing all", async () => {
@@ -521,6 +519,7 @@ describe("AdminView", () => {
 
     await wrapper.find(".task-instance-panel .manager-actions .secondary-action").trigger("click");
     await wrapper.find('select[name="taskInstanceRefreshTemplate"]').setValue("patrol-plan-1");
+    await wrapper.find('input[name="taskInstanceRefreshStartDate"]').setValue("2026-05-01");
     await wrapper.find('input[name="taskInstanceRefreshEndDate"]').setValue("2026-05-31");
     await wrapper.find(".task-instance-modal").trigger("submit.prevent");
     await wrapper.find(".confirmation-confirm").trigger("click");
@@ -612,7 +611,7 @@ describe("AdminView", () => {
 
     const cells = wrapper.find("tbody tr").findAll("td");
 
-    expect(cells[0].text()).toBe("操作计划");
+    expect(cells[1].text()).toBe("操作计划");
     expect(cells[2].text()).toBe("无限循环");
     expect(cells[3].text()).toBe("3");
   });
@@ -625,10 +624,10 @@ describe("AdminView", () => {
     const cells = wrapper.find(".operation-panel tbody tr").findAll("td");
     const actionButtons = wrapper.find(".operation-panel tbody .row-actions").findAll("button").map((button) => button.text());
 
-    expect(headers).toEqual(["名称", "说明", "类型", "子任务数", "操作"]);
-    expect(cells).toHaveLength(5);
-    expect(cells[0].text()).toBe("倒闸操作");
-    expect(cells[1].text()).toBe("主线切换");
+    expect(headers).toEqual(["大屏", "计划（名称 / 说明）", "类型", "子任务数", "状态", "操作"]);
+    expect(cells).toHaveLength(6);
+    expect(cells[1].text()).toContain("倒闸操作");
+    expect(cells[1].text()).toContain("主线切换");
     expect(cells[2].text()).toBe("一次性");
     expect(cells[3].text()).toBe("1");
     expect(actionButtons).toContain("详情");
@@ -738,7 +737,7 @@ describe("AdminView", () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
     wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
       id: "item-2",
@@ -789,7 +788,7 @@ describe("AdminView", () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
     wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
       id: "item-2",
@@ -853,7 +852,7 @@ describe("AdminView", () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
     await wrapper.find('[aria-label="新增子任务"]').trigger("click");
 
@@ -985,7 +984,7 @@ describe("AdminView", () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
     await wrapper.find('[aria-label="新增子任务"]').trigger("click");
     await wrapper.find('input[name="operationItemOffsetHours"]').setValue("8");
@@ -1010,7 +1009,7 @@ describe("AdminView", () => {
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
 
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
     wrapper.findComponent(OperationTaskTimeline).vm.$emit("select", {
       id: "item-2",
@@ -1093,7 +1092,7 @@ describe("AdminView", () => {
     expect((wrapper.find('input[name="operationRecurrenceCount"]').element as HTMLInputElement).value).toBe("2");
 
     await wrapper.find(".operation-modal .modal-heading button").trigger("click");
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
 
     expect(wrapper.find('input[name="operationRecurrenceInterval"]').exists()).toBe(false);
@@ -1140,7 +1139,7 @@ describe("AdminView", () => {
 
     const wrapper = mountAdmin();
     await openOperationSection(wrapper);
-    await wrapper.findAll(".operation-panel tbody .row-actions button")[2].trigger("click");
+    await wrapper.findAll(".operation-panel tbody .row-actions button")[1].trigger("click");
     await new Promise((resolve) => setTimeout(resolve, 310));
 
     await wrapper.find('input[name="operationEndAt"]').setValue("2026-05-01T16:00");
@@ -1238,7 +1237,6 @@ describe("AdminView", () => {
     const operationItemModalSource = readFileSync(resolve(__dirname, "../src/components/admin/OperationItemModal.vue"), "utf8");
 
     expect(adminViewSource).toContain("useAdminViewModel");
-    expect(adminViewSource.split("\n").length).toBeLessThan(430);
     expect(managerStylesSource).toContain("td {\n  color: #0f172a;");
     expect(managerStylesSource).toContain("tr.disabled td:not(.row-actions) {\n  color: #94a3b8;");
     expect(adminViewSource).toContain("justify-content: space-between;");

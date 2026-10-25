@@ -31,7 +31,7 @@ describe("parsePatrolCycleItemExcel", () => {
   });
 
   it("loads xlsx only when parsing an import file", () => {
-    const source = readFileSync(join(process.cwd(), "src/utils/patrolCycleItemExcel.ts"), "utf8");
+    const source = readFileSync(join(process.cwd(), "src/utils/planExcel.ts"), "utf8");
 
     expect(source).not.toContain("import * as XLSX from \"xlsx\"");
     expect(source).toContain("import(\"xlsx\")");
@@ -54,7 +54,7 @@ describe("parsePatrolCycleItemExcel", () => {
       [1, "上午", "1号线", "", ""]
     ]);
 
-    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("Excel 表头缺少：其他");
+    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("工作表「周期项」表头缺少：其他");
   });
 
   it("rejects duplicate required headers after trimming whitespace", async () => {
@@ -63,7 +63,7 @@ describe("parsePatrolCycleItemExcel", () => {
       [1, "上午", "1号线", "张三", "", "", "李四"]
     ]);
 
-    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("Excel 表头重复：人员");
+    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("工作表「周期项」表头重复：人员");
   });
 
   it("preserves worksheet row numbers after blank rows", async () => {

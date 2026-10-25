@@ -5,7 +5,8 @@ import {
 	  deleteOperationPlanItem,
   fetchOperationPlan,
   fetchOperationPlans,
-  generateTaskInstances,
+  fetchOperationBoardSelection, saveOperationBoardSelection, regenerateOperationPlan, PlanWriteError,
+  type OperationBoardSelection, type OperationPlanDetailRecord,
   type OperationPlanInput,
   type OperationPlanItemRecord,
   type OperationPlanRecord,
@@ -18,8 +19,9 @@ const OPERATION_DETAIL_LOADING_MIN_MS = 300;
 
 export interface OperationRefreshForm {
   templateId: string;
-  windowStartDate: string;
-  windowEndDate: string;
+  startItemId: string;
+  startAt: string;
+  cutoffAt: string;
 }
 
 export function useOperationAdmin(context: OperationAdminContext) {
@@ -29,6 +31,24 @@ export function useOperationAdmin(context: OperationAdminContext) {
   const operationSelectedItemId = ref<string | null>(null);
   const operationShowAll = ref(false);
   const operationRefreshOpen = ref(false);
+  const generationPlans = ref<OperationPlanRecord[]>([]);
+  const generationPlan = ref<OperationPlanDetailRecord | null>(null);
+  const generationLocked = ref(false);
+  const generationLoading = ref(false);
+  const generationBusy = ref(false);
+  const generationStep = ref<'form' | 'confirm'>('form');
+  const generationError = ref('');
+  const boardSelection = ref<OperationBoardSelection | null>(null);
+  const boardSelectionLoading = ref(true);
+  const boardSelectionSavingId = ref<string | null>(null);
+  const boardSelectionMessage = ref('');
+  const operationWriteBusy = ref(false);
+  let listVersion = 0, generationVersion = 0, detailVersion = 0;
+  async function withOperationWrite(action: () => Promise<void>) {
+    if (operationWriteBusy.value || generationBusy.value) return;
+    operationWriteBusy.value = true;
+    try { await withStatus(action); } finally { operationWriteBusy.value = false; }
+  }
   const operationGenerationSummary = ref("");
   const operationModalOpen = ref(false);
   const operationModalMode = ref<OperationModalMode>("create");
@@ -60,8 +80,9 @@ export function useOperationAdmin(context: OperationAdminContext) {
 
   const operationRefreshForm = reactive<OperationRefreshForm>({
     templateId: "",
-    windowStartDate: selectedDate.value,
-    windowEndDate: selectedDate.value
+    startItemId: "",
+    startAt: `${selectedDate.value}T08:00`,
+    cutoffAt: ""
   });
 
   const operationItemForm = reactive({
@@ -100,41 +121,119 @@ export function useOperationAdmin(context: OperationAdminContext) {
   });
 
   async function loadOperationRows(): Promise<void> {
-    operationRows.value = await fetchOperationPlans(selectedDate.value, operationShowAll.value ? "all" : "date");
+    const version = ++listVersion;
+    const [rows, selection] = await Promise.all([
+      fetchOperationPlans(selectedDate.value, operationShowAll.value ? 'all' : 'date'), fetchOperationBoardSelection().catch(error => {
+        if (version === listVersion) { boardSelectionMessage.value = '读取大屏选择失败：' + (error instanceof Error ? error.message : '请重试'); boardSelectionLoading.value = false; }
+        return null;
+      })
+    ]);
+    if (version !== listVersion) return;
+    operationRows.value = rows;
+    if (!boardSelectionSavingId.value && selection) boardSelection.value = selection;
+    boardSelectionLoading.value = false;
   }
 
-  function openOperationRefresh(): void {
+  async function selectBoardPlan(planId: string) {
+    if (boardSelectionSavingId.value || boardSelectionLoading.value) return;
+    ++listVersion;
+    boardSelectionSavingId.value = planId;
+    boardSelectionMessage.value = '';
+    try {
+      const selection = await saveOperationBoardSelection(planId);
+      boardSelection.value = selection;
+      boardSelectionMessage.value = '已切换为「' + selection.name + '」，已通知大屏刷新';
+    } catch (error) {
+      if (error instanceof PlanWriteError && error.confirmedFailure) boardSelectionMessage.value = '切换失败：' + error.message;
+      else {
+        boardSelectionMessage.value = '切换结果未确认，请刷新查看';
+        try { boardSelection.value = await fetchOperationBoardSelection(); } catch { /* Keep the saved selection visible. */ }
+      }
+    } finally { boardSelectionSavingId.value = null; }
+  }
+
+  async function openOperationRefresh(record?: OperationPlanRecord): Promise<void> {
+    if (operationWriteBusy.value || generationBusy.value) return;
     resetOperationRefreshForm(selectedDate.value || today);
+    generationLocked.value = !!record;
+    generationPlan.value = null;
+    generationPlans.value = [];
+    generationStep.value = 'form';
+    generationError.value = '';
+    operationGenerationSummary.value = '';
     operationRefreshOpen.value = true;
+    generationLoading.value = true;
+    const version = ++generationVersion;
+    try {
+      const plans = await fetchOperationPlans(selectedDate.value, 'all');
+      if (version !== generationVersion || !operationRefreshOpen.value) return;
+      generationPlans.value = plans;
+      if (record) { operationRefreshForm.templateId = record.id; await selectGenerationPlan(record.id); }
+    } catch (error) {
+      if (version === generationVersion) generationError.value = error instanceof Error ? error.message : '读取计划失败';
+    } finally { if (version === generationVersion) generationLoading.value = false; }
+  }
+
+  async function selectGenerationPlan(id: string) {
+    if (generationBusy.value) return;
+    const version = ++generationVersion;
+    operationRefreshForm.templateId = id;
+    operationRefreshForm.startItemId = '';
+    generationPlan.value = null;
+    generationError.value = '';
+    generationStep.value = 'form';
+    if (!id) { generationLoading.value = false; return; }
+    generationLoading.value = true;
+    try {
+      const plan = await fetchOperationPlan(id);
+      if (version !== generationVersion || !operationRefreshOpen.value) return;
+      generationPlan.value = plan;
+      operationRefreshForm.startAt = `${selectedDate.value || today}T08:00`;
+      const start = operationRefreshForm.startAt;
+      if (plan.recurrenceType === 'once') operationRefreshForm.cutoffAt = addMinutesToDateTimeLocal(start, Math.max(1, ...plan.items.map((item) => item.offsetMinutes + item.durationMinutes)));
+      else if (plan.recurrenceType === 'finite') operationRefreshForm.cutoffAt = Date.parse(plan.endAt) > Date.parse(normalizeDateTime(start)) ? plan.endAt.slice(0, 16) : '';
+      else operationRefreshForm.cutoffAt = addMinutesToDateTimeLocal(start.slice(0, 10) + 'T00:00', 1440);
+    } catch (error) { if (version === generationVersion) generationError.value = error instanceof Error ? error.message : '读取计划失败'; }
+    finally { if (version === generationVersion) generationLoading.value = false; }
   }
 
   function closeOperationRefresh(): void {
+    if (generationBusy.value) return;
+    ++generationVersion;
     operationRefreshOpen.value = false;
+    generationLoading.value = false;
+  }
+
+  const generationValidation = computed(() => {
+    const plan = generationPlan.value;
+    if (!plan) return '请选择计划';
+    if (!plan.enabled) return '计划已禁用，请先启用';
+    if (!plan.items.length) return '请先添加子任务';
+    if (plan.recurrenceType !== 'once' && !operationRefreshForm.startItemId) return '请选择起始子任务';
+    if (!operationRefreshForm.startAt) return '请填写开始时间';
+    if (!operationRefreshForm.cutoffAt || Date.parse(normalizeDateTime(operationRefreshForm.cutoffAt)) <= Date.parse(normalizeDateTime(operationRefreshForm.startAt))) return '生成截止时间必须晚于开始时间';
+    return '';
+  });
+
+  function confirmOperationGeneration() {
+    if (!generationValidation.value && !generationLoading.value) { generationError.value = ''; generationStep.value = 'confirm'; }
   }
 
   async function refreshOperationInstances(): Promise<void> {
-    const windowEndDate = operationRefreshWindowEndDate();
-    const plan = operationRows.value.find((row) => row.id === operationRefreshForm.templateId);
-    const scopeText = plan ? `计划「${plan.name}」` : "全部操作计划";
-    const confirmed = await requestConfirmation({
-      title: "刷新实例",
-      message: `将刷新 ${scopeText} 在 ${operationRefreshForm.windowStartDate} 至 ${windowEndDate} 的待处理生成实例。`,
-      detail: "已完成、进行中、取消或手动实例不会被覆盖。",
-      confirmLabel: "执行刷新"
-    });
-    if (!confirmed) return;
-    await withStatus(async () => {
-      const result = await generateTaskInstances({
-        windowStartDate: operationRefreshForm.windowStartDate,
-        windowEndDate,
-        types: ["operation"],
-        templateIds: operationRefreshForm.templateId ? [operationRefreshForm.templateId] : undefined,
-        refreshPending: true
-      });
-      operationGenerationSummary.value = `新增 ${result.inserted}，更新 ${result.updated}，跳过 ${result.skipped}`;
-      closeOperationRefresh();
+    const plan = generationPlan.value;
+    if (!plan || generationBusy.value || generationValidation.value || generationStep.value !== 'confirm') return;
+    generationBusy.value = true;
+    generationError.value = '';
+    try {
+      const result = await regenerateOperationPlan(plan.id, { startAt: normalizeDateTime(operationRefreshForm.startAt), cutoffAt: normalizeDateTime(operationRefreshForm.cutoffAt),
+        ...(plan.recurrenceType !== 'once' ? { startItemId: operationRefreshForm.startItemId } : {}) });
+      operationGenerationSummary.value = '已重新生成「' + plan.name + '」：清理 ' + result.removed + ' 条，新增 ' + result.inserted + ' 条，跳过 ' + result.skipped + ' 条'
+        + (result.inserted === 0 ? '；所选时间范围未产生可生成任务' : '');
+      operationRefreshOpen.value = false;
       await refresh();
-    });
+    } catch (error) {
+      generationError.value = error instanceof PlanWriteError && error.confirmedFailure ? '生成失败，原安排已保留：' + error.message : '生成结果未确认，请刷新后检查';
+    } finally { generationBusy.value = false; }
   }
 
   function normalizeDateTime(value: string): string {
@@ -258,15 +357,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function resetOperationRefreshForm(date: string): void {
-    operationRefreshForm.templateId = "";
-    operationRefreshForm.windowStartDate = date;
-    operationRefreshForm.windowEndDate = date;
-  }
-
-  function operationRefreshWindowEndDate(): string {
-    return operationRefreshForm.windowEndDate >= operationRefreshForm.windowStartDate
-      ? operationRefreshForm.windowEndDate
-      : operationRefreshForm.windowStartDate;
+    Object.assign(operationRefreshForm, { templateId: '', startItemId: '', startAt: date + 'T08:00', cutoffAt: '' });
   }
 
   function resetOperationItemForm(): void {
@@ -282,6 +373,8 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   async function openOperationModal(record?: OperationPlanRecord, mode?: OperationModalMode): Promise<void> {
+    if (operationWriteBusy.value || generationBusy.value) return;
+    const version = ++detailVersion;
     resetOperationForm();
     operationRecordId.value = record?.id ?? null;
     operationModalMode.value = mode ?? (record ? "edit" : "create");
@@ -296,6 +389,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
       let shouldOpenModal = false;
       try {
         const detail = await fetchOperationPlan(record.id);
+        if (version !== detailVersion) return;
         const firstItem = detail.items[0];
         operationDetailItems.value = detail.items;
         operationSelectedItemId.value = firstItem?.id ?? null;
@@ -311,13 +405,16 @@ export function useOperationAdmin(context: OperationAdminContext) {
         shouldOpenModal = true;
       } finally {
         await waitForOperationDetailLoadingMinimum(loadingStartedAt);
-        operationDetailLoading.value = false;
-        if (shouldOpenModal) operationModalOpen.value = true;
+        if (version === detailVersion) {
+          operationDetailLoading.value = false;
+          if (shouldOpenModal) operationModalOpen.value = true;
+        }
       }
     });
   }
 
   function selectOperationItem(item: OperationPlanItemRecord): void {
+    if (operationWriteBusy.value) return;
     operationSelectedItemId.value = item.id;
     operationItemModalMode.value = "edit";
     operationItemForm.id = item.id;
@@ -331,7 +428,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   }
 
   function openOperationItemCreate(): void {
-    if (operationReadOnly.value || !operationRecordId.value) return;
+    if (operationWriteBusy.value || operationReadOnly.value || !operationRecordId.value) return;
     operationSelectedItemId.value = null;
     operationItemModalMode.value = "create";
     operationItemForm.id = "";
@@ -344,7 +441,9 @@ export function useOperationAdmin(context: OperationAdminContext) {
     operationItemModalOpen.value = true;
   }
 
-  function closeOperationModal(): void {
+  function closeOperationModal(force = false): void {
+    if (operationWriteBusy.value && !force) return;
+    ++detailVersion;
     operationModalOpen.value = false;
     operationModalMode.value = "create";
     operationRecordId.value = null;
@@ -354,12 +453,13 @@ export function useOperationAdmin(context: OperationAdminContext) {
     resetOperationItemForm();
   }
 
-  function closeOperationItemModal(): void {
+  function closeOperationItemModal(force = false): void {
+    if (operationWriteBusy.value && !force) return;
     operationItemModalOpen.value = false;
   }
 
   async function toggleOperation(record: OperationPlanRecord): Promise<void> {
-    await withStatus(async () => {
+    await withOperationWrite(async () => {
       await updateOperationPlanEnabled(record.id, !record.enabled);
       await refresh();
     });
@@ -372,7 +472,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
       confirmLabel: "删除"
     });
     if (!confirmed) return;
-    await withStatus(async () => {
+    await withOperationWrite(async () => {
       await deleteOperationPlan(id);
       await refresh();
     });
@@ -380,11 +480,11 @@ export function useOperationAdmin(context: OperationAdminContext) {
 
   async function saveOperation(): Promise<void> {
     if (operationReadOnly.value) return;
-    await withStatus(async () => {
+    await withOperationWrite(async () => {
       const payload = operationPayloadForItems(operationDetailItems.value);
       if (operationRecordId.value) await updateOperationPlan(operationRecordId.value, payload);
       else await createOperationPlan(payload);
-      closeOperationModal();
+      closeOperationModal(true);
       await refresh();
     });
   }
@@ -392,7 +492,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
   async function saveOperationItem(): Promise<void> {
     if (operationReadOnly.value || !operationRecordId.value) return;
     const recordId = operationRecordId.value;
-    await withStatus(async () => {
+    await withOperationWrite(async () => {
       const itemPayload = {
         offsetMinutes: operationItemAbsoluteOffsetMinutes(),
         durationMinutes: operationItemDurationTotalMinutes(),
@@ -411,7 +511,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
         operationDetailItems.value = detail.items;
         const createdItem = detail.items.find((item) => !existingItemIds.has(item.id));
         operationSelectedItemId.value = createdItem?.id ?? null;
-        closeOperationItemModal();
+        closeOperationItemModal(true);
         await refresh();
         return;
       }
@@ -425,7 +525,7 @@ export function useOperationAdmin(context: OperationAdminContext) {
       const payload = operationPayloadForItems(nextItems, updatedItem);
       await updateOperationPlan(recordId, payload);
       operationDetailItems.value = nextItems;
-      closeOperationItemModal();
+      closeOperationItemModal(true);
       await refresh();
     });
   }
@@ -441,17 +541,19 @@ export function useOperationAdmin(context: OperationAdminContext) {
 
     const recordId = operationRecordId.value;
     const itemId = operationItemForm.id;
-    await withStatus(async () => {
+    await withOperationWrite(async () => {
 	      await deleteOperationPlanItem(recordId, itemId);
       const nextItems = operationDetailItems.value.filter((item) => item.id !== itemId);
       operationDetailItems.value = nextItems;
       operationSelectedItemId.value = null;
-      closeOperationItemModal();
+      closeOperationItemModal(true);
       await refresh();
     });
   }
 
   return {
+    generationPlans, generationPlan, generationLocked, generationLoading, generationBusy, generationStep, generationError, generationValidation,
+    selectGenerationPlan, confirmOperationGeneration, boardSelection, boardSelectionLoading, boardSelectionSavingId, boardSelectionMessage, selectBoardPlan, operationWriteBusy,
     operationRows,
     operationDetailItems,
     operationSelectedItemId,

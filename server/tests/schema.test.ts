@@ -13,6 +13,7 @@ describe("database schema", () => {
       .map((row) => (row as { name: string }).name);
 
     expect(tables).toEqual([
+      "board_settings",
       "holidays",
       "leave_people",
       "task_instances",

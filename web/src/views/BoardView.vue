@@ -8,7 +8,8 @@
 
     <section class="board-module operation-module">
       <SideLabel text="操作" />
-      <OperationTimeline :items="snapshot?.operation.items ?? []" :server-time="snapshot?.serverTime ?? ''" />
+      <OperationTimeline v-if="snapshot?.operation.items.length" :items="snapshot.operation.items" :server-time="snapshot.serverTime" />
+      <div v-else-if="snapshot" class="operation-empty">无可展示计划</div>
     </section>
 
     <section class="board-module permit-module">
@@ -294,6 +295,8 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.88);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
 }
+
+.operation-empty { display: grid; place-items: center; flex: 1; color: #64748b; }
 
 .operation-module {
   height: var(--operation-height);

@@ -12,6 +12,7 @@
         +
       </button>
     </div>
+    <p v-if="fileSummary" role="status">{{ fileSummary }}</p>
     <div class="table-shell">
       <table class="patrol-plan-table">
         <colgroup>
@@ -37,8 +38,10 @@
               <button type="button" @click="emit('select-plan', record)">详情</button>
               <button type="button" @click="emit('manage-items', record)">周期项管理</button>
               <button type="button" @click="emit('edit-plan', record)">修改</button>
-              <button type="button" @click="emit('toggle-plan', record)">{{ record.enabled ? "禁用" : "启用" }}</button>
-              <button type="button" class="danger" @click="emit('delete-plan', record)">删除</button>
+              <PlanActionsMenu :name="record.name" :actions="[
+                { key: 'export', label: exportingId === record.id ? '导出中…' : '导出计划 XLSX', disabled: !!exportingId },
+                { key: 'toggle', label: record.enabled ? '禁用' : '启用', separator: true }, { key: 'delete', label: '删除计划', danger: true }
+              ]" @action="key => key === 'export' ? emit('export-plan', record) : key === 'toggle' ? emit('toggle-plan', record) : emit('delete-plan', record)" />
             </td>
           </tr>
           <tr v-if="rows.length === 0">
@@ -49,7 +52,7 @@
     </div>
 
     <div v-if="planFormOpen" class="modal-backdrop" role="presentation" @click.self="emit('close-plan')">
-      <form class="modal-form patrol-plan-modal" @submit.prevent="emit('save-plan')">
+      <form v-modal-focus="{ close: () => emit('close-plan') }" aria-label="巡视模板表单" class="modal-form patrol-plan-modal" @submit.prevent="emit('save-plan')">
         <div class="modal-heading">
           <div>
             <h2>{{ planEditingId ? "编辑巡视模板" : "新增巡视模板" }}</h2>
@@ -89,7 +92,7 @@
     </div>
 
     <div v-if="detail && detailOpen" class="modal-backdrop patrol-detail-backdrop" role="presentation" @click.self="emit('close-detail')">
-      <section class="modal-form patrol-detail-modal cycle-detail">
+      <section v-modal-focus="{ close: () => emit('close-detail') }" aria-label="巡视模板详情" class="modal-form patrol-detail-modal cycle-detail">
         <div class="modal-heading">
           <div>
             <h2>{{ detail.name }} 周期项</h2>
@@ -97,6 +100,8 @@
           </div>
           <button type="button" aria-label="关闭巡视模板详情" @click="emit('close-detail')">×</button>
         </div>
+        <button type="button" class="secondary-action" :disabled="!!exportingId" @click="emit('export-plan', detail)">{{ exportingId === detail.id ? '导出中…' : '导出计划 XLSX' }}</button>
+        <p v-if="fileSummary" role="status">{{ fileSummary }}</p>
         <div class="table-shell patrol-detail-table">
           <table>
             <thead>
@@ -127,8 +132,8 @@
       </section>
     </div>
 
-    <div v-if="detail && itemManagerOpen" class="modal-backdrop patrol-detail-backdrop" role="presentation" @click.self="emit('close-item-manager')">
-      <section class="modal-form patrol-detail-modal patrol-item-manager-modal cycle-detail">
+    <div :inert="importOpen" v-if="detail && itemManagerOpen" class="modal-backdrop patrol-detail-backdrop" role="presentation" @click.self="emit('close-item-manager')">
+      <section v-modal-focus="{ close: () => emit('close-item-manager') }" aria-label="巡视周期项管理" class="modal-form patrol-detail-modal patrol-item-manager-modal cycle-detail">
         <div class="modal-heading">
           <div>
             <h2>{{ detail.name }} 周期项管理</h2>
@@ -146,23 +151,11 @@
           >
             +
           </button>
-          <a
-            class="secondary-action toolbar-import-action toolbar-download-action"
-            href="/templates/patrol-cycle-items-import-template.xlsx"
-            download="patrol-cycle-items-import-template.xlsx"
-          >
-            导入模板下载
-          </a>
-          <button type="button" class="secondary-action toolbar-import-action" @click="excelInput?.click()">批量导入</button>
-          <input
-            ref="excelInput"
-            class="visually-hidden"
-            name="patrolCycleItemExcel"
-            type="file"
-            accept=".xlsx,.xls"
-            @change="handleExcelChange"
-          />
+          <button type="button" class="secondary-action" @click="downloadDetailTemplate('patrol')">导入模板下载</button>
+          <button type="button" class="secondary-action" @click="emit('open-import', detail)">导入周期项</button>
+          <button type="button" class="secondary-action" :disabled="!!exportingId" @click="emit('export-plan', detail)">{{ exportingId === detail.id ? '导出中…' : '导出计划 XLSX' }}</button>
         </div>
+        <p v-if="fileSummary" role="status">{{ fileSummary }}</p>
         <div class="table-shell patrol-item-manager-table">
           <table>
             <thead>
@@ -199,7 +192,7 @@
     </div>
 
     <div v-if="itemFormOpen" class="modal-backdrop patrol-cycle-item-backdrop" role="presentation" @click.self="emit('close-item-form')">
-      <form class="modal-form patrol-cycle-item-modal" @submit.prevent="emit('save-item')">
+      <form v-modal-focus="{ close: () => emit('close-item-form') }" aria-label="巡视周期项表单" class="modal-form patrol-cycle-item-modal" @submit.prevent="emit('save-item')">
         <div class="modal-heading">
           <div>
             <h2>{{ itemEditingId ? "修改周期项" : "新增周期项" }}</h2>
@@ -246,13 +239,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { vModalFocus } from "../../utils/modalFocus";
+import PlanActionsMenu from "./PlanActionsMenu.vue";
+import { downloadDetailTemplate } from "../../utils/planExcel";
 import type { PatrolCycleItemRecord, PatrolPlanDetail, PatrolPlanRecord } from "../../api/client";
 import type { PatrolCycleItemForm, PatrolPlanForm } from "../../composables/admin/usePatrolPlanAdmin";
 import ListHeader from "./ListHeader.vue";
 
 defineProps<{
   rows: PatrolPlanRecord[];
+  fileSummary?: string;
+  exportingId?: string | null;
+  importOpen?: boolean;
   detail: PatrolPlanDetail | null;
   detailOpen: boolean;
   itemManagerOpen: boolean;
@@ -280,10 +278,9 @@ const emit = defineEmits<{
   "delete-item": [item: PatrolCycleItemRecord];
   "close-item-form": [];
   "save-item": [];
-  "import-file": [file: File];
+  "open-import": [detail: PatrolPlanDetail];
+  "export-plan": [record: PatrolPlanRecord];
 }>();
-
-const excelInput = ref<HTMLInputElement | null>(null);
 
 function skipText(record: PatrolPlanRecord): string {
   const parts = [];
@@ -292,12 +289,6 @@ function skipText(record: PatrolPlanRecord): string {
   return parts.length > 0 ? parts.join("、") : "-";
 }
 
-function handleExcelChange(event: Event): void {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = "";
-  if (file) emit("import-file", file);
-}
 </script>
 
 <style scoped src="./managerStyles.css"></style>

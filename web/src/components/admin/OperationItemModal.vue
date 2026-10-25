@@ -1,6 +1,6 @@
 <template>
   <div class="modal-backdrop item-modal-backdrop" role="presentation" @click.self="emit('close')">
-    <form class="modal-form operation-item-modal" @submit.prevent="emit('save')">
+    <form v-modal-focus="{ close: () => emit('close'), busy }" :aria-label="title" :inert="busy" class="modal-form operation-item-modal" @submit.prevent="emit('save')">
       <div class="modal-heading">
         <h2>{{ title }}</h2>
         <button type="button" aria-label="关闭子任务弹窗" @click="emit('close')">×</button>
@@ -108,6 +108,7 @@
 </template>
 
 <script setup lang="ts">
+import { vModalFocus } from "../../utils/modalFocus";
 import type { OperationPlanItemRecord } from "../../api/client";
 
 export type OperationItemModalMode = "create" | "edit";
@@ -126,6 +127,7 @@ export interface OperationItemForm {
 
 const props = defineProps<{
   title: string;
+  busy?: boolean;
   mode: OperationItemModalMode;
   form: OperationItemForm;
   readOnly: boolean;

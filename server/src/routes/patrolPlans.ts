@@ -415,7 +415,8 @@ function mapItemRow(row: PatrolItemRow) {
     vehicle: extData.vehicle,
     other: extData.other,
     content: row.content,
-    sortOrder: row.sort_order
+    sortOrder: row.sort_order,
+    extData: parseExtDataJson(row.ext_data_json)
   };
 }
 
