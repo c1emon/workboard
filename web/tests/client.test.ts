@@ -29,7 +29,29 @@ import {
 describe("api client", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
+
+  it.each([undefined, "", "http://workboard-api.internal:4000"])(
+    "uses the configured API origin or same-origin URLs (%s)",
+    async (base) => {
+      vi.resetModules();
+      vi.stubEnv("VITE_API_BASE", base);
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+      const eventSourceMock = vi.fn().mockImplementation(() => ({ addEventListener: vi.fn() }));
+      vi.stubGlobal("fetch", fetchMock);
+      vi.stubGlobal("EventSource", eventSourceMock);
+      const client = await import("../src/api/client");
+
+      await client.fetchBoard();
+      await client.fetchPatrolPlans();
+      client.subscribeBoardUpdates(() => {});
+
+      expect(fetchMock).toHaveBeenNthCalledWith(1, `${base ?? ""}/api/board`);
+      expect(fetchMock).toHaveBeenNthCalledWith(2, `${base ?? ""}/api/admin/patrol-plans`);
+      expect(eventSourceMock).toHaveBeenCalledWith(`${base ?? ""}/api/events`);
+    }
+  );
 
   it("preserves structured admin error details in thrown messages", async () => {
     vi.stubGlobal(

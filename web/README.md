@@ -5,10 +5,16 @@ The web app is a Vue 3 + Vite client. It provides the board view for daily execu
 ## Run
 
 ```bash
-npm run dev --workspace web
+pnpm dev:web
 ```
 
-The API base URL defaults to `http://localhost:4000`. Override it with `VITE_API_BASE` when the server runs elsewhere.
+API requests default to same-origin `/api` URLs. During development, Vite proxies them to `http://127.0.0.1:4000`; in the default Compose deployment, Nginx proxies them to `http://server:4000`. Other computers can open the frontend using the host's LAN address without changing API configuration.
+
+For a separately hosted API, set `VITE_API_BASE` to its browser-accessible origin before starting Vite or building the frontend. The value does not include `/api` and is embedded at build time.
+
+## Patrol Excel Import
+
+The first worksheet must start with these headers: `周期第几天`, `时间`, `目标`, `人员`, `车辆`, `其他`. Columns may be reordered, surrounding header whitespace is ignored, and extra columns are ignored. Missing or duplicate required headers are rejected. Empty optional values are preserved as empty strings, blank rows are skipped, and validation errors use the worksheet's original row numbers.
 
 ## Main Areas
 
@@ -23,6 +29,6 @@ Keep UI state in composables when it is shared across controls or modals. Keep p
 ## Verification
 
 ```bash
-npm run test --workspace web
-npm run build --workspace web
+pnpm --filter ./web test
+pnpm --filter ./web build
 ```

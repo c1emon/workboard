@@ -1,6 +1,6 @@
 import type { BoardSnapshot, TaskInstanceStatus } from "./types";
 
-const apiBase = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
+const apiBase = import.meta.env.VITE_API_BASE ?? "";
 
 type TimeTag = "全天" | "上午" | "下午";
 type ListScope = "date" | "all";

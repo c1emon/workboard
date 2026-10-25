@@ -13,14 +13,14 @@ export async function parsePatrolCycleItemExcel(file: File): Promise<ImportedPat
 
   const rows = XLSX.utils.sheet_to_json<Array<string | number | null | undefined>>(workbook.Sheets[firstSheet], {
     header: 1,
-    blankrows: false,
+    blankrows: true,
     defval: ""
   });
   const [headers, ...dataRows] = rows;
-  validateHeaders(headers ?? []);
+  const columnIndexes = validateHeaders(headers ?? []);
 
   const items = dataRows
-    .map((row, index) => parseRow(row, index + 2))
+    .map((row, index) => parseRow(columnIndexes.map((column) => row[column]), index + 2))
     .filter((item): item is ImportedPatrolCycleItem => item !== null);
   if (items.length === 0) throw new Error("Excel 文件没有可导入的周期项");
   return items;
@@ -39,10 +39,13 @@ async function readFileArrayBuffer(file: File): Promise<ArrayBuffer> {
   });
 }
 
-function validateHeaders(headers: Array<string | number | null | undefined>): void {
+function validateHeaders(headers: Array<string | number | null | undefined>): number[] {
   const normalized = headers.map((header) => stringValue(header));
   const missing = requiredHeaders.filter((header) => !normalized.includes(header));
   if (missing.length > 0) throw new Error(`Excel 表头缺少：${missing.join("、")}`);
+  const duplicates = requiredHeaders.filter((header) => normalized.indexOf(header) !== normalized.lastIndexOf(header));
+  if (duplicates.length > 0) throw new Error(`Excel 表头重复：${duplicates.join("、")}`);
+  return requiredHeaders.map((header) => normalized.indexOf(header));
 }
 
 function parseRow(row: Array<string | number | null | undefined>, rowNumber: number): ImportedPatrolCycleItem | null {

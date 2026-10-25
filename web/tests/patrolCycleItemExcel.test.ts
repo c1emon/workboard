@@ -36,6 +36,57 @@ describe("parsePatrolCycleItemExcel", () => {
     expect(source).not.toContain("import * as XLSX from \"xlsx\"");
     expect(source).toContain("import(\"xlsx\")");
   });
+
+  it("maps reordered headers and ignores extra columns", async () => {
+    const file = workbookFile([
+      ["备注", " 车辆 ", "目标", "时间", "其他", "周期第几天", "人员"],
+      ["忽略", "巡检车", "1号线", "上午", "带记录仪", 1, "张三"]
+    ]);
+
+    await expect(parsePatrolCycleItemExcel(file)).resolves.toEqual([
+      { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "张三", vehicle: "巡检车", other: "带记录仪" }
+    ]);
+  });
+
+  it("rejects missing required headers", async () => {
+    const file = workbookFile([
+      ["周期第几天", "时间", "目标", "人员", "车辆"],
+      [1, "上午", "1号线", "", ""]
+    ]);
+
+    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("Excel 表头缺少：其他");
+  });
+
+  it("rejects duplicate required headers after trimming whitespace", async () => {
+    const file = workbookFile([
+      ["周期第几天", "时间", "目标", "人员", "车辆", "其他", " 人员 "],
+      [1, "上午", "1号线", "张三", "", "", "李四"]
+    ]);
+
+    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("Excel 表头重复：人员");
+  });
+
+  it("preserves worksheet row numbers after blank rows", async () => {
+    const file = workbookFile([
+      ["周期第几天", "时间", "目标", "人员", "车辆", "其他"],
+      [],
+      [1, "晚上", "1号线", "", "", ""]
+    ]);
+
+    await expect(parsePatrolCycleItemExcel(file)).rejects.toThrow("第 3 行时间必须是 全天、上午 或 下午");
+  });
+
+  it("skips rows with no import values even when extra columns contain notes", async () => {
+    const file = workbookFile([
+      ["周期第几天", "时间", "目标", "人员", "车辆", "其他", "备注"],
+      ["", "", "", "", "", "", "仅备注"],
+      [1, "上午", "1号线", "", "", "", ""]
+    ]);
+
+    await expect(parsePatrolCycleItemExcel(file)).resolves.toEqual([
+      { cycleDay: 1, timeTag: "上午", target: "1号线", personnel: "", vehicle: "", other: "" }
+    ]);
+  });
 });
 
 function workbookFile(rows: unknown[][]): File {
