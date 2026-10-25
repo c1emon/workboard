@@ -1,7 +1,7 @@
 # board-log-presentation Specification
 
 ## Purpose
-TBD - created by archiving change adjust-board-log-ui. Update Purpose after archive.
+规定变电运维工作日志大屏的标题、浅色视觉呈现、紧凑布局、任务列宽和固定行高文字截断规则，并保持原有数据刷新、连接状态及整表滚动行为。
 ## Requirements
 ### Requirement: Board uses work log title
 The system SHALL display the board page title as `变电运维工作日志`.
@@ -40,13 +40,17 @@ The system SHALL allocate more horizontal width to `任务` columns than to lowe
 - **WHEN** a dense board table includes a `任务` column
 - **THEN** the generated column layout gives the `任务` column a wider flexible allocation than personnel, vehicle, and other columns
 
-### Requirement: Task text wraps and expands rows
-The system SHALL allow overflowing task text in dense board tables to wrap instead of being truncated with ellipsis, expanding row height as needed for readability.
+### Requirement: Task text uses bounded wrapping in fixed-height rows
+Dense board task cells SHALL keep the existing fixed row height and wrap task text to at most two visible lines, truncating additional text. The existing whole-table scrolling behavior SHALL remain unchanged. Long text SHALL NOT increase module height or squeeze other board modules.
 
-#### Scenario: Task text exceeds column width
-- **WHEN** a dense board row contains task text longer than the available task column width
-- **THEN** the task text wraps onto additional lines
-- **THEN** the row height expands enough to display the wrapped task text
+#### Scenario: A task exceeds the visible two-line limit
+- **WHEN** task text exceeds two lines in its board table cell
+- **THEN** the row retains its existing height and additional text is truncated
+- **AND** other module positions and dimensions remain unchanged
+
+#### Scenario: Rows exceed the visible table capacity
+- **WHEN** a dense board table has more rows than its visible capacity
+- **THEN** it continues using the existing whole-table scrolling behavior
 
 ### Requirement: Existing board behavior is preserved
 The system SHALL preserve the existing board data fetching, update subscription, fallback refresh, empty-state, and connection status behavior.

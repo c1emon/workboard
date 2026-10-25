@@ -7,4 +7,4 @@
 - `changes/archive/`：已归档的变更记录。
 - `reference/`：历史设计参考，可能包含已被后续设计替代的模型和接口，不作为当前实施指令。
 
-当前需求记录：[refine-operation-plan-workflows/requirements.md](changes/refine-operation-plan-workflows/requirements.md)。已确认要求整理在该 change 的 proposal 和 delta specs 中；技术与交互设计见 [design.md](changes/refine-operation-plan-workflows/design.md)，Web UI 页面与流程细化见 [ui-design.md](changes/refine-operation-plan-workflows/ui-design.md)。尚未实施；实施前完成 tasks，并遵守实现分支确认规则。
+已实施并归档：[refine-operation-plan-workflows](changes/archive/2026-10-25-refine-operation-plan-workflows/proposal.md)。正式要求已同步到 `specs/`；原始需求见 [requirements.md](changes/archive/2026-10-25-refine-operation-plan-workflows/requirements.md)，技术与交互设计见 [design.md](changes/archive/2026-10-25-refine-operation-plan-workflows/design.md)，Web UI 页面与流程见 [ui-design.md](changes/archive/2026-10-25-refine-operation-plan-workflows/ui-design.md)，本地验证记录见 [tasks.md](changes/archive/2026-10-25-refine-operation-plan-workflows/tasks.md)。
